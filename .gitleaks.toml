@@ -1,0 +1,9 @@
+# gitleaks configuration: every default rule stays on. The allowlist only covers fixed test fixtures that
+# look like keys but are not secrets.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake party room key used by the relay's request-parsing test"
+paths = ['''^crates/dekan-relay/src/lib\.rs$''']
+regexes = ['''^0123456789abcdef0123456789abcdef$''']

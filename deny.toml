@@ -1,0 +1,43 @@
+[graph]
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+]
+
+[licenses]
+# cargo-deny >= 0.18: `unlicensed`, and the per-severity keys under [advisories], were removed.
+# Anything not in `allow` is denied by default.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    # webpki-roots ships Mozilla's CA bundle as data under CDLA-Permissive-2.0 (permissive, no copyleft).
+    "CDLA-Permissive-2.0",
+    # ryu (float formatting), pulled in transitively by serde_json.
+    "BSL-1.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+# Transitive duplicates are outside our control (today: getrandom, syn, thiserror, thiserror-impl,
+# webpki-roots — rustls/reqwest/tungstenite moving at different speeds). Denying them would keep CI
+# permanently red for something no change of ours can fix, so it warns and stays visible.
+multiple-versions = "warn"
+wildcards = "deny"
+# The only wildcards are the workspace's own path dependencies (dekan-core = { path = ... }).
+# Wildcards on crates.io dependencies stay denied.
+allow-wildcard-paths = true
+
+[advisories]
+# Vulnerabilities and unsound advisories are denied by default and cannot be downgraded here.
+unmaintained = "workspace"
+yanked = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
