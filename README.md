@@ -22,7 +22,7 @@ Dekan lets you use any skin during a match. You pick the skin in Dekan's own win
 Dekan then builds a copy of the game files that contain it, and when the game starts it opens that copy instead
 of its own files. The game installation itself is never modified.
 
-Dekan is a customized fork of [Bullet](https://github.com/Isllanrx/Bullet), originally created by Isllan Toso and released under the MIT License. This fork keeps the original license notice while replacing the application branding, package names, executable name, data paths and UI identity with Dekan. See [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md).
+Dekan is a customized fork of UI, originally created by Isllan Toso and released under the MIT License. This fork keeps the original license notice while replacing the application branding, package names, executable name, data paths and UI identity with Dekan. See [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md).
 
 <p align="center">
   <img src="assets/urgot-ingame.png" alt="Dekan in Game" width="80%">
