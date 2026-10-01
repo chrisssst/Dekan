@@ -29,7 +29,7 @@ zstd = "0.14"
 flate2 = "1"
 memmap2 = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
-windows = { version = "0.58", features = [] }  # features added per-crate
+windows = { version = "0.62", features = [] }  # features added per-crate
 base64 = "0.23"
 sha2 = "0.11"
 # Party payload encryption: XChaCha20-Poly1305, RustCrypto.
