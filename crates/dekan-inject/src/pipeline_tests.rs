@@ -49,10 +49,8 @@ fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> P
 async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
     use dekan_wad::writer::{WadWriter, optimal_raw};
 
-    let dir = std::env::temp_dir().join(format!(
-        "dekan_test_pipeline_native_{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("dekan_test_pipeline_native_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
     let wad = |path: &std::path::Path, entries: &[(u64, &[u8])]| {
         let mut writer = WadWriter::default();
