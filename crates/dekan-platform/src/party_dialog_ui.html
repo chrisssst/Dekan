@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>{{title}}</title>
+    <style>
+      :root {
+        --bg-0: #05080c;
+        --bg-1: #0a1428;
+        --panel: #0d1622;
+        --line-gold: #4a3d22;
+        --gold: #c8aa6e;
+        --gold-bright: #f0e6d2;
+        --gold-dim: #785a28;
+        --cyan: #0ac8b9;
+        --text: #f0e6d2;
+        --muted: #a09b8c;
+        --muted-dim: #5b5a56;
+        --error: #e84057;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        user-select: none;
+        background: radial-gradient(120% 140% at 50% -10%, var(--bg-1) 0%, var(--bg-0) 80%);
+        color: var(--text);
+        font: 13px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 20px 24px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid var(--line-gold);
+        padding-bottom: 12px;
+      }
+
+      .header-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #1c2738 0%, #0d1622 100%);
+        border: 1px solid var(--gold-dim);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--gold);
+        box-shadow: 0 0 10px rgba(200, 170, 110, 0.2);
+      }
+
+      .header-titles h1 {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--gold-bright);
+        text-transform: uppercase;
+      }
+
+      .header-titles p {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .content {
+        margin: 14px 0;
+      }
+
+      .input-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .feedback {
+        font-size: 11px;
+        color: var(--cyan);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      .feedback.visible {
+        opacity: 1;
+      }
+
+      .input-wrapper {
+        display: flex;
+        gap: 8px;
+        background: #09121d;
+        border: 1px solid var(--line-gold);
+        border-radius: 4px;
+        padding: 4px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      .input-wrapper:focus-within {
+        border-color: var(--gold);
+        box-shadow: 0 0 10px rgba(200, 170, 110, 0.25);
+      }
+
+      .code-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        padding: 8px 10px;
+        font-family: "Consolas", "Courier New", monospace;
+        font-size: 13px;
+        color: var(--gold-bright);
+        outline: none;
+        user-select: text;
+      }
+
+      .code-input::placeholder {
+        color: var(--muted-dim);
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+
+      .btn-inline {
+        background: rgba(200, 170, 110, 0.1);
+        border: 1px solid var(--gold-dim);
+        color: var(--gold);
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .btn-inline:hover {
+        background: var(--gold);
+        color: #05080c;
+        border-color: var(--gold-bright);
+      }
+
+      .footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        border-top: 1px solid rgba(74, 61, 34, 0.4);
+        padding-top: 14px;
+      }
+
+      .btn {
+        padding: 9px 20px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        outline: none;
+      }
+
+      .btn-primary {
+        background: linear-gradient(180deg, #1e2a3a 0%, #111a26 100%);
+        border: 1px solid var(--gold);
+        color: var(--gold-bright);
+        box-shadow: 0 0 8px rgba(200, 170, 110, 0.2);
+      }
+
+      .btn-primary:hover {
+        background: linear-gradient(180deg, #2b3b52 0%, #182536 100%);
+        border-color: var(--gold-bright);
+        box-shadow: 0 0 12px rgba(200, 170, 110, 0.4);
+      }
+
+      .btn-primary:active {
+        transform: translateY(1px);
+      }
+
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid #3c3c41;
+        color: var(--muted);
+      }
+
+      .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        border-color: #55555c;
+      }
+
+      .error-msg {
+        color: var(--error);
+        font-size: 11px;
+        margin-top: 6px;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <div class="header-titles">
+        <h1>{{title}}</h1>
+        <p>{{desc}}</p>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="input-label">
+        <span>{{label}}</span>
+        <span id="feedback" class="feedback">{{copied_text}}</span>
+      </div>
+      <div class="input-wrapper">
+        <input
+          type="text"
+          id="codeInput"
+          class="code-input"
+          value="{{initial_code}}"
+          placeholder="{{placeholder}}"
+          {{readonly_attr}}
+          autofocus
+          spellcheck="false"
+          autocomplete="off"
+        />
+        {{action_inline_button}}
+      </div>
+      <div id="errorMsg" class="error-msg"></div>
+    </div>
+
+    <div class="footer">
+      {{footer_buttons}}
+    </div>
+
+    <script>
+      const codeInput = document.getElementById('codeInput');
+      const feedback = document.getElementById('feedback');
+      const errorMsg = document.getElementById('errorMsg');
+
+      if (codeInput) {
+        codeInput.focus();
+        if (codeInput.value) {
+          codeInput.select();
+        }
+      }
+
+      function showFeedback(text) {
+        if (feedback) {
+          feedback.textContent = text;
+          feedback.classList.add('visible');
+          setTimeout(() => feedback.classList.remove('visible'), 2200);
+        }
+      }
+
+      function doCopy() {
+        if (!codeInput) return;
+        const code = codeInput.value.trim();
+        if (!code) return;
+        navigator.clipboard.writeText(code).then(() => {
+          showFeedback('{{copied_text}}');
+        }).catch(() => {
+          if (window.ipc) {
+            window.ipc.postMessage('copy:' + code);
+            showFeedback('{{copied_text}}');
+          }
+        });
+      }
+
+      function doPaste() {
+        if (!codeInput) return;
+        navigator.clipboard.readText().then((clip) => {
+          if (clip) {
+            codeInput.value = clip.trim();
+            codeInput.focus();
+            codeInput.select();
+          }
+        }).catch(() => {
+          if (window.ipc) {
+            window.ipc.postMessage('request_paste');
+          }
+        });
+      }
+
+      function applyPasteFromRust(text) {
+        if (codeInput && text) {
+          codeInput.value = text.trim();
+          codeInput.focus();
+          codeInput.select();
+        }
+      }
+
+      function doSubmit() {
+        if (!codeInput) return;
+        const code = codeInput.value.trim();
+        if (!code) {
+          if (errorMsg) {
+            errorMsg.textContent = '{{error_empty}}';
+            errorMsg.style.display = 'block';
+          }
+          return;
+        }
+        if (window.ipc) {
+          window.ipc.postMessage('submit:' + code);
+        }
+      }
+
+      function doCancel() {
+        if (window.ipc) {
+          window.ipc.postMessage('cancel');
+        }
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          doSubmit();
+        } else if (e.key === 'Escape') {
+          doCancel();
+        }
+      });
+    </script>
+  </body>
+</html>

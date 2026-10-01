@@ -1,0 +1,23 @@
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
+
+pub mod activation;
+pub mod auto_accept;
+pub mod autostart;
+pub mod client_window;
+pub mod clipboard;
+pub mod dialog;
+pub mod elevation;
+pub mod error;
+pub mod fs;
+pub mod game_version;
+pub mod i18n;
+pub mod overlay_window;
+pub mod party_dialog;
+pub mod paths;
+pub mod process;
+pub mod shell;
+pub mod single_instance;
+pub mod tray;
+pub mod user_profile;
+pub mod version;
+pub mod welcome;

@@ -1,0 +1,159 @@
+name: Promote release
+
+# The one step that stays manual: turning a pre-release into the release users are pointed at. It
+# requires the `production` environment, whose required reviewers are configured in the repository
+# settings, and it refuses an installer that this repository's release workflow did not build.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Pre-release tag to promote, e.g. v1.0.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote to latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: write
+      attestations: read
+    steps:
+      - name: Verify provenance and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad tag $TAG"; exit 1; }
+          [[ "$(gh release view "$TAG" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" == true ]] \
+            || { echo "::error::$TAG is not a pre-release"; exit 1; }
+          mkdir assets && cd assets
+          gh release download "$TAG" --repo "$REPO"
+          sha256sum -c SHA256SUMS
+          for exe in *.exe; do
+            gh attestation verify "$exe" --repo "$REPO" \
+              --signer-workflow "$REPO/.github/workflows/release.yml"
+          done
+
+      - name: Mark as latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --repo "$REPO" --prerelease=false --latest
+
+      - name: Notify Discord on release
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "Secret DISCORD_RELEASE_WEBHOOK is not set. Skipping notification."
+            exit 0
+          fi
+
+          gh release view "$TAG" --repo "$REPO" --json body --jq .body > /tmp/release_body.txt 2>/dev/null || true
+
+          python3 - << 'EOF'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime, timezone
+
+          webhook_url = os.environ.get("DISCORD_WEBHOOK")
+          tag = os.environ.get("TAG", "")
+          repo = os.environ.get("REPO", "OWNER/REPOSITORY")
+          repo_url = f"https://github.com/{repo}"
+          release_url = f"{repo_url}/releases/tag/{tag}"
+
+          installer_name = ""
+          if os.path.exists("assets"):
+              for f in os.listdir("assets"):
+                  if f.endswith(".exe"):
+                      installer_name = f
+                      break
+
+          installer_hash = ""
+          if os.path.exists("assets/SHA256SUMS"):
+              with open("assets/SHA256SUMS", "r", encoding="utf-8") as f:
+                  line = f.readline().strip()
+                  if line:
+                      installer_hash = line.split()[0]
+
+          body = ""
+          if os.path.exists("/tmp/release_body.txt"):
+              with open("/tmp/release_body.txt", "r", encoding="utf-8") as f:
+                  body = f.read().strip()
+
+          if len(body) > 1000:
+              body = body[:997] + "..."
+
+          download_url = f"{repo_url}/releases/download/{tag}/{installer_name}" if installer_name else release_url
+
+          fields = [
+              {
+                  "name": "🏷️ Versão",
+                  "value": f"**{tag}**",
+                  "inline": True
+              },
+              {
+                  "name": "📦 Instalador",
+                  "value": f"[{installer_name}]({download_url})" if installer_name else f"[Acessar Release]({release_url})",
+                  "inline": True
+              }
+          ]
+
+          if installer_hash:
+              fields.append({
+                  "name": "🔐 SHA-256",
+                  "value": f"`{installer_hash}`",
+                  "inline": False
+              })
+
+          fields.append({
+              "name": "🔗 Links Úteis",
+              "value": f"[Notas da Versão e Código no GitHub]({release_url})",
+              "inline": False
+          })
+
+          payload = {
+              "username": "Dekan Releases",
+              "avatar_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png",
+              "embeds": [
+                  {
+                      "title": f"🎉 Nova versão lançada: {tag}!",
+                      "description": body if body else "Uma nova versão estável do Dekan está disponível para download!",
+                      "url": release_url,
+                      "color": 5763719,
+                      "fields": fields,
+                      "footer": {
+                          "text": "Dekan • League of Legends Skin Changer",
+                          "icon_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png"
+                      },
+                      "timestamp": datetime.now(timezone.utc).isoformat()
+                  }
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook_url,
+              data=data,
+              headers={"Content-Type": "application/json", "User-Agent": "Dekan-Release-Notifier"}
+          )
+          with urllib.request.urlopen(req) as resp:
+              print(f"Discord notified successfully (status: {resp.status})")
+          EOF

@@ -1,0 +1,23 @@
+[package]
+name = "dekan-party"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Party mode: encrypted shared room over a relay"
+
+[dependencies]
+dekan-core = { path = "../dekan-core" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+base64.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+chacha20poly1305.workspace = true

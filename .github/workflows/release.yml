@@ -1,0 +1,149 @@
+name: Release
+
+# Runs after a merge to main. When the workspace version in Cargo.toml has no release yet, it builds the
+# installer on a clean runner, attests where it was built, and publishes it as a PRE-RELEASE. Users
+# are only pointed at a build once a maintainer promotes it (promote.yml) after testing it in a real
+# match, so a wrong approval can at worst produce a pre-release nobody is told to install.
+on:
+  push:
+    branches: [main]
+    paths: [Cargo.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Version and existing releases
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(cargo metadata --no-deps --format-version 1 --locked \
+            | jq -r '.packages[] | select(.name == "dekan-app") | .version')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version $version"; exit 1; }
+          display_version="${version%.0}"
+          tag="v$display_version"
+          echo "version=$display_version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 \
+             || git ls-remote --exit-code --tags "https://github.com/$REPO" "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build installer
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      # Same gate as CI, on the exact commit being shipped. No cache: a release never reuses build
+      # output from another run.
+      - name: Quality gate (cargo xtask check)
+        run: cargo xtask check
+
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+
+      - name: Build installer (cargo xtask installer)
+        run: cargo xtask installer
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $name = "Dekan-Setup-$env:VERSION-x64.exe"
+          $hash = (Get-FileHash "dist/installer/$name" -Algorithm SHA256).Hash.ToLower()
+          "$hash *$name" | Set-Content -NoNewline -Encoding ascii dist/installer/SHA256SUMS
+          Get-Content dist/installer/SHA256SUMS
+
+      # Anyone can check that the installer was built by this workflow from this commit:
+      #   gh attestation verify Dekan-Setup-<version>-x64.exe --repo OWNER/REPOSITORY
+      - id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
+
+      # The same Sigstore bundle, shipped next to the installer: verifiable offline
+      # (`gh attestation verify <exe> --bundle <exe>.sigstore.json --repo OWNER/REPOSITORY`).
+      - name: Attach the provenance bundle
+        shell: pwsh
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: Copy-Item $env:BUNDLE "dist/installer/Dekan-Setup-$env:VERSION-x64.exe.sigstore.json"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dekan-${{ env.VERSION }}
+          if-no-files-found: error
+          path: |
+            dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
+            dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe.sigstore.json
+            dist/installer/SHA256SUMS
+
+  publish:
+    name: Publish pre-release
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Write access only here, only for the job that creates the tag and the release.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh release create "$TAG" out/*.exe out/*.sigstore.json out/SHA256SUMS \
+            --target "$SHA" --prerelease --generate-notes --title "Dekan $TAG"
