@@ -5,7 +5,7 @@
 | Ask a question, get help installing, share mods | [Discord](https://discord.gg/kutsal) |
 | Report a bug (with the log attached) | [Bug report](https://github.com/chrisssst/Dekan/issues/new?template=bug_report.yml) |
 | Suggest a feature | [Feature request](https://github.com/chrisssst/Dekan/issues/new?template=feature_request.yml) |
-| Contact the maintainer | [isllan.dev](https://isllan.dev/) |
+| Contact the maintainer | [Discord](https://discord.gg/kutsal) |
 | Report a security issue | [Private advisory](https://github.com/chrisssst/Dekan/security/advisories/new), never in public |
 
 Before asking, check the README's [Troubleshooting](README.md#troubleshooting) section. Most problems show up
