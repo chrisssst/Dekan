@@ -315,7 +315,7 @@ static TURKISH: Text = Text {
     html_lang: "tr",
     welcome_active: "SİSTEM TEPSİSİNDE AKTİF",
     welcome_background: "Dekan arka planda küçültülmüş olarak çalışmaya devam eder",
-    welcome_author: "Proje Isllan Toso tarafından geliştirilmiştir.",
+    welcome_author: "Dekan tarafından geliştirilmiştir.",
     welcome_tray_hint: "Kontrol panelini açmak için sistem tepsisi simgesine tıklayın: seçenekler, parti, mod ve log klasörleri.",
     welcome_dismiss: "ANLADIM",
     welcome_quote: "",

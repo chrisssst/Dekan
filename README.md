@@ -399,7 +399,7 @@ If Dekan is useful to you, **a star on GitHub** helps other players find it.
 
 ## Contact
 
-The project is maintained by **Isllan Toso**: [isllan.dev](https://isllan.dev/).
+The project is maintained under the **Dekan** name.
 
 For help and bug reports, the [Discord community](https://discord.gg/kutsal) and
 [GitHub issues](https://github.com/chrisssst/Dekan/issues) are the fastest routes. Security issues go through a

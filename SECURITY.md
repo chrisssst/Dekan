@@ -12,7 +12,7 @@ Useful details to include:
 - what an attacker could do, and under which conditions,
 - steps to reproduce, and the log from `%LOCALAPPDATA%\Dekan\logs` if relevant.
 
-Maintainer: Isllan Toso, [isllan.dev](https://isllan.dev/).
+Maintainer: Dekan.
 
 You will get an acknowledgement within a few days. Fixes ship as a new pre-release first and are credited in
 the release notes unless you prefer otherwise.
