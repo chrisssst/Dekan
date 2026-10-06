@@ -1251,8 +1251,7 @@ impl InjectionTrigger {
                 return None;
             }
         };
-        match dekan_lcu::client::LcuClient::new(&lockfile, dekan_lcu::client::DEFAULT_LCU_TIMEOUT)
-        {
+        match dekan_lcu::client::LcuClient::new(&lockfile, dekan_lcu::client::DEFAULT_LCU_TIMEOUT) {
             Ok(client) => Some(client),
             Err(e) => {
                 warn!(error = %e, "Could not build the LCU client");

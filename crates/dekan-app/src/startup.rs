@@ -32,8 +32,7 @@ mod tests {
     use super::*;
 
     fn tools(name: &str, host: Option<&[u8]>, dll: Option<&[u8]>) -> (PathBuf, PathBuf, PathBuf) {
-        let dir =
-            std::env::temp_dir().join(format!("dekan_startup_{name}_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dekan_startup_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
         std::fs::create_dir_all(&dir).expect("fixture dir");
         let host_path = dir.join("ltk_patcher_host.exe");

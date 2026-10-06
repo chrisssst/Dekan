@@ -574,9 +574,8 @@ impl OverlaySession {
     fn show_selection(&self, entry_id: Option<u32>, origin: Option<&str>) {
         let id = entry_id.map_or_else(|| "null".to_owned(), |id| id.to_string());
         let origin = origin.map_or_else(|| "null".to_owned(), |o| format!("\"{o}\""));
-        self.controller.eval_script(format!(
-            "window.dekanOverlay.setSelection({id}, {origin});"
-        ));
+        self.controller
+            .eval_script(format!("window.dekanOverlay.setSelection({id}, {origin});"));
     }
 
     async fn import_mod(

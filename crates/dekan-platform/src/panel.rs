@@ -490,10 +490,7 @@ mod tests {
         };
         let dir = std::path::PathBuf::from(dir);
         std::fs::create_dir_all(&dir).expect("dump dir");
-        for (tag, language) in [
-            ("tr", Language::Turkish),
-            ("en", Language::English),
-        ] {
+        for (tag, language) in [("tr", Language::Turkish), ("en", Language::English)] {
             let html = panel_html(&PanelLabels::from_text(language.text())).expect("labels");
             std::fs::write(dir.join(format!("panel-{tag}.html")), html).expect("panel");
         }

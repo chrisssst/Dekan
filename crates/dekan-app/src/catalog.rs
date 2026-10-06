@@ -589,10 +589,7 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
         .boxed()
 }
 
-async fn fetch_chroma_preview(
-    client: &dekan_lcu::client::LcuClient,
-    path: &str,
-) -> Option<String> {
+async fn fetch_chroma_preview(client: &dekan_lcu::client::LcuClient, path: &str) -> Option<String> {
     match client.get_asset_bytes(path).await {
         Ok(bytes) if !bytes.is_empty() => Some(tile_data_uri(path, &bytes)),
         Ok(_) => None,

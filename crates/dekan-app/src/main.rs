@@ -189,19 +189,15 @@ async fn main() -> Result<()> {
         dekan_inject::overlay_builder::prewarm_game_index(&paths.game_dir);
         let gate_state = state_rx.clone();
         let gate_token = shutdown_token.clone();
-        dekan_classic::generator::prewarm_companions(
-            &paths.game_dir,
-            &state_dir_path,
-            move || {
-                if gate_token.is_cancelled() {
-                    dekan_classic::generator::PrewarmGate::Stop
-                } else if gate_state.borrow().phase.is_in_game() {
-                    dekan_classic::generator::PrewarmGate::Wait
-                } else {
-                    dekan_classic::generator::PrewarmGate::Go
-                }
-            },
-        );
+        dekan_classic::generator::prewarm_companions(&paths.game_dir, &state_dir_path, move || {
+            if gate_token.is_cancelled() {
+                dekan_classic::generator::PrewarmGate::Stop
+            } else if gate_state.borrow().phase.is_in_game() {
+                dekan_classic::generator::PrewarmGate::Wait
+            } else {
+                dekan_classic::generator::PrewarmGate::Go
+            }
+        });
     }
 
     if library_has_content {
@@ -444,9 +440,7 @@ async fn main() -> Result<()> {
         });
 
         if dekan_app::update_check::is_enabled(
-            std::env::var(dekan_core::env::UPDATE_CHECK)
-                .ok()
-                .as_deref(),
+            std::env::var(dekan_core::env::UPDATE_CHECK).ok().as_deref(),
         ) {
             let update_tray = tray_controller.clone();
             let check = dekan_app::update_check::UpdateCheck {

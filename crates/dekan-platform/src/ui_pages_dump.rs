@@ -13,10 +13,7 @@ fn dump_rendered_pages() {
         crate::overlay_window::overlay_html(),
     )
     .expect("overlay");
-    for (tag, language) in [
-        ("tr", Language::Turkish),
-        ("en", Language::English),
-    ] {
+    for (tag, language) in [("tr", Language::Turkish), ("en", Language::English)] {
         let text = language.text();
         for (page, html) in [
             ("welcome", crate::welcome::welcome_html(text)),

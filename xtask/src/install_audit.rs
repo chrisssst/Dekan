@@ -242,10 +242,8 @@ mod tests {
     struct Temp(PathBuf);
     impl Temp {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "dekan_install_audit_{name}_{}",
-                std::process::id()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("dekan_install_audit_{name}_{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path); // ignore-ok: fixture may not exist yet
             std::fs::create_dir_all(&path).expect("temp");
             Self(path)
