@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and help (Discord)
-    url: https://discord.gg/e2dH2nUjd9
+    url: https://discord.gg/kutsal
     about: Setup help, questions and mod sharing are faster on Discord.
   - name: Security vulnerability
     url: https://github.com/chrisssst/Dekan/security/advisories/new

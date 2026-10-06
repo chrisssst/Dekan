@@ -2,7 +2,7 @@
 
 | You want to… | Go to |
 | --- | --- |
-| Ask a question, get help installing, share mods | [Discord](https://discord.gg/e2dH2nUjd9) |
+| Ask a question, get help installing, share mods | [Discord](https://discord.gg/kutsal) |
 | Report a bug (with the log attached) | [Bug report](https://github.com/chrisssst/Dekan/issues/new?template=bug_report.yml) |
 | Suggest a feature | [Feature request](https://github.com/chrisssst/Dekan/issues/new?template=feature_request.yml) |
 | Contact the maintainer | [isllan.dev](https://isllan.dev/) |
