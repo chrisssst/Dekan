@@ -5,7 +5,7 @@ page explains what makes a contribution easy to accept.
 
 ## Before you start
 
-- **Questions and ideas:** ask on [Discord](https://discord.gg/e2dH2nUjd9) first. A quick chat often saves a
+- **Questions and ideas:** ask on [Discord](https://discord.gg/kutsal) first. A quick chat often saves a
   pull request that heads in the wrong direction.
 - **Bugs:** open an issue with the bug template and **attach the log** from `%LOCALAPPDATA%\Dekan\logs` for
   the match where it failed.
