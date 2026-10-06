@@ -28,45 +28,33 @@ pub enum GameVersionError {
 
     #[error("file truncated before the {0}")]
     Truncated(&'static str),
-    /// The file does not start with `MZ`.
     #[error("not a PE file: DOS signature is not MZ")]
     BadDosSignature,
-    /// `e_lfanew` does not point at `PE\0\0`.
     #[error("not a PE file: no PE signature at offset {0:#x}")]
     BadPeSignature(u32),
-    /// `e_lfanew` points outside any plausible header area.
     #[error("PE header offset {0:#x} is out of range")]
     HeaderOffsetOutOfRange(u32),
-    /// The recorded build file exists but is not valid JSON of the expected shape.
     #[error("{path} is malformed: {source}")]
     Malformed {
         path: PathBuf,
         source: serde_json::Error,
     },
-    /// The recorded build could not be written.
     #[error("could not record the game build: {0}")]
     Save(#[from] crate::error::PlatformError),
 }
 
-/// A build of the game, as recorded in [`GAME_PATCH_FILE`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameBuild {
-    /// PE COFF `TimeDateStamp` of the game executable.
     pub time_date_stamp: u32,
 }
 
-/// What comparing the installed build with the recorded one found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildCheck {
-    /// Nothing was recorded before; the current build is now.
     FirstSeen { new: u32 },
-    /// Same build as last run.
     Unchanged { stamp: u32 },
-    /// The game was updated (or rolled back) since the last run; the new build is now recorded.
     Changed { old: u32, new: u32 },
 }
 
-/// Read the COFF `TimeDateStamp` of the executable at `path`, reading only its headers.
 pub fn read_time_date_stamp(path: &Path) -> Result<u32, GameVersionError> {
     let mut file = std::fs::File::open(path).map_err(|e| GameVersionError::Io {
         context: format!("could not open {}", path.display()),
@@ -75,8 +63,6 @@ pub fn read_time_date_stamp(path: &Path) -> Result<u32, GameVersionError> {
     time_date_stamp_from(&mut file)
 }
 
-/// Read the COFF `TimeDateStamp` from a PE image: the DOS header, then the PE signature and COFF
-/// header it points at. Every offset is checked before it is used.
 pub fn time_date_stamp_from<R: Read + Seek>(reader: &mut R) -> Result<u32, GameVersionError> {
     let mut dos = [0u8; DOS_HEADER_LEN];
     read_exact_or_truncated(reader, &mut dos, "DOS header")?;
@@ -103,7 +89,6 @@ pub fn time_date_stamp_from<R: Read + Seek>(reader: &mut R) -> Result<u32, GameV
     u32_le(&pe, TIME_DATE_STAMP_OFFSET).ok_or(GameVersionError::Truncated("COFF header"))
 }
 
-/// Load the build recorded by the last run. `None` when nothing was recorded yet.
 pub fn load(state_dir: &Path) -> Result<Option<GameBuild>, GameVersionError> {
     let path = state_dir.join(GAME_PATCH_FILE);
     let bytes = match std::fs::read(&path) {
@@ -121,7 +106,6 @@ pub fn load(state_dir: &Path) -> Result<Option<GameBuild>, GameVersionError> {
         .map_err(|source| GameVersionError::Malformed { path, source })
 }
 
-/// Record `build` as the last one seen.
 pub fn save(state_dir: &Path, build: GameBuild) -> Result<(), GameVersionError> {
     let json = serde_json::to_vec(&build).map_err(|source| GameVersionError::Malformed {
         path: state_dir.join(GAME_PATCH_FILE),
@@ -131,10 +115,6 @@ pub fn save(state_dir: &Path, build: GameBuild) -> Result<(), GameVersionError> 
     Ok(())
 }
 
-/// Compare the build in `game_dir` with the recorded one, and record it when it differs.
-///
-/// A malformed record is treated as no record: it is overwritten with the current build, because
-/// refusing to record forever would hide every later patch.
 pub fn check(state_dir: &Path, game_dir: &Path) -> Result<BuildCheck, GameVersionError> {
     let current = read_time_date_stamp(&game_dir.join(GAME_EXE))?;
     let previous = match load(state_dir) {

@@ -25,6 +25,10 @@ use wry::{Rect, WebViewBuilder};
 
 const OVERLAY_HTML: &str = include_str!("overlay_ui.html");
 
+pub(crate) fn overlay_html() -> String {
+    OVERLAY_HTML.replace("{{version}}", crate::version::display_version())
+}
+
 use crate::client_window::{
     ClientWindowState, WindowRect, client_window_state, overlay_placement, overlay_placement_on,
 };
@@ -58,7 +62,6 @@ pub const OVERLAY_MIN_WIDTH: i32 = 320;
 
 pub const OVERLAY_MIN_HEIGHT: i32 = 380;
 
-/// Size the user dragged the overlay to; placement keeps it across client moves.
 static OVERLAY_SIZE: (AtomicI32, AtomicI32) = (
     AtomicI32::new(OVERLAY_WIDTH),
     AtomicI32::new(OVERLAY_HEIGHT),
@@ -341,8 +344,6 @@ fn run_overlay_message_loop(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             class_name,
             w!("Dekan"),
-            // WS_THICKFRAME only makes the native size loop available (started from the UI's
-            // grip); WM_NCCALCSIZE hands the whole window to the client so no frame is drawn.
             WS_POPUP | WS_THICKFRAME,
             0,
             0,
@@ -370,7 +371,7 @@ fn run_overlay_message_loop(
     crate::paths::ensure_webview2_data_dir();
 
     let hwnd_raw = hwnd.0 as isize;
-    let html = OVERLAY_HTML.replace("{{version}}", crate::version::display_version());
+    let html = overlay_html();
     let webview = match WebViewBuilder::new()
         .with_html(html)
         .with_ipc_handler(move |request| {
@@ -391,9 +392,6 @@ fn run_overlay_message_loop(
                         let foreground_thread = GetWindowThreadProcessId(foreground_hwnd, None);
                         let current_thread = GetCurrentThreadId();
 
-                        // Only the foreground is taken here. Keyboard focus must land on the
-                        // WebView2 child, not on this host: `SetFocus(host)` pulled it out of the
-                        // page and the search box stopped receiving keystrokes.
                         if foreground_thread != 0 && foreground_thread != current_thread {
                             let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: best-effort thread input attachment
                             let _ = BringWindowToTop(target_hwnd); // ignore-ok: brings window to top of z-order
@@ -485,7 +483,6 @@ fn run_overlay_message_loop(
 
             match OverlayCommand::parse(payload) {
                 Ok(command) => {
-                    // Hovering chromas sends these continuously; they are not state transitions.
                     if matches!(command, OverlayCommand::ChromaPreview { .. }) {
                         debug!(?command, "Overlay UI command received");
                     } else {
@@ -611,12 +608,10 @@ unsafe extern "system" fn overlay_wnd_proc(
     };
 
     match msg {
-        // The whole window is client area: no frame from WS_THICKFRAME is ever painted.
         WM_NCCALCSIZE if wparam.0 != 0 => LRESULT(0),
         WM_GETMINMAXINFO => {
             let info = lparam.0 as *mut MINMAXINFO;
             if !info.is_null() {
-                // SAFETY: Windows passes a valid MINMAXINFO for this message.
                 unsafe {
                     (*info).ptMinTrackSize.x = OVERLAY_MIN_WIDTH;
                     (*info).ptMinTrackSize.y = OVERLAY_MIN_HEIGHT;

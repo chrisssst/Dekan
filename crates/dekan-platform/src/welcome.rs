@@ -26,7 +26,6 @@ use wry::WebViewBuilder;
 const WELCOME_HTML: &str = include_str!("welcome_ui.html");
 const TIMER_AUTO_DISMISS: usize = 2001;
 
-/// Posted by the window procedure on `WM_SIZE`: the WebView lives on the pump, not in the proc.
 const WM_WELCOME_RESIZED: u32 = WM_APP + 1;
 
 const WELCOME_WIDTH: i32 = 530;
@@ -34,7 +33,6 @@ const WELCOME_HEIGHT: i32 = 440;
 const WELCOME_MIN_WIDTH: i32 = 420;
 const WELCOME_MIN_HEIGHT: i32 = 340;
 
-/// One list row, or nothing: an empty string must not leave a bare dekan behind.
 fn list_item(value: &str) -> String {
     if value.is_empty() {
         String::new()
@@ -46,7 +44,7 @@ fn list_item(value: &str) -> String {
     }
 }
 
-fn welcome_html(text: &crate::i18n::Text) -> String {
+pub(crate) fn welcome_html(text: &crate::i18n::Text) -> String {
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
@@ -64,7 +62,7 @@ fn welcome_html(text: &crate::i18n::Text) -> String {
         .replace("{{welcome_quote_item}}", &list_item(text.welcome_quote))
 }
 
-fn about_html(text: &crate::i18n::Text) -> String {
+pub(crate) fn about_html(text: &crate::i18n::Text) -> String {
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
@@ -94,17 +92,14 @@ impl HasWindowHandle for WelcomeWindowHandle {
         let non_zero = NonZeroIsize::new(self.0.0 as isize).ok_or(HandleError::Unavailable)?;
         let handle = Win32WindowHandle::new(non_zero);
         let raw = RawWindowHandle::Win32(handle);
-        // SAFETY: self.0 is a valid Win32 HWND owned by this thread for the lifetime of the borrow.
         unsafe { Ok(WindowHandle::borrow_raw(raw)) }
     }
 }
 
-/// Load the embedded Dekan application icon from the PE resources.
 #[allow(clippy::manual_dangling_ptr)]
 pub(crate) fn load_dekan_icon() -> Option<HICON> {
     unsafe {
         if let Ok(module) = GetModuleHandleW(None) {
-            // Resource ID 1 is standard for the icon embedded by winres in build.rs
             if let Ok(icon) = LoadIconW(HINSTANCE(module.0), PCWSTR(1 as *const u16)) {
                 if !icon.is_invalid() {
                     return Some(icon);
@@ -115,14 +110,12 @@ pub(crate) fn load_dekan_icon() -> Option<HICON> {
     None
 }
 
-/// Spawn the styled dark-mode welcome window on a background thread (auto-dismisses in 15s).
 pub fn show_welcome_window() {
     thread::spawn(|| {
         run_welcome_window_pump(true, false);
     });
 }
 
-/// Spawn the styled dark-mode About window on a background thread (stays open until user dismisses).
 pub fn show_about_window() {
     thread::spawn(|| {
         run_welcome_window_pump(false, true);
@@ -137,14 +130,12 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         lpfnWndProc: Some(welcome_wnd_proc),
         hInstance: Default::default(),
         lpszClassName: class_name,
-        // SAFETY: Loading standard arrow cursor
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
         hIcon: hicon,
         hbrBackground: HBRUSH((COLOR_WINDOW.0 + 1) as *mut _),
         ..Default::default()
     };
 
-    // SAFETY: RegisterClassW registers our welcome window class
     unsafe {
         let _ = RegisterClassW(&wc); // ignore-ok: failure just means already registered
     }
@@ -152,14 +143,12 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
     let width = WELCOME_WIDTH;
     let height = WELCOME_HEIGHT;
 
-    // SAFETY: GetSystemMetrics queries screen resolution
     let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
     let screen_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
 
     let pos_x = (screen_w - width) / 2;
     let pos_y = (screen_h - height) / 2;
 
-    // SAFETY: CreateWindowExW creates the top-level welcome frame
     let hwnd = match unsafe {
         CreateWindowExW(
             WINDOW_EX_STYLE(0),
@@ -189,9 +178,7 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         }
     };
 
-    // Ensure window icons are explicitly assigned to titlebar and taskbar
     if !hicon.is_invalid() {
-        // SAFETY: SendMessageW with WM_SETICON assigns icon to the window
         unsafe {
             // ignore-ok: WM_SETICON returns the previous icon, not a status; a default icon is cosmetic
             let _ = SendMessageW(
@@ -210,9 +197,7 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         }
     }
 
-    // Enable Windows 10/11 Immersive Dark Mode for titlebar
     let dark_mode_val: i32 = 1;
-    // SAFETY: DwmSetWindowAttribute is cosmetic; older Windows builds simply refuse
     unsafe {
         // ignore-ok: cosmetic; older Windows builds refuse this attribute by design
         let _ = DwmSetWindowAttribute(
@@ -226,7 +211,6 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
     crate::paths::ensure_webview2_data_dir();
 
     let mut client_rect = RECT::default();
-    // SAFETY: GetClientRect queries client area of hwnd
     unsafe {
         // ignore-ok: a zeroed rect creates the WebView at 0x0, resized by the first WM_SIZE
         let _ = GetClientRect(hwnd, &mut client_rect);
@@ -249,7 +233,6 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         })
         .with_ipc_handler(move |request| {
             if request.body() == "dismiss" {
-                // SAFETY: PostMessageW safely requests window close on dismiss button click
                 unsafe {
                     // ignore-ok: best-effort dismiss; the 15 s timer and titlebar still close it
                     let _ = PostMessageW(HWND(hwnd_raw as *mut _), WM_CLOSE, WPARAM(0), LPARAM(0));
@@ -257,13 +240,10 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
             }
         })
         .build_as_child(&host);
-    // Kept alive until the pump ends: dropping it tears the page down.
     let webview = match webview {
         Ok(webview) => webview,
         Err(e) => {
-            // An empty frame is worse than no window: the welcome is informational only.
             warn!(error = %e, "Welcome window: could not create the WebView");
-            // SAFETY: destroying this thread's own window on a failed build.
             unsafe {
                 // ignore-ok: the only failure is an already-gone window, which is the wanted outcome
                 let _ = DestroyWindow(hwnd);
@@ -345,7 +325,6 @@ unsafe extern "system" fn welcome_wnd_proc(
         WM_GETMINMAXINFO => {
             let info = lparam.0 as *mut MINMAXINFO;
             if !info.is_null() {
-                // SAFETY: Windows passes a valid MINMAXINFO for this message.
                 unsafe {
                     (*info).ptMinTrackSize.x = WELCOME_MIN_WIDTH;
                     (*info).ptMinTrackSize.y = WELCOME_MIN_HEIGHT;
@@ -400,7 +379,7 @@ mod tests {
 
     #[test]
     fn about_page_is_distinct_from_the_intro_and_states_it_is_educational() {
-        for language in [Language::Portuguese, Language::Spanish, Language::English] {
+        for language in [Language::Turkish, Language::English] {
             let text = language.text();
             let about = about_html(text);
             let welcome = welcome_html(text);
@@ -431,7 +410,7 @@ mod tests {
 
     #[test]
     fn every_language_fills_every_placeholder() {
-        for language in [Language::Portuguese, Language::Spanish, Language::English] {
+        for language in [Language::Turkish, Language::English] {
             let html = welcome_html(language.text());
             assert!(!html.contains("{{"), "{language:?} left a placeholder");
             assert!(html.contains(language.text().welcome_dismiss));

@@ -109,163 +109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dekan-app"
-version = "1.1.0"
-dependencies = [
- "anyhow",
- "base64 0.23.1",
- "dekan-classic",
- "dekan-core",
- "dekan-inject",
- "dekan-lcu",
- "dekan-party",
- "dekan-platform",
- "dekan-wad",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "winres",
- "zip",
-]
-
-[[package]]
-name = "dekan-classic"
-version = "1.1.0"
-dependencies = [
- "dekan-core",
- "dekan-wad",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "dekan-core"
-version = "1.1.0"
-dependencies = [
- "futures-util",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "dekan-inject"
-version = "1.1.0"
-dependencies = [
- "dekan-core",
- "dekan-platform",
- "dekan-wad",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "windows 0.58.0",
- "xxhash-rust",
- "zstd",
-]
-
-[[package]]
-name = "dekan-lcu"
-version = "1.1.0"
-dependencies = [
- "base64 0.23.1",
- "dekan-core",
- "dekan-platform",
- "futures-util",
- "reqwest",
- "rustls",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "dekan-party"
-version = "1.1.0"
-dependencies = [
- "base64 0.23.1",
- "dekan-core",
- "chacha20poly1305",
- "futures-util",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.20",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "dekan-platform"
-version = "1.1.0"
-dependencies = [
- "dekan-core",
- "raw-window-handle",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "uuid",
- "windows 0.58.0",
- "wry",
- "zip",
-]
-
-[[package]]
-name = "dekan-relay"
-version = "1.1.0"
-dependencies = [
- "dekan-core",
- "dekan-party",
- "futures-util",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "dekan-wad"
-version = "1.1.0"
-dependencies = [
- "flate2",
- "memmap2",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
- "xxhash-rust",
- "zip",
- "zstd",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -474,6 +317,164 @@ name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
+
+[[package]]
+name = "dekan-app"
+version = "1.2.1"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "dekan-classic",
+ "dekan-core",
+ "dekan-inject",
+ "dekan-lcu",
+ "dekan-party",
+ "dekan-platform",
+ "dekan-wad",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "winres",
+ "zip",
+]
+
+[[package]]
+name = "dekan-classic"
+version = "1.2.1"
+dependencies = [
+ "dekan-core",
+ "dekan-wad",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-core"
+version = "1.2.1"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-inject"
+version = "1.2.1"
+dependencies = [
+ "dekan-core",
+ "dekan-platform",
+ "dekan-wad",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+ "xxhash-rust",
+ "zstd",
+]
+
+[[package]]
+name = "dekan-lcu"
+version = "1.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "dekan-core",
+ "dekan-platform",
+ "futures-util",
+ "reqwest",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-party"
+version = "1.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "chacha20poly1305",
+ "dekan-core",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-platform"
+version = "1.2.1"
+dependencies = [
+ "dekan-core",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows 0.58.0",
+ "wry",
+ "zip",
+]
+
+[[package]]
+name = "dekan-relay"
+version = "1.2.1"
+dependencies = [
+ "dekan-core",
+ "dekan-party",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dekan-wad"
+version = "1.2.1"
+dependencies = [
+ "flate2",
+ "memmap2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+ "xxhash-rust",
+ "zip",
+ "zstd",
+]
 
 [[package]]
 name = "deranged"
@@ -3043,12 +3044,13 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.1.0"
+version = "1.2.1"
 dependencies = [
  "dekan-app",
  "dekan-classic",
  "dekan-core",
  "dekan-inject",
+ "dekan-lcu",
  "dekan-party",
  "dekan-platform",
  "dekan-wad",

@@ -333,3 +333,42 @@ fn test_decoded_size_must_match_the_toc() {
         }
     }
 }
+
+#[test]
+fn test_read_prefix_decodes_only_the_head_of_every_compression() {
+    let original = b"PROPrest of a large property bin that is never needed to classify it";
+    let zstd_data = zstd::encode_all(&original[..], 3).expect("zstd compression");
+    let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut gzip, original).expect("gzip write");
+    let gzip_data = gzip.finish().expect("gzip finish");
+    let wad = build_synthetic_wad(&[
+        (0x1, CompressionType::Raw, original, original.len()),
+        (0x2, CompressionType::Zstd, &zstd_data, original.len()),
+        (0x3, CompressionType::Gzip, &gzip_data, original.len()),
+        (
+            0x4,
+            CompressionType::ZstdChunked,
+            &zstd_data,
+            original.len(),
+        ),
+        (0x5, CompressionType::Raw, b"PR", 2),
+    ]);
+    let path = std::env::temp_dir().join(format!("dekan_prefix_{}.wad", std::process::id()));
+    std::fs::write(&path, &wad).expect("write wad");
+    let file = WadFile::open(&path).expect("open");
+
+    for hash in [0x1, 0x2, 0x3, 0x4] {
+        assert_eq!(
+            file.read_prefix(hash, 4).expect("prefix").as_deref(),
+            Some(&b"PROP"[..]),
+            "entry {hash:#x}"
+        );
+    }
+    assert_eq!(
+        file.read_prefix(0x5, 4).expect("short entry").as_deref(),
+        Some(&b"PR"[..]),
+        "never more than the entry holds"
+    );
+    assert_eq!(file.read_prefix(0x9, 4).expect("absent"), None);
+    std::fs::remove_file(&path).ok();
+}

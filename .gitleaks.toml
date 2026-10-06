@@ -1,5 +1,3 @@
-# gitleaks configuration: every default rule stays on. The allowlist only covers fixed test fixtures that
-# look like keys but are not secrets.
 [extend]
 useDefault = true
 

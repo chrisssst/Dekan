@@ -1,5 +1,3 @@
-//! Accepts the ready check when the user turned "Accept matches automatically" on in the tray.
-
 use std::time::Duration;
 
 use dekan_core::phase::GamePhase;
@@ -7,8 +5,6 @@ use dekan_core::state::StateReceiver;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-/// The ready-check popup needs a moment before the client takes an accept; answering on the
-/// very first phase event is refused as often as not.
 const ACCEPT_DELAY: Duration = Duration::from_millis(1200);
 
 const ATTEMPTS: u32 = 3;
@@ -25,7 +21,7 @@ pub async fn run(mut state_rx: StateReceiver, token: CancellationToken) {
                 let now = state_rx.borrow_and_update().phase == GamePhase::ReadyCheck;
                 let entered = now && !in_ready_check;
                 in_ready_check = now;
-                if entered && dekan_platform::auto_accept::is_enabled() {
+                if entered && dekan_platform::preferences::AUTO_ACCEPT.is_enabled() {
                     accept(&state_rx, &token).await;
                 }
             }
@@ -39,9 +35,8 @@ async fn accept(state_rx: &StateReceiver, token: &CancellationToken) {
             _ = token.cancelled() => return,
             () = tokio::time::sleep(ACCEPT_DELAY) => {}
         }
-        // The user may have accepted, declined or dodged by hand meanwhile.
         if state_rx.borrow().phase != GamePhase::ReadyCheck
-            || !dekan_platform::auto_accept::is_enabled()
+            || !dekan_platform::preferences::AUTO_ACCEPT.is_enabled()
         {
             return;
         }

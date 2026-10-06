@@ -36,25 +36,33 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `pipeline.rs` | Orchestrates build → arm → confirm |
 | `runner.rs` | Runs external processes without a console window |
 | `dll_validator.rs` | Checks a binary's SHA-256 against its audited hash before it is ever run or loaded |
-| `suspend.rs` | Game suspension guard and recovery |
 
 ## Rules the builder follows
 
-- **Keep the game's bytes.** Unchanged entries are copied exactly as the game shipped them. The game checks
-  its archives, and a recompressed copy can be rejected as corrupt.
-- **A champion mod never changes a file that a map also contains.** Some paths exist both in a champion archive
-  and in a map archive. If the champion's copy is changed but the map's is not, the game detects the mismatch
-  and asks for a repair. Those shared entries are therefore left exactly as the game has them, and maps are
-  only rewritten by map mods.
+- **Keep the game's bytes and header.** Unchanged entries are copied exactly as the game shipped them, and every
+  rebuilt archive keeps the game's header (signature and checksum). The game checks its archives, and a copy
+  recompressed or written with another header is rejected as corrupt.
+- **A path that several archives hold changes in all of them.** Some paths exist both in a champion archive and
+  in a map archive (Zed's shadow is in `Map11.wad.client` too). Changing only one side makes the game report the
+  archive as inconsistent, and leaving the path out leaves that part of the skin on its default look, so the
+  map archive is rebuilt as well.
+- **A game archive is copied once, then reused.** When a mod only replaces entries the archive already has, the
+  rebuilt archive is the game file copied byte for byte with the new entries appended and its table updated.
+  The copy is kept until the game file changes (outside the served folder when a build does not need it), and
+  the map archives a champion shares are copied as soon as the champion is locked in. A 2.5 GB map is copied
+  once per patch; switching skins afterwards takes milliseconds.
+- **A cached overlay is reused only for the same inputs and the same builder.** Its fingerprint records every
+  mod file, base game archive and output archive, plus the builder and its revision; an unknown builder or
+  another revision rebuilds it.
 - **Every third-party binary is verified first.** If the injector's hash does not match, it is refused. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 
-## Suspension and recovery
+## No suspension
 
-In the rare fallback where the game has to be paused while the overlay is being prepared, the whole process is
-suspended in one call. A guard object resumes it automatically when it goes out of scope, even on a panic. If
-Dekan itself dies while the game is suspended, the next start finds the marker file and resumes the game,
-after checking that the process id still belongs to the game.
+Dekan never suspends the game or opens its threads. The anti-cheat refuses it even from an elevated process
+with the debug privilege, so the fallback never worked in a match, and the calls it needed are the ones
+antivirus heuristics weigh most. The late path, when the game starts before the injector is armed, builds the
+overlay and arms the injector within a fixed time budget instead.
 
 ## Testing
 
@@ -63,5 +71,6 @@ cargo test -p dekan-inject
 ```
 
 `tests/native_overlay_faithful.rs` builds an overlay from a real game install and checks, entry by entry, that
-unchanged data is byte-identical to the game's. Anything that affects what happens inside the game still has
+unchanged data is byte-identical to the game's and that each archive keeps the game's header
+(`DEKAN_FAITHFUL_MODS`, `DEKAN_FAITHFUL_MOD` and `DEKAN_FAITHFUL_SECOND` choose the mods). Anything that affects what happens inside the game still has
 to be confirmed in a real match.

@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for reporting. **A bug without a log usually cannot be diagnosed.**
         Logs are in `%LOCALAPPDATA%\Dekan\logs`. For more detail, set `DEKAN_LOG=debug`, reproduce, and attach the newest file.
-        Security issues should be reported privately through the security contact configured for this fork.
+        Security issues go to a [private advisory](https://github.com/chrisssst/Dekan/security/advisories/new), not here.
   - type: input
     id: version
     attributes:

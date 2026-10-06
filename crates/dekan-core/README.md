@@ -31,6 +31,20 @@ known list of places that could have caused it.
 | `env.rs` | The only list of `DEKAN_*` environment variables Dekan reads |
 | `error.rs` | Error types shared across crates |
 
+## Custom mods
+
+- Mods are read only from `%LOCALAPPDATA%\Dekan\custom_mods`; Dekan never reads another product's mod folder.
+- A mod folder is `META/info.json` plus a non-empty `WAD/` or `RAW/`, matched case-insensitively like Windows
+  does; `.fantome` and `.zip` archives are extracted into the staging directory. Anything else is counted and
+  reported once, so a folder dropped in with the wrong layout does not vanish without a trace. Hidden
+  `.<name>-import-*` temporaries that mod managers leave after a failed import are not mods.
+- `description.txt` is read up to a tooltip-sized limit.
+- What the selection window sends is validated per slot: every id must be listed in the slot it was sent for
+  (a map id sent as the font is refused, an unknown id is never guessed at). The accepted part is applied, the
+  refused part is logged, and the window receives the effective selection back.
+- A chroma preview request carries only the chroma id; the image path is resolved from the catalog Rust built,
+  never taken from the page.
+
 ## Party verification
 
 `party.rs` decides whether a teammate's announced skin can be trusted. An announcement is only accepted when

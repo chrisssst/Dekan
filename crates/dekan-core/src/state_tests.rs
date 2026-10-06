@@ -283,3 +283,22 @@ fn clear_for_new_game_resets_everything() {
     assert_eq!(state.injection, InjectionStatus::Idle);
     assert!(state.champion_id.is_none());
 }
+
+#[test]
+fn hosting_a_party_is_a_named_transition_that_only_fires_on_change() {
+    let (tx, rx) = new_state_channel();
+    assert!(!rx.borrow().party_hosting);
+
+    let mut watcher = rx.clone();
+    watcher.mark_unchanged();
+    set_party_hosting(&tx, true);
+    assert!(watcher.has_changed().expect("sender alive"));
+    assert!(rx.borrow().party_hosting);
+
+    watcher.mark_unchanged();
+    set_party_hosting(&tx, true);
+    assert!(!watcher.has_changed().expect("sender alive"));
+
+    set_party_hosting(&tx, false);
+    assert!(!rx.borrow().party_hosting);
+}

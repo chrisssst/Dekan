@@ -10,8 +10,25 @@ fn game_dir() -> PathBuf {
 }
 
 fn mods_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("DEKAN_FAITHFUL_MODS") {
+        return PathBuf::from(dir);
+    }
     let local = std::env::var("LOCALAPPDATA").expect("LOCALAPPDATA set");
     PathBuf::from(local).join("Dekan").join("mods")
+}
+
+fn mod_name() -> String {
+    std::env::var("DEKAN_FAITHFUL_MOD").unwrap_or_else(|_| "std_zed_70".to_owned())
+}
+
+fn assert_same_header(game_wad: &std::path::Path, overlay_wad: &std::path::Path) {
+    let head = |path: &std::path::Path| std::fs::read(path).expect("wad")[..268].to_vec();
+    assert_eq!(
+        head(game_wad),
+        head(overlay_wad),
+        "{} keeps the game's signature and checksum",
+        overlay_wad.display()
+    );
 }
 
 fn compare_wad(
@@ -88,12 +105,39 @@ fn compare_wad(
     }
 }
 
+fn mod_hashes(mod_wad: &std::path::Path) -> Vec<u64> {
+    if mod_wad.is_file() {
+        return WadFile::open(mod_wad)
+            .expect("open mod wad")
+            .toc()
+            .map(|e| e.path_hash)
+            .collect();
+    }
+    let mut hashes = Vec::new();
+    let mut stack = vec![mod_wad.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("mod folder").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                let relative = path
+                    .strip_prefix(mod_wad)
+                    .expect("inside the mod")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                hashes.push(dekan_wad::hash::wad_path_hash(&relative));
+            }
+        }
+    }
+    hashes
+}
+
 fn expected_changes(mod_wad: &std::path::Path, game_wad: &std::path::Path) -> Vec<u64> {
-    let m = WadFile::open(mod_wad).expect("open mod wad");
     let g = WadFile::open(game_wad).expect("open game wad");
     let game: std::collections::HashSet<u64> = g.toc().map(|e| e.path_hash).collect();
-    m.toc()
-        .map(|e| e.path_hash)
+    mod_hashes(mod_wad)
+        .into_iter()
         .filter(|h| game.contains(h))
         .collect()
 }
@@ -103,13 +147,14 @@ fn expected_changes(mod_wad: &std::path::Path, game_wad: &std::path::Path) -> Ve
 fn native_clone_of_map11_and_zed_is_byte_faithful() {
     let game = game_dir();
     let mods = mods_dir();
+    let name = mod_name();
     assert!(
         game.join("DATA/FINAL").exists(),
         "game not found at {game:?}"
     );
     assert!(
-        mods.join("238_238068/WAD/Zed.wad.client").exists(),
-        "extracted mod 238_238068 not found in {mods:?}"
+        mods.join(&name).join("WAD").join("Zed.wad.client").exists(),
+        "mod {name} not found in {mods:?}"
     );
 
     let out = std::env::temp_dir().join("dekan_native_faithful");
@@ -121,7 +166,7 @@ fn native_clone_of_map11_and_zed_is_byte_faithful() {
         &game,
         &mods,
         &out,
-        &["238_238068".to_string()],
+        std::slice::from_ref(&name),
         &AtomicBool::new(false),
     )
     .expect("native overlay build");
@@ -132,7 +177,7 @@ fn native_clone_of_map11_and_zed_is_byte_faithful() {
         build.elapsed.as_millis()
     );
 
-    let mod_wad = mods.join(r"238_238068\WAD\Zed.wad.client");
+    let mod_wad = mods.join(&name).join("WAD").join("Zed.wad.client");
 
     let game_map11 = game.join(r"DATA\FINAL\Maps\Shipping\Map11.wad.client");
     let map11_changed = expected_changes(&mod_wad, &game_map11);
@@ -140,20 +185,41 @@ fn native_clone_of_map11_and_zed_is_byte_faithful() {
         "Map11.wad.client (mod entries also in Map11: {}):",
         map11_changed.len()
     );
-    compare_wad(
-        &game_map11,
-        &out.join(r"DATA\FINAL\Maps\Shipping\Map11.wad.client"),
-        &map11_changed,
-    );
+    let overlay_map11 = out.join(r"DATA\FINAL\Maps\Shipping\Map11.wad.client");
+    compare_wad(&game_map11, &overlay_map11, &map11_changed);
+    assert_same_header(&game_map11, &overlay_map11);
 
     let game_zed = game.join(r"DATA\FINAL\Champions\Zed.wad.client");
     let zed_changed = expected_changes(&mod_wad, &game_zed);
     println!("Zed.wad.client (modded entries: {}):", zed_changed.len());
-    compare_wad(
-        &game_zed,
-        &out.join(r"DATA\FINAL\Champions\Zed.wad.client"),
-        &zed_changed,
-    );
+    let overlay_zed = out.join(r"DATA\FINAL\Champions\Zed.wad.client");
+    compare_wad(&game_zed, &overlay_zed, &zed_changed);
+    assert_same_header(&game_zed, &overlay_zed);
+
+    if let Ok(second) = std::env::var("DEKAN_FAITHFUL_SECOND") {
+        let rebuild = overlay_builder::build(
+            &game,
+            &mods,
+            &out,
+            std::slice::from_ref(&second),
+            &AtomicBool::new(false),
+        )
+        .expect("second overlay build");
+        println!(
+            "second build ({second}): {} WADs, written {}, {} bytes, {} ms",
+            rebuild.wad_files,
+            rebuild.written,
+            rebuild.bytes,
+            rebuild.elapsed.as_millis()
+        );
+        let second_wad = mods.join(&second).join("WAD").join("Zed.wad.client");
+        compare_wad(
+            &game_map11,
+            &overlay_map11,
+            &expected_changes(&second_wad, &game_map11),
+        );
+        assert_same_header(&game_map11, &overlay_map11);
+    }
 
     // ignore-ok: best-effort cleanup of temp directory after test run
     let _ = std::fs::remove_dir_all(&out);

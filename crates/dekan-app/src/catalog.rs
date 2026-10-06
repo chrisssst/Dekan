@@ -18,8 +18,6 @@ pub struct CatalogChroma {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub form: bool,
 
-    /// LCU asset path of the chroma's preview image. Kept on the Rust side: the page only
-    /// learns whether a preview exists and asks for it by id.
     #[serde(skip)]
     pub preview_path: Option<String>,
 
@@ -134,6 +132,15 @@ impl Catalog {
     }
 
     #[must_use]
+    pub fn chroma_preview_paths(&self) -> Vec<(u32, String)> {
+        self.skins
+            .iter()
+            .flat_map(|s| s.chromas.iter())
+            .filter_map(|c| c.preview_path.clone().map(|path| (c.id, path)))
+            .collect()
+    }
+
+    #[must_use]
     pub fn chroma_preview_path(&self, chroma_id: u32) -> Option<&str> {
         self.skins
             .iter()
@@ -141,6 +148,22 @@ impl Catalog {
             .find(|c| c.id == chroma_id)
             .and_then(|c| c.preview_path.as_deref())
     }
+}
+
+fn client_form(form: &dekan_lcu::champion_assets::QuestTier) -> CatalogChroma {
+    CatalogChroma {
+        id: form.id,
+        name: if form.name.is_empty() {
+            fallback_name(form.id)
+        } else {
+            form.name.clone()
+        },
+        color: None,
+        form: true,
+        preview_path: None,
+        has_preview: false,
+    }
+    .with_preview(form.tile_path.as_deref())
 }
 
 fn fallback_name(id: u32) -> String {
@@ -154,12 +177,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| format!("#{}", library.champion_id));
 
-    let alias = assets
-        .map(|a| a.alias.clone())
-        .filter(|a| !a.is_empty())
-        .or_else(|| {
-            dekan_core::champions::champion_alias_by_id(library.champion_id).map(str::to_owned)
-        });
+    let alias = assets.map(|a| a.alias.clone()).filter(|a| !a.is_empty());
 
     let skins: Vec<CatalogSkin> = if !library.skins.is_empty() {
         library
@@ -175,22 +193,33 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
                     .iter()
                     .map(|chroma| {
                         let chroma_meta = assets.and_then(|a| a.chroma(chroma.id));
-                        let client_name = chroma_meta
-                            .map(|c| c.name.clone())
-                            .filter(|n| !n.is_empty());
-                        let form_name = dekan_core::forms::form_display_name(chroma.id);
+                        let form_meta = assets.and_then(|a| a.form(chroma.id));
+                        let client_name = assets
+                            .and_then(|a| a.name_of(chroma.id))
+                            .filter(|n| !n.is_empty())
+                            .map(str::to_owned);
                         CatalogChroma {
                             id: chroma.id,
-                            form: client_name.is_none() && form_name.is_some(),
-                            name: client_name
-                                .or(form_name)
-                                .unwrap_or_else(|| fallback_name(chroma.id)),
+                            form: form_meta.is_some(),
+                            name: client_name.unwrap_or_else(|| fallback_name(chroma.id)),
                             color: chroma_meta.and_then(|c| c.colors.first().cloned()),
                             preview_path: None,
                             has_preview: false,
                         }
-                        .with_preview(chroma_meta.and_then(|c| c.chroma_path.as_deref()))
+                        .with_preview(
+                            chroma_meta
+                                .and_then(|c| c.chroma_path.as_deref())
+                                .or_else(|| form_meta.and_then(|f| f.tile_path.as_deref())),
+                        )
                     })
+                    .chain(
+                        assets
+                            .and_then(|a| a.skins.iter().find(|s| s.id == skin.id))
+                            .into_iter()
+                            .flat_map(|client_skin| client_skin.forms())
+                            .filter(|form| skin.chromas.iter().all(|c| c.id != form.id))
+                            .map(client_form),
+                    )
                     .collect();
 
                 CatalogSkin {
@@ -221,14 +250,13 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
                     .chromas
                     .iter()
                     .map(|chroma| {
-                        let form_name = dekan_core::forms::form_display_name(chroma.id);
                         CatalogChroma {
                             id: chroma.id,
-                            form: form_name.is_some(),
-                            name: if !chroma.name.is_empty() {
-                                chroma.name.clone()
+                            form: false,
+                            name: if chroma.name.is_empty() {
+                                fallback_name(chroma.id)
                             } else {
-                                form_name.unwrap_or_else(|| fallback_name(chroma.id))
+                                chroma.name.clone()
                             },
                             color: chroma.colors.first().cloned(),
                             preview_path: None,
@@ -236,6 +264,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
                         }
                         .with_preview(chroma.chroma_path.as_deref())
                     })
+                    .chain(skin.forms().map(client_form))
                     .collect();
 
                 CatalogSkin {
@@ -270,15 +299,11 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
 
 fn champion_quote(champion_id: u32) -> Option<&'static str> {
     match champion_id {
-        21 => Some("Eu sempre atiro primeiro!"), // Miss Fortune
+        21 => Some("Eu sempre atiro primeiro!"),
         _ => None,
     }
 }
 
-/// Load the catalog for a champion: index the library, then decorate it with client metadata.
-///
-/// Indexing touches the filesystem and runs on the blocking pool. The client lookup is
-/// best-effort by design — a silent client costs names, never the catalog itself.
 pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
     let library = match tokio::task::spawn_blocking(move || {
         scan_champion(&library_root, champion_id)
@@ -309,20 +334,22 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
         catalog.locale = resolve_locale(client).await;
     }
 
-    // Offline / library-less discovery fallback (Fase J, #162):
-    // When no client assets were available and library has no skins on disk,
-    // probe the installed game WADs for available skin numbers.
-    if catalog.skins.is_empty() {
+    if catalog.alias.is_none() || catalog.skins.is_empty() {
         if let Some(game_dir) = dekan_platform::paths::discover_game_dir() {
-            if let Some(alias) = catalog
-                .alias
-                .as_deref()
-                .or_else(|| dekan_core::champions::champion_alias_by_id(champion_id))
-            {
+            if catalog.alias.is_none() {
+                let installed = game_dir.clone();
+                catalog.alias = tokio::task::spawn_blocking(move || {
+                    dekan_classic::client_data::champion_alias(&installed, champion_id)
+                })
+                .await
+                .ok()
+                .flatten();
+            }
+            if let Some(alias) = catalog.alias.clone().filter(|_| catalog.skins.is_empty()) {
                 if let Ok(champ) =
-                    dekan_classic::generator::StandardChampion::open(&game_dir, alias)
+                    dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
                 {
-                    let numbers = champ.skin_numbers(100);
+                    let numbers = champ.skin_numbers(1000);
                     for n in numbers {
                         let skin_id = champion_id * 1000 + n;
                         catalog.skins.push(CatalogSkin {
@@ -349,65 +376,22 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
     catalog
 }
 
-/// Catalog for a Rift Classic champion (id `60000 + id`, E12).
-///
-/// Classic does not load the library packages at all — the mod is generated from the installed
-/// game's `jade_*` tree — so what can be offered is decided by the **game**, not the library: the
-pub async fn load_classic_catalog(
-    game_dir: PathBuf,
-    library_root: PathBuf,
+#[must_use]
+pub fn build_classic_catalog(
     classic_champion_id: u32,
-) -> Catalog {
-    use dekan_classic::builder::ClassicIdMapper;
-    use dekan_classic::generator::{ClassicChampion, main_character, resolve_alias};
-
-    let regular = ClassicIdMapper::normalize_champion_id(classic_champion_id);
-    let fetched = fetch_assets(regular).await;
-    let client_alias = fetched
-        .as_ref()
-        .map(|(assets, _)| assets.alias.clone())
-        .filter(|a| !a.is_empty());
-
-    let library_dir = library_root.join(regular.to_string());
-    let scan = tokio::task::spawn_blocking(move || {
-        let alias = resolve_alias(&game_dir, client_alias.as_deref(), &library_dir)?;
-        let champion = match ClassicChampion::open(&game_dir, &alias) {
-            Ok(champion) => champion,
-            Err(e) => {
-                warn!(alias = %alias, error = %e, "Champion WAD could not be opened for Rift Classic");
-                return None;
-            }
-        };
-        let numbers: std::collections::BTreeSet<u32> = champion
-            .skin_numbers(&main_character(&alias), 1000)
-            .into_iter()
-            .collect();
-        Some((alias, numbers))
-    })
-    .await;
-
-    let (alias, numbers) = match scan {
-        Ok(Some(found)) => found,
-        Ok(None) => {
-            warn!(
-                champion_id = classic_champion_id,
-                regular, "No champion WAD alias found for Rift Classic; nothing can be offered"
-            );
-            (String::new(), std::collections::BTreeSet::new())
-        }
-        Err(e) => {
-            warn!(error = %e, "Rift Classic scan task failed; nothing can be offered");
-            (String::new(), std::collections::BTreeSet::new())
-        }
-    };
+    assets: Option<&ChampionAssets>,
+    numbers: &std::collections::BTreeSet<u32>,
+) -> (Catalog, usize) {
+    let regular =
+        dekan_classic::builder::ClassicIdMapper::normalize_champion_id(classic_champion_id);
     let offerable = |id: u32| {
         let number = id % 1000;
-        number != 0 && number < 300 && numbers.contains(&number)
+        number != 0 && numbers.contains(&number)
     };
 
     let mut dropped = 0usize;
-    let skins: Vec<CatalogSkin> = match &fetched {
-        Some((assets, _)) => assets
+    let skins: Vec<CatalogSkin> = match assets {
+        Some(assets) => assets
             .skins
             .iter()
             .filter(|skin| !skin.is_base)
@@ -431,8 +415,9 @@ pub async fn load_classic_catalog(
                         }
                         .with_preview(c.chroma_path.as_deref())
                     })
+                    .chain(skin.forms().filter(|f| offerable(f.id)).map(client_form))
                     .collect();
-                dropped += skin.chromas.len() - chromas.len();
+                dropped += (skin.chromas.len() + skin.forms().count()) - chromas.len();
                 if !offerable(skin.id) {
                     dropped += 1 + chromas.len();
                     return None;
@@ -454,7 +439,7 @@ pub async fn load_classic_catalog(
         None => numbers
             .iter()
             .copied()
-            .filter(|n| *n != 0 && *n < 300)
+            .filter(|n| *n != 0)
             .map(|n| {
                 let id = regular * 1000 + n;
                 CatalogSkin {
@@ -468,13 +453,12 @@ pub async fn load_classic_catalog(
             .collect(),
     };
 
-    let champion_name = fetched
-        .as_ref()
-        .map(|(assets, _)| assets.name.clone())
+    let champion_name = assets
+        .map(|assets| assets.name.clone())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| format!("#{regular}"));
 
-    let mut catalog = Catalog {
+    let catalog = Catalog {
         champion_id: classic_champion_id,
 
         champion_name,
@@ -487,6 +471,73 @@ pub async fn load_classic_catalog(
         mods: ModsPanel::default(),
         notice: None,
     };
+    (catalog, dropped)
+}
+
+pub async fn load_classic_catalog(
+    game_dir: PathBuf,
+    library_root: PathBuf,
+    classic_champion_id: u32,
+) -> Catalog {
+    use dekan_classic::builder::ClassicIdMapper;
+    use dekan_classic::generator::{ClassicChampion, resolve_alias_with_id};
+
+    let regular = ClassicIdMapper::normalize_champion_id(classic_champion_id);
+    let fetched = match fetch_assets(classic_champion_id).await {
+        Some(classic) if classic.0.skins.iter().any(|skin| !skin.is_base) => Some(classic),
+        _ => {
+            debug!(
+                champion_id = classic_champion_id,
+                regular, "No Classic skin list from the client; using the regular champion's"
+            );
+            fetch_assets(regular).await
+        }
+    };
+
+    let client_classic_alias = fetched
+        .as_ref()
+        .map(|(assets, _)| assets.alias.clone())
+        .filter(|alias| alias.to_ascii_lowercase().starts_with("jade_"));
+    let library_dir = library_root.join(regular.to_string());
+    let scan = tokio::task::spawn_blocking(move || {
+        let alias = resolve_alias_with_id(&game_dir, None, Some(regular), &library_dir)?;
+        let classic_alias = client_classic_alias.or_else(|| {
+            dekan_classic::client_data::champion_alias(&game_dir, classic_champion_id)
+        });
+        let champion = match ClassicChampion::open(&game_dir, &alias) {
+            Ok(champion) => champion.with_client_character(classic_alias.as_deref()),
+            Err(e) => {
+                warn!(alias = %alias, error = %e, "Champion WAD could not be opened for Rift Classic");
+                return None;
+            }
+        };
+        let numbers: std::collections::BTreeSet<u32> = champion
+            .skin_numbers(champion.main_character(), 1000)
+            .into_iter()
+            .collect();
+        Some((alias, numbers))
+    })
+    .await;
+
+    let (alias, numbers) = match scan {
+        Ok(Some(found)) => found,
+        Ok(None) => {
+            warn!(
+                champion_id = classic_champion_id,
+                regular, "No champion WAD alias found for Rift Classic; nothing can be offered"
+            );
+            (String::new(), std::collections::BTreeSet::new())
+        }
+        Err(e) => {
+            warn!(error = %e, "Rift Classic scan task failed; nothing can be offered");
+            (String::new(), std::collections::BTreeSet::new())
+        }
+    };
+    let (mut catalog, dropped) = build_classic_catalog(
+        classic_champion_id,
+        fetched.as_ref().map(|(assets, _)| assets),
+        &numbers,
+    );
     if let Some((assets, client)) = &fetched {
         attach_tiles(&mut catalog, assets, client).await;
         catalog.locale = resolve_locale(client).await;
@@ -513,9 +564,32 @@ async fn lcu_client() -> Option<dekan_lcu::client::LcuClient> {
     dekan_lcu::client::LcuClient::new(&lockfile, dekan_lcu::client::DEFAULT_LCU_TIMEOUT).ok()
 }
 
-/// Fetch one chroma preview from the client and return it as a `data:` URI the page can show.
-pub async fn fetch_chroma_preview(path: &str) -> Option<String> {
-    let client = lcu_client().await?;
+const PREVIEW_FETCHES: usize = 4;
+
+pub type PreviewFetches = futures_util::stream::BoxStream<'static, (u32, Option<String>)>;
+
+#[must_use]
+pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
+    use futures_util::StreamExt;
+    futures_util::stream::once(lcu_client())
+        .flat_map(move |client| {
+            futures_util::stream::iter(previews.clone())
+                .map(move |(id, path)| {
+                    let client = client.clone();
+                    async move {
+                        let uri = match client {
+                            Some(client) => fetch_chroma_preview(&client, &path).await,
+                            None => None,
+                        };
+                        (id, uri)
+                    }
+                })
+                .buffer_unordered(PREVIEW_FETCHES)
+        })
+        .boxed()
+}
+
+async fn fetch_chroma_preview(client: &dekan_lcu::client::LcuClient, path: &str) -> Option<String> {
     match client.get_asset_bytes(path).await {
         Ok(bytes) if !bytes.is_empty() => Some(tile_data_uri(path, &bytes)),
         Ok(_) => None,

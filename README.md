@@ -10,11 +10,21 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml"><img src="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/chrisssst/Dekan"><img src="https://api.scorecard.dev/projects/github.com/chrisssst/Dekan/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Dekan?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Dekan/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
+  <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
+  <a href="https://discord.gg/e2dH2nUjd9"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-
+<p align="center">
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><b>Download</b></a> ·
+  <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
+  <a href="https://github.com/chrisssst/Dekan/issues"><b>Report a bug</b></a>
+</p>
 
 ---
 
@@ -22,10 +32,11 @@ Dekan lets you use any skin during a match. You pick the skin in Dekan's own win
 Dekan then builds a copy of the game files that contain it, and when the game starts it opens that copy instead
 of its own files. The game installation itself is never modified.
 
-Dekan is a customized fork of UI, originally created by Isllan Toso and released under the MIT License. This fork keeps the original license notice while replacing the application branding, package names, executable name, data paths and UI identity with Dekan. See [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md).
+Dekan was inspired by [Rose](https://github.com/Alban1911/Rose), a Python project that sparked the idea of rebuilding the concept in Rust. It became an opportunity to apply and deepen my Rust knowledge while designing the project from the ground up, with one goal: the skin you choose is the skin you get in every game mode.
 
 <p align="center">
-  <img src="assets/2323232323.png" alt="Dekan in Game" width="80%">
+  <img src="assets/urgot-select.png" alt="Dekan in Champion Select" width="49%">
+  <img src="assets/urgot-ingame.png" alt="Dekan in Game" width="49%">
 </p>
 
 > [!IMPORTANT]
@@ -86,7 +97,9 @@ Dekan is a customized fork of UI, originally created by Isllan Toso and released
 - **Party mode.** Friends on your team see each other's skins, through an end-to-end encrypted relay.
 - **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
   outdated skin files.
-- **In your language.** The interface is available in English, Portuguese and Spanish.
+- **In your language.** The interface is available in Turkish and English, with Turkish as the default.
+- **New version notice.** When a new release is published, Dekan tells you once in a Windows notification and
+  keeps a download link in the control panel. It never downloads or installs anything by itself.
 - **Free and open source.** Dekan costs nothing. If you paid for it, you were scammed.
 
 ## Why Dekan
@@ -105,7 +118,7 @@ What that means in practice:
 | | How Dekan gets there |
 | --- | --- |
 | **Security** | Runs without administrator rights. Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
-| **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. A suspended game is always resumed, even after a crash. Every error is logged with its cause. |
+| **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. Dekan never suspends or touches the game process; it only prepares files the game reads. Every error is logged with its cause. |
 | **Performance** | Written in Rust with no garbage collector or interpreter. The index of the game's archives is built in the background at startup. Built overlays are reused while the game build is unchanged, and entries identical to the game's are left out. |
 | **Dynamic** | Finds the game on any drive or region, follows the client's language, re-reads your champion right before building (ARAM swaps, trades, last-second locks), and rebuilds itself after every patch with no manual update of skin packages. |
 | **Independence** | One self-contained program. No client plugin loader, no Python runtime, no files read from other tools. The only external piece is the injector, loaded from Dekan's own folder. |
@@ -125,7 +138,7 @@ Setup takes three steps: install Dekan, add the injector, start Dekan.
 
 ### Step 1 — Install Dekan
 
-1. Build the installer with `cargo xtask installer`, or download it from the Releases page of the repository where you publish this Dekan fork.
+1. Download `Dekan-Setup-<version>-x64.exe` from [Releases](https://github.com/chrisssst/Dekan/releases).
 2. Optional but recommended: check that the download is intact. Compare the result with the `SHA256SUMS` file
    published next to the installer:
 
@@ -151,13 +164,13 @@ build.
 
 > [!IMPORTANT]
 > Dekan only accepts the **exact build** it has audited. Today that is the build shipped with
-> **LTK Manager 1.21.0 and 1.22.0**. Older versions contain a different build, which Dekan refuses. When a
+> **LTK Manager 1.21.0 through 1.24.0** (the same two files in every one of them). Older versions contain a different build, which Dekan refuses. When a
 > future LTK Manager changes these files, use the version named in the latest Dekan release notes.
 
 #### A. Get LTK Manager
 
 1. Open the [LTK Manager releases](https://github.com/LeagueToolkit/ltk-manager/releases) and download
-   `LTK.Manager_1.22.0_x64-setup.exe` (or 1.21.0).
+   `LTK.Manager_1.24.0_x64-setup.exe` (or any version from 1.21.0 to 1.24.0).
 2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Dekan is running: two injectors at once will conflict.
@@ -263,6 +276,7 @@ champion they are not playing.
 | `DEKAN_RELAY_URL` | Party relay to use instead of the default one |
 | `DEKAN_SKIN_SYNC` | A GitHub repository as `owner/repo` to download a skin library from in the background; off when unset |
 | `DEKAN_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
+| `DEKAN_UPDATE_CHECK` | `0` turns off the check for a new Dekan release; on when unset |
 
 All of them are optional. [`.env.example`](.env.example) documents each one and how to set it on Windows.
 Dekan reads them from the environment; it does not load a `.env` file.
@@ -342,8 +356,10 @@ C:\Program Files\Dekan\              installed program (read-only for users)
   checks the file's SHA-256 hash against the one built into Dekan. A file that has been swapped is refused
   and logged.
 - It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Dekan`.
-- It collects no telemetry. It only talks to the League client on your own machine and, in party mode, to the
-  relay. The relay only receives encrypted data.
+- It collects no telemetry. It only talks to the League client on your own machine, to GitHub to read the
+  latest release number (off with `DEKAN_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only
+  receives encrypted data.
+- It never downloads or runs an update. A new release is only announced; you install it yourself.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Dekan\logs`.
 
 ### What you should know
@@ -354,7 +370,7 @@ C:\Program Files\Dekan\              installed program (read-only for users)
 - Windows SmartScreen may warn about the installer until it is code-signed.
 
 Please report security issues privately through
-the private security channel configured for your Dekan repository, not in public issues.
+[GitHub Security Advisories](https://github.com/chrisssst/Dekan/security/advisories/new), not in public issues.
 
 ## Troubleshooting
 
@@ -371,11 +387,23 @@ usually impossible to diagnose. For quick help, ask on [Discord](https://discord
 
 ## Community
 
-This source package does not include a preconfigured public community or support server. After publishing your fork, add your own repository, issue tracker and community links here.
+Join the **[Dekan Discord](https://discord.gg/e2dH2nUjd9)** to get help with setup, report what works in each game mode, share
+custom mods and hear about new builds first. Pre-releases are announced there before they are promoted, so
+it is the best place to help test them.
+
+Bugs with a log attached are best reported as [GitHub issues](https://github.com/chrisssst/Dekan/issues).
+Want to help build it? Read [CONTRIBUTING.md](CONTRIBUTING.md). Everyone is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+If Dekan is useful to you, **a star on GitHub** helps other players find it.
 
 ## Contact
 
-For provenance and upstream licensing information, see [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md). Configure your own support links after publishing the Dekan fork.
+The project is maintained by **Isllan Toso**: [isllan.dev](https://isllan.dev/).
+
+For help and bug reports, the [Discord community](https://discord.gg/e2dH2nUjd9) and
+[GitHub issues](https://github.com/chrisssst/Dekan/issues) are the fastest routes. Security issues go through a
+[private advisory](https://github.com/chrisssst/Dekan/security/advisories/new).
 
 ## Project layout
 

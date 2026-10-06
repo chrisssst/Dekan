@@ -34,7 +34,6 @@ impl std::fmt::Debug for PartyToken {
     }
 }
 
-/// A random non-zero id that fits a JavaScript number (53 bits).
 pub fn random_member_id() -> Result<u64, PartyError> {
     loop {
         let id = u64::try_generate().map_err(no_randomness)? & ((1u64 << 53) - 1);

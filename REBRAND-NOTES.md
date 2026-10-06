@@ -1,34 +1,23 @@
-# Dekan rebrand notes
+# Dekan 1.2.1 rebrand notes
 
-This package is a full branding fork of the original Bullet 1.1 source tree.
+This package is based on the upstream Bullet 1.2.1 source tree.
 
-Changed for Dekan:
+Customized for Dekan:
 
-- application/product name and visible UI text
-- executable name (`dekan.exe`)
-- installer name (`Dekan-Setup-<version>-x64.exe`)
-- all internal Rust crate/package names (`dekan-*`)
-- application data paths (`%LOCALAPPDATA%\Dekan`)
-- environment variables (`DEKAN_*`)
-- mutex, registry autostart name, installer paths and uninstall cleanup
-- party code/protocol branding (`DEKAN1` / `dekan-party`)
-- relay service package branding
-- CI/release artifact names
-- root/app icons and PNG branding assets using the supplied Dekan logo
-- Windows version-resource product/company metadata
+- application/product name, executable and installer names
+- Rust crate/package names (`dekan-*`)
+- `%LOCALAPPDATA%\Dekan`, registry/autostart names and `DEKAN_*` variables
+- party/protocol branding (`DEKAN1` / `dekan-party`) while retaining the upstream public relay endpoint for compatibility
+- Windows version metadata, installer metadata and GitHub workflow branding
+- supplied Dekan logo converted to PNG/banner and multi-resolution Windows ICO assets
+- interface languages reduced to Turkish and English
+- Turkish is the default/fallback interface language; English remains available when an English locale is detected
 
-Compatibility note: the existing public relay endpoint is retained as the default URL so party mode does not point at a nonexistent server. You can replace it in `crates/dekan-party/src/config.rs` after deploying your own relay.
+The original MIT license and upstream attribution are preserved in `LICENSE` and `UPSTREAM-NOTICE.md`.
 
-The original MIT license and upstream attribution are intentionally preserved. See `LICENSE` and `UPSTREAM-NOTICE.md`.
+## 1.2.1 release-ready adjustments
 
-## Build
-
-The original project targets Windows x64 with Rust/MSVC. Typical commands:
-
-```powershell
-cargo xtask check
-cargo xtask package
-cargo xtask installer
-```
-
-The installer script is `installer/dekan.iss` and the final installer is expected under `dist/installer/`.
+- User-facing language choices are limited to Turkish and English.
+- Turkish is the default/fallback UI language.
+- Portuguese release-notification text was replaced with Turkish.
+- CI executable metadata validation now matches the Dekan-branded binary.

@@ -51,19 +51,15 @@ impl ModCategory {
         }
     }
 
-    /// Whether at most one mod of this category can be selected at a time.
     #[must_use]
     pub fn is_single_choice(self) -> bool {
         matches!(self, Self::Skin | Self::Map | Self::Font | Self::Announcer)
     }
 }
 
-/// Where a mod was found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModSource {
-    /// `%LOCALAPPDATA%\Dekan\custom_mods`, the only folder mods are read from; Dekan never reads
-    /// another product's mod folder.
     Dekan,
 }
 
@@ -75,42 +71,33 @@ impl ModSource {
     }
 }
 
-/// How a mod is stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModPackage {
-    /// An extracted folder, mirrored into the staging directory.
     Directory,
-    /// A `.fantome`/`.zip`, extracted into the staging directory.
     Archive,
 }
 
-/// One mod available on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModEntry {
-    /// Stable id: `<source>:<category folder>/<name>`, or `<source>:skins/<folder>/<name>`.
     pub id: String,
-    /// Display name — the folder name or the archive stem.
     pub name: String,
     pub category: ModCategory,
     pub source: ModSource,
     #[serde(skip)]
     pub path: PathBuf,
     pub package: ModPackage,
-    /// `description.txt` next to or inside the mod.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-/// A mods root and where it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModRoot {
     pub path: PathBuf,
     pub source: ModSource,
 }
 
-/// Everything selectable for one champion: its skin mods plus every category mod.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModCatalog {
@@ -118,12 +105,10 @@ pub struct ModCatalog {
     pub map: Vec<ModEntry>,
     pub font: Vec<ModEntry>,
     pub announcer: Vec<ModEntry>,
-    /// Every multi-choice category (`ui` … `others`), sorted by category then name.
     pub others: Vec<ModEntry>,
 }
 
 impl ModCatalog {
-    /// Look an id up anywhere in the catalog.
     #[must_use]
     pub fn find(&self, id: &str) -> Option<&ModEntry> {
         self.skin
@@ -135,7 +120,6 @@ impl ModCatalog {
             .find(|entry| entry.id == id)
     }
 
-    /// Total number of mods listed.
     #[must_use]
     pub fn len(&self) -> usize {
         self.skin.len()
@@ -145,18 +129,14 @@ impl ModCatalog {
             + self.others.len()
     }
 
-    /// Whether nothing at all is listed.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
-/// Maximum characters read from a `description.txt`: it is shown in a tooltip, not a document.
 const MAX_DESCRIPTION_CHARS: usize = 300;
 
-/// Whether `dir` is a mod folder the overlay builder accepts: `META/info.json` plus a non-empty `WAD/` or
-/// `RAW/`. Names are matched case-insensitively, like Windows does.
 #[must_use]
 pub fn is_valid_mod_dir(dir: &Path) -> bool {
     let Some(meta) = child_dir_ci(dir, "META") else {
@@ -204,10 +184,6 @@ fn read_description(path: &Path, package: ModPackage) -> Option<String> {
     (!trimmed.is_empty()).then_some(trimmed)
 }
 
-/// List the mods directly inside `dir`, tagging them with `category` and an id prefix.
-///
-/// Entries that are neither a valid mod folder nor an archive are counted and reported once — a
-/// folder the user dropped in with the wrong layout must not just vanish without a trace.
 fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) -> Vec<ModEntry> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -226,14 +202,11 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
             rejected += 1;
             continue;
         };
-        // Mod managers leave hidden `.<name>-import-*` temporaries behind on a failed import;
-        // anything hidden this way is not a mod.
         if file_name.starts_with('.') {
             continue;
         }
 
         let (name, package) = if path.is_dir() {
-            // Champion folders inside `skins/` are scanned on their own, not as mods.
             if category == ModCategory::Skin && file_name.parse::<u32>().is_ok() {
                 continue;
             }
@@ -275,10 +248,6 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
     found
 }
 
-/// Skin mods of `champion_id` under one root.
-///
-/// `belongs` decides for a mod dropped straight into `skins/`, which carries no champion folder:
-/// the caller reads the mod's content (this crate does not open archives).
 fn scan_skin_mods(
     root: &ModRoot,
     champion_id: ChampionId,
@@ -442,12 +411,6 @@ pub struct RejectedMod {
 }
 
 impl ModCatalog {
-    /// Validate what the UI asked for and fold it into `current` for `champion_id`.
-    ///
-    /// Every id must be listed in this catalog **in the slot it was sent for** — a map id sent as
-    /// the font, or an id the catalog never produced, is rejected rather than guessed at. The
-    /// accepted part is applied; the rejected part is returned for logging and the UI is sent the
-    /// effective selection back.
     pub fn apply_request(
         &self,
         current: &ModSelection,

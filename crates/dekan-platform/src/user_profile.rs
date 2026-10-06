@@ -49,7 +49,6 @@ pub fn resolution() -> &'static Resolution {
     RESOLUTION.get_or_init(resolve)
 }
 
-/// The desktop user's `%LOCALAPPDATA%`.
 pub fn local_app_data() -> Result<PathBuf, PlatformError> {
     match resolution() {
         Resolution::Unresolved { reason } => Err(PlatformError::Path(format!(

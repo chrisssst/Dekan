@@ -33,7 +33,7 @@ patch.
 | --- | --- |
 | `wad.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
 | `writer.rs` | WAD writer used to build overlays |
-| `prop.rs` | BIN/PROP parser and serializer, including the list of linked files |
+| `prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records |
 | `hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
 | `fantome.rs` | Reading `.fantome` packages |
 | `hash_index.rs` | Hash-to-path lookup table |
@@ -48,6 +48,14 @@ patch.
   original bytes is what lets the overlay load.
 - **Duplicates are found by real content.** When the writer merges identical data, it compares the bytes it
   actually wrote. It never trusts the checksum recorded in the game's table of contents.
+- **Strict property files.** A PROP version below 2 is refused and bytes after the last object are an error: a
+  file that does not end where its own table says is not one this parser understands. Serializing fails
+  instead of truncating a value that does not fit its on-disk width.
+- **Format changes are legible.** A WAD with a new major version is reported as such, so a patch that changes
+  the format reads as that in the log instead of "the skin did not load".
+- **Writes are atomic and sequential.** `X.wad.client` is written as `X.wad.client.partial` first; payloads read
+  from files are laid out in file and offset order so reads stay sequential. Audio banks (`.bnk`, `.wpk`) are
+  stored uncompressed like the game stores them; `r3d2` followed by a model or animation tag is not audio.
 
 ## Testing
 

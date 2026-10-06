@@ -35,7 +35,6 @@ impl HasWindowHandle for DialogWindowHandle {
         let non_zero = NonZeroIsize::new(self.0.0 as isize).ok_or(HandleError::Unavailable)?;
         let handle = Win32WindowHandle::new(non_zero);
         let raw = RawWindowHandle::Win32(handle);
-        // SAFETY: self.0 is a valid Win32 HWND owned by this thread for the lifetime of the borrow.
         unsafe { Ok(WindowHandle::borrow_raw(raw)) }
     }
 }
@@ -48,9 +47,12 @@ fn escape_html(value: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Show the modal dialog displaying the newly created party room code.
 pub fn show_party_created_dialog(code: &str) -> Result<(), PlatformError> {
     let text = crate::i18n::text();
+    run_dialog_modal(text.party_dialog_create_title, created_html(text, code)).map(|_| ())
+}
+
+pub(crate) fn created_html(text: &crate::i18n::Text, code: &str) -> String {
     let inline_btn = format!(
         "<button type=\"button\" class=\"btn-inline\" onclick=\"doCopy()\">{}</button>",
         escape_html(text.party_dialog_btn_copy)
@@ -60,7 +62,7 @@ pub fn show_party_created_dialog(code: &str) -> Result<(), PlatformError> {
         escape_html(text.party_dialog_btn_ok)
     );
 
-    let html = DIALOG_HTML
+    DIALOG_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{title}}", &escape_html(text.party_dialog_create_title))
         .replace("{{desc}}", &escape_html(text.party_dialog_create_desc))
@@ -74,13 +76,15 @@ pub fn show_party_created_dialog(code: &str) -> Result<(), PlatformError> {
         .replace(
             "{{error_empty}}",
             &escape_html(text.party_dialog_error_empty),
-        );
-
-    run_dialog_modal(text.party_dialog_create_title, html).map(|_| ())
+        )
 }
 
 pub fn show_party_join_dialog(initial_code: Option<&str>) -> Result<Option<String>, PlatformError> {
     let text = crate::i18n::text();
+    run_dialog_modal(text.party_dialog_join_title, join_html(text, initial_code))
+}
+
+pub(crate) fn join_html(text: &crate::i18n::Text, initial_code: Option<&str>) -> String {
     let inline_btn = format!(
         "<button type=\"button\" class=\"btn-inline\" onclick=\"doPaste()\">{}</button>",
         escape_html(text.party_dialog_btn_paste)
@@ -92,7 +96,7 @@ pub fn show_party_join_dialog(initial_code: Option<&str>) -> Result<Option<Strin
         escape_html(text.party_dialog_btn_join)
     );
 
-    let html = DIALOG_HTML
+    DIALOG_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{title}}", &escape_html(text.party_dialog_join_title))
         .replace("{{desc}}", &escape_html(text.party_dialog_join_desc))
@@ -109,9 +113,7 @@ pub fn show_party_join_dialog(initial_code: Option<&str>) -> Result<Option<Strin
         .replace(
             "{{error_empty}}",
             &escape_html(text.party_dialog_error_empty),
-        );
-
-    run_dialog_modal(text.party_dialog_join_title, html)
+        )
 }
 
 fn run_dialog_modal(title: &str, html: String) -> Result<Option<String>, PlatformError> {

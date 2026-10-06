@@ -37,11 +37,13 @@ Each crate also has its own README with its files and responsibilities: [dekan-c
 2. **No panics at runtime.** `unwrap()` and `expect()` only appear in tests. Every discarded `Result` carries
    a comment that explains why it is safe to ignore, and a check enforces this.
 3. **Least privilege.** Dekan never asks for administrator rights and never writes to the game folder.
-   External resources (a suspended process, a child process, a temporary file) are released by `Drop`, even
+   External resources (a child process, a temporary file) are released by `Drop`, even
    during a panic.
 4. **Nothing is hardcoded to one machine.** The game path is discovered, the language follows the client,
    and servers can be configured. All configuration lives in `dekan_core::env`.
 5. **Logs record changes.** A line repeated inside a polling loop is treated as a bug.
+6. **Code carries no comments.** Names, types and tests say what the code does; why it does it lives in these
+   docs and the crate READMEs. Only one-line tool directives remain, and `cargo xtask check` enforces it.
 
 ## Checking a change
 

@@ -1,4 +1,3 @@
-# Categories for the automatically generated release notes.
 changelog:
   exclude:
     labels: [ignore-for-release]

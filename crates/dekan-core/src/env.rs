@@ -6,7 +6,21 @@ pub const PATCHER_FLAGS: &str = "DEKAN_PATCHER_FLAGS";
 
 pub const SKIN_SYNC: &str = "DEKAN_SKIN_SYNC";
 
-pub const ALL: [&str; 4] = [LOG, RELAY_URL, PATCHER_FLAGS, SKIN_SYNC];
+pub const UPDATE_CHECK: &str = "DEKAN_UPDATE_CHECK";
+
+pub const SKIN_GRAPH: &str = "DEKAN_SKIN_GRAPH";
+
+pub const CHROMA_CLASSIFICATION: &str = "DEKAN_CHROMA_CLASSIFICATION";
+
+pub const ALL: [&str; 7] = [
+    LOG,
+    RELAY_URL,
+    PATCHER_FLAGS,
+    SKIN_SYNC,
+    UPDATE_CHECK,
+    SKIN_GRAPH,
+    CHROMA_CLASSIFICATION,
+];
 
 #[cfg(test)]
 mod tests {

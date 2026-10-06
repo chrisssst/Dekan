@@ -45,7 +45,7 @@ jobs:
 
           payload = {
               "username": "Dekan Stars",
-              "avatar_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png",
+              "avatar_url": "https://raw.githubusercontent.com/chrisssst/Dekan/main/assets/dekan.png",
               "embeds": [
                   {
                       "title": "⭐ Nova estrela recebida!",
@@ -70,7 +70,7 @@ jobs:
                       },
                       "footer": {
                           "text": "Dekan • League of Legends Skin Changer",
-                          "icon_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png"
+                          "icon_url": "https://raw.githubusercontent.com/chrisssst/Dekan/main/assets/dekan.png"
                       },
                       "timestamp": datetime.now(timezone.utc).isoformat()
                   }

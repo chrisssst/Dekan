@@ -10,4 +10,3 @@ pub mod overlay_cache;
 pub mod overlay_process;
 pub mod pipeline;
 pub mod runner;
-pub mod suspend;

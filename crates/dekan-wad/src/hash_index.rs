@@ -71,19 +71,16 @@ impl<'a> HashIndex<'a> {
         })
     }
 
-    /// Number of indexed path hashes.
     #[must_use]
     pub fn len(&self) -> usize {
         self.entry_count
     }
 
-    /// Whether the index contains zero entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entry_count == 0
     }
 
-    /// Read an entry record by its ordinal table index without allocation.
     fn read_entry(&self, idx: usize) -> IndexEntry {
         let offset = HASH_INDEX_HEADER_SIZE + (idx * HASH_INDEX_ENTRY_SIZE);
         let chunk = &self.data[offset..offset + HASH_INDEX_ENTRY_SIZE];
@@ -101,9 +98,6 @@ impl<'a> HashIndex<'a> {
         }
     }
 
-    /// Find a file path matching the given 64-bit xxHash in O(log N) time.
-    ///
-    /// Returns a zero-copy string slice directly referencing the index buffer.
     #[must_use]
     pub fn find_path_by_hash(&self, target_hash: u64) -> Option<&'a str> {
         if self.entry_count == 0 {

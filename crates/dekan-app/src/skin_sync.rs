@@ -56,8 +56,6 @@ pub struct SkinSyncConfig {
 }
 
 impl SkinSyncConfig {
-    /// Sync is off unless `DEKAN_SKIN_SYNC` names a GitHub repository as `owner/repo`. There is no
-    /// built-in source: Dekan never downloads skins from a repository the user did not choose.
     #[must_use]
     pub fn from_env_value(value: Option<&str>) -> Option<Self> {
         let (owner, repo) = value?.trim().split_once('/')?;

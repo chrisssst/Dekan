@@ -2,8 +2,7 @@ use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
-    Portuguese,
-    Spanish,
+    Turkish,
     English,
 }
 
@@ -12,8 +11,7 @@ impl Language {
     pub fn from_locale(locale: &str) -> Option<Self> {
         let language = locale.split(['_', '-']).next()?.to_ascii_lowercase();
         match language.as_str() {
-            "pt" => Some(Self::Portuguese),
-            "es" => Some(Self::Spanish),
+            "tr" => Some(Self::Turkish),
             "en" => Some(Self::English),
             _ => None,
         }
@@ -30,24 +28,20 @@ impl Language {
 
     fn from_primary_lang_id(primary: u16) -> Self {
         match primary {
-            0x16 => Self::Portuguese,
-            0x0a => Self::Spanish,
-            _ => Self::English,
+            0x09 => Self::English,
+            _ => Self::Turkish,
         }
     }
 
     #[must_use]
     pub fn for_locale(locale: Option<&str>) -> Self {
-        locale
-            .and_then(Self::from_locale)
-            .unwrap_or_else(Self::of_windows)
+        locale.and_then(Self::from_locale).unwrap_or(Self::Turkish)
     }
 
     #[must_use]
     pub fn text(self) -> &'static Text {
         match self {
-            Self::Portuguese => &PORTUGUESE,
-            Self::Spanish => &SPANISH,
+            Self::Turkish => &TURKISH,
             Self::English => &ENGLISH,
         }
     }
@@ -55,7 +49,6 @@ impl Language {
 
 static ACTIVE_LANGUAGE: std::sync::RwLock<Option<Language>> = std::sync::RwLock::new(None);
 
-/// Set the active language from a client locale (e.g. `pt_BR`, `es_ES`, `en_US`).
 pub fn set_active_locale(locale: &str) {
     if let Some(lang) = Language::from_locale(locale) {
         if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
@@ -64,14 +57,12 @@ pub fn set_active_locale(locale: &str) {
     }
 }
 
-/// Reset the active language back to Windows default.
 pub fn reset_active_language() {
     if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
         *lock = None;
     }
 }
 
-/// The active language: client locale if detected, otherwise Windows display language.
 #[must_use]
 pub fn active_language() -> Language {
     if let Ok(lock) = ACTIVE_LANGUAGE.read() {
@@ -79,16 +70,14 @@ pub fn active_language() -> Language {
             return lang;
         }
     }
-    Language::of_windows()
+    Language::Turkish
 }
 
-/// The active dictionary for Dekan.
 #[must_use]
 pub fn text() -> &'static Text {
     active_language().text()
 }
 
-/// Every string, one field each. `{n}`, `{code}`, `{reason}` and `{error}` are filled by [`fill`].
 #[derive(Debug)]
 pub struct Text {
     pub status_tools_missing: &'static str,
@@ -111,10 +100,14 @@ pub struct Text {
     pub party_connecting: &'static str,
     pub party_in_room: &'static str,
     pub party_reconnecting: &'static str,
+    pub party_created_connecting: &'static str,
+    pub party_created_in_room: &'static str,
 
     pub menu_party_create: &'static str,
     pub menu_party_join: &'static str,
     pub menu_party_leave: &'static str,
+    pub menu_group_party: &'static str,
+    pub menu_group_folders: &'static str,
     pub menu_open_mods: &'static str,
     pub menu_open_logs: &'static str,
     pub menu_open_tools: &'static str,
@@ -122,6 +115,38 @@ pub struct Text {
     pub menu_autostart: &'static str,
     pub menu_auto_accept: &'static str,
     pub menu_quit: &'static str,
+    pub menu_open_panel: &'static str,
+    pub menu_random_skin: &'static str,
+    pub panel_section_options: &'static str,
+    pub panel_section_diagnostics: &'static str,
+    pub panel_random_skin_hint: &'static str,
+    pub check_injector: &'static str,
+    pub check_game: &'static str,
+    pub check_client: &'static str,
+    pub check_dll: &'static str,
+    pub check_privileges: &'static str,
+    pub detail_ok: &'static str,
+    pub detail_injector_missing: &'static str,
+    pub detail_game_missing: &'static str,
+    pub detail_client_connected: &'static str,
+    pub detail_client_waiting: &'static str,
+    pub detail_dll_days_left: &'static str,
+    pub detail_dll_refused: &'static str,
+    pub detail_dll_unknown: &'static str,
+    pub detail_elevated: &'static str,
+    pub detail_not_elevated: &'static str,
+    pub update_available_title: &'static str,
+    pub update_available_body: &'static str,
+    pub panel_update_line: &'static str,
+    pub panel_update_download: &'static str,
+    pub panel_mark_problem: &'static str,
+    pub panel_mark_problem_hint: &'static str,
+    pub panel_export_diagnostics: &'static str,
+
+    pub missing_tools_title: &'static str,
+    pub missing_tools_body: &'static str,
+    pub broken_tools_title: &'static str,
+    pub broken_tools_body: &'static str,
 
     pub already_running_title: &'static str,
     pub already_running_body: &'static str,
@@ -168,7 +193,6 @@ pub struct Text {
     pub welcome_dismiss: &'static str,
 
     pub welcome_quote: &'static str,
-    /// The relay refused us because the room already holds its maximum of members.
     pub party_room_full: &'static str,
 
     pub about_title: &'static str,
@@ -182,180 +206,125 @@ pub fn fill(template: &str, key: &str, value: &str) -> String {
     template.replace(&format!("{{{key}}}"), value)
 }
 
-static PORTUGUESE: Text = Text {
-    status_tools_missing: "Ferramentas ausentes (injeção desativada)",
-    status_waiting_league: "Aguardando o League",
-    status_connected: "Conectado ao League",
-    status_lobby: "No lobby",
-    status_matchmaking: "Buscando partida",
-    status_ready_check: "Partida encontrada",
-    status_champ_select: "Seleção de campeões",
-    status_finalization: "Finalizando a seleção",
-    status_injecting: "Injetando a skin…",
-    status_in_game: "Em jogo",
-    status_in_game_confirmed: "Em jogo — skin ativa",
-    status_in_game_unconfirmed: "Em jogo — skin NÃO confirmada",
-    status_in_game_failed: "Em jogo — falha na injeção",
-    status_reconnecting: "Reconectando",
+static TURKISH: Text = Text {
+    status_tools_missing: "Araçlar eksik (enjeksiyon devre dışı)",
+    status_waiting_league: "League bekleniyor",
+    status_connected: "League'e bağlandı",
+    status_lobby: "Lobide",
+    status_matchmaking: "Maç aranıyor",
+    status_ready_check: "Maç bulundu",
+    status_champ_select: "Şampiyon seçimi",
+    status_finalization: "Seçim tamamlanıyor",
+    status_injecting: "Skin uygulanıyor…",
+    status_in_game: "Oyunda",
+    status_in_game_confirmed: "Oyunda — skin aktif",
+    status_in_game_unconfirmed: "Oyunda — skin doğrulanmadı",
+    status_in_game_failed: "Oyunda — enjeksiyon başarısız",
+    status_reconnecting: "Yeniden bağlanıyor",
 
-    party_off: "Party: desligado",
-    party_unavailable: "Party: indisponível (relay não configurado)",
-    party_connecting: "Party: conectando…",
-    party_in_room: "Party: na sala ({n} no total)",
-    party_reconnecting: "Party: reconectando…",
+    party_off: "Parti: kapalı",
+    party_unavailable: "Parti: kullanılamıyor (relay yapılandırılmamış)",
+    party_connecting: "Parti: bağlanıyor…",
+    party_in_room: "Parti: odada (toplam {n} kişi)",
+    party_reconnecting: "Parti: yeniden bağlanıyor…",
+    party_created_connecting: "Parti oluşturuldu: bağlanıyor…",
+    party_created_in_room: "Parti oluşturuldu: odada (toplam {n} kişi)",
 
-    menu_party_create: "Criar sala de party...",
-    menu_party_join: "Entrar na sala de party...",
-    menu_party_leave: "Sair da party",
-    menu_open_mods: "Abrir pasta de mods",
-    menu_open_logs: "Abrir pasta de logs",
-    menu_open_tools: "Abrir pasta de ferramentas",
-    menu_about: "Sobre o Dekan...",
-    menu_autostart: "Iniciar com o Windows",
-    menu_auto_accept: "Aceitar partida automaticamente",
-    menu_quit: "Sair do Dekan",
+    menu_party_create: "Parti odası oluştur...",
+    menu_party_join: "Parti odasına katıl...",
+    menu_party_leave: "Partiden ayrıl",
+    menu_group_party: "Parti",
+    menu_group_folders: "Klasörler",
+    menu_open_mods: "Mod klasörünü aç",
+    menu_open_logs: "Log klasörünü aç",
+    menu_open_tools: "Araçlar klasörünü aç",
+    menu_about: "Dekan Hakkında...",
+    menu_autostart: "Windows ile başlat",
+    menu_auto_accept: "Maçları otomatik kabul et",
+    menu_quit: "Dekan'dan çık",
+    menu_open_panel: "Dekan'ı aç",
+    menu_random_skin: "Seçim yapılmazsa rastgele skin kullan",
+    panel_section_options: "Seçenekler",
+    panel_section_diagnostics: "Tanılama",
+    panel_random_skin_hint: "Şampiyon kilitlendiğinde Dekan'da skin seçilmemişse maçın skinsiz başlamaması için rastgele bir skin seçilir.",
+    check_injector: "Enjektör (tools klasörü)",
+    check_game: "Yüklü oyun",
+    check_client: "League istemcisi",
+    check_dll: "Enjektör DLL geçerliliği",
+    check_privileges: "Dekan yetkileri",
+    detail_ok: "Tamam",
+    detail_injector_missing: "ltk_patcher_host.exe veya ltk_patcher_dll.dll eksik",
+    detail_game_missing: "oyun klasörü bulunamadı",
+    detail_client_connected: "bağlandı",
+    detail_client_waiting: "istemcinin açılması bekleniyor",
+    detail_dll_days_left: "mevcut yamayı kabul ediyor; {n} gün veya daha sonra oluşturulan oyun derlemelerini reddeder",
+    detail_dll_refused: "yüklü yama DLL'in kabul ettiğinden daha yeni: güncel bir DLL çıkana kadar hiçbir skin yüklenmez",
+    detail_dll_unknown: "oyun derlemesi okunamadı",
+    detail_elevated: "yönetici olarak çalışıyor",
+    detail_not_elevated: "yönetici yetkisi olmadan çalışıyor",
+    update_available_title: "Dekan {version} kullanılabilir",
+    update_available_body: "İndirme sayfasını açmak için buraya tıklayın. Siz onaylamadan hiçbir şey indirilmez veya kurulmaz.",
+    panel_update_line: "{version} sürümü kullanılabilir (sizde {current} var).",
+    panel_update_download: "İndirme sayfasını aç",
+    panel_mark_problem: "Sorunu şimdi işaretle",
+    panel_mark_problem_hint: "Oyundan çıkmadan: maç sırasında Ctrl+Shift+B bir sorun gördüğünüz anı işaretler, F12 ekran görüntüsü alır. Maç bittiğinde tanılama verileri otomatik olarak log klasörüne kaydedilir.",
+    panel_export_diagnostics: "Tanılama verilerini dışa aktar",
 
-    already_running_title: "Dekan já está aberto",
-    already_running_body: "O Dekan já está em execução em segundo plano.\n\nProcure o ícone do Dekan na \
-                           bandeja do Windows.\nPara encerrá-lo, clique com o botão direito no ícone e \
-                           escolha \"Sair do Dekan\".",
+    missing_tools_title: "Dekan — Enjektör Gerekli",
+    missing_tools_body: "Dekan'ın çalışması için enjeksiyon altyapısı gerekir:\n• ltk_patcher_host.exe\n• ltk_patcher_dll.dll\n\nİki dosyayı da LTK Manager 1.21.0–1.24.0 sürümlerinden (README'deki 2. adım) 'tools' klasörüne kopyalayın ve Dekan'ı yeniden açın.\nKlasör sizin için açıldı.",
+    broken_tools_title: "Dekan — Geçersiz Enjektör",
+    broken_tools_body: "'tools' klasöründeki enjektör dosyaları denetlenmiş sürümlerle eşleşmiyor.\n\nBaşlatmadan önce doğru dosyalarla değiştirin.\nKlasör sizin için açıldı.",
 
-    party_unavailable_title: "Party indisponível",
-    party_unavailable_body: "O party precisa de um relay configurado.\n\n{reason}",
-    party_created_title: "Sala de party criada",
-    party_created_body: "O código da sala foi copiado. Cole para seus amigos — ele vale por 1 hora.\n\n\
-                         Quem tiver o código vê a skin que você escolher.",
-    party_copy_failed_body: "Não foi possível copiar o código. Copie manualmente:\n\n{code}",
-    party_join_title: "Entrar na party",
-    party_join_empty_clipboard: "Copie o código da sala que seu amigo enviou e tente de novo.",
-    party_join_clipboard_error: "A área de transferência não pôde ser lida: {error}",
-    party_joining: "Entrando na sala. O status aparece no menu da bandeja.",
-    party_invalid_code: "Código de party inválido: {error}",
+    already_running_title: "Dekan zaten açık",
+    already_running_body: "Dekan zaten arka planda çalışıyor.\n\nWindows sistem tepsisinde Dekan simgesini bulun.\nKapatmak için simgeye sağ tıklayıp \"Dekan'dan çık\" seçeneğini seçin.",
 
-    party_dialog_create_title: "Sala de Party Criada",
-    party_dialog_create_desc: "Envie este código para seus amigos no mesmo time para verem suas skins:",
-    party_dialog_join_title: "Entrar na Sala de Party",
-    party_dialog_join_desc: "Insira ou cole o código da sala de party enviado pelo seu amigo:",
-    party_dialog_label_code: "Código da Sala (Party)",
-    party_dialog_placeholder: "Cole o código aqui (DEKAN1:...)",
-    party_dialog_btn_copy: "Copiar Código",
-    party_dialog_btn_paste: "Colar",
-    party_dialog_btn_ok: "Concluir",
-    party_dialog_btn_join: "Entrar na Sala",
-    party_dialog_btn_cancel: "Cancelar",
-    party_dialog_copied: "Copiado! ✓",
-    party_dialog_error_empty: "Por favor, insira o código da sala.",
+    party_unavailable_title: "Parti kullanılamıyor",
+    party_unavailable_body: "Parti modu için yapılandırılmış bir relay gerekir.\n\n{reason}",
+    party_created_title: "Parti odası oluşturuldu",
+    party_created_body: "Oda kodu kopyalandı. Arkadaşlarınıza gönderin — kod 1 saat geçerlidir.\n\nKoda sahip olanlar seçtiğiniz skini görebilir.",
+    party_copy_failed_body: "Kod kopyalanamadı. Elle kopyalayın:\n\n{code}",
+    party_join_title: "Partiye katıl",
+    party_join_empty_clipboard: "Arkadaşınızın gönderdiği oda kodunu kopyalayıp tekrar deneyin.",
+    party_join_clipboard_error: "Pano okunamadı: {error}",
+    party_joining: "Odaya katılınıyor. Durum sistem tepsisi menüsünde gösterilir.",
+    party_invalid_code: "Geçersiz parti kodu: {error}",
 
-    import_title: "Dekan — importar mod",
-    import_refused: "O arquivo não foi importado:\n{reason}",
-    import_unsupported_extension: "só é possível importar mods .fantome e .zip",
-    import_not_a_mod: "não é um pacote de mod ({error})",
-    import_no_manifest: "falta o manifesto META/info.json",
-    import_no_content: "o pacote não tem conteúdo em WAD/ nem em RAW/",
-    import_no_champion: "o pacote não diz de qual campeão é: escolha o campeão na seleção e importe de novo",
-    import_io_error: "erro ao gravar o mod: {error}",
+    party_dialog_create_title: "Parti Odası Oluşturuldu",
+    party_dialog_create_desc: "Özel skinlerinizi görebilmeleri için bu kodu aynı takımdaki arkadaşlarınıza gönderin:",
+    party_dialog_join_title: "Parti Odasına Katıl",
+    party_dialog_join_desc: "Arkadaşınızın gönderdiği oda kodunu girin veya yapıştırın:",
+    party_dialog_label_code: "Oda Kodu (Parti)",
+    party_dialog_placeholder: "Oda kodunu buraya yapıştırın (DEKAN1:...)",
+    party_dialog_btn_copy: "Kodu Kopyala",
+    party_dialog_btn_paste: "Yapıştır",
+    party_dialog_btn_ok: "Tamam",
+    party_dialog_btn_join: "Odaya Katıl",
+    party_dialog_btn_cancel: "İptal",
+    party_dialog_copied: "Kopyalandı! ✓",
+    party_dialog_error_empty: "Lütfen oda kodunu girin.",
 
-    html_lang: "pt-BR",
-    welcome_active: "ATIVO NA BANDEJA DO SISTEMA",
-    welcome_background: "O Dekan permanece minimizado em segundo plano",
-    welcome_author: "Build personalizado do Dekan.",
-    welcome_tray_hint: "Clique com o botão direito no ícone da bandeja para abrir mods, logs ou gerenciar a party.",
-    welcome_dismiss: "ENTENDIDO",
-    welcome_quote: "“Eu sempre atiro primeiro.” — Miss Fortune",
-    party_room_full: "A sala de party está cheia. Peça para alguém sair e tente entrar de novo.",
+    import_title: "Dekan — mod içe aktar",
+    import_refused: "Dosya içe aktarılamadı:\n{reason}",
+    import_unsupported_extension: "yalnızca .fantome ve .zip modları içe aktarılabilir",
+    import_not_a_mod: "geçerli bir mod paketi değil ({error})",
+    import_no_manifest: "META/info.json manifest dosyası eksik",
+    import_no_content: "pakette WAD/ veya RAW/ içeriği yok",
+    import_no_champion: "paket hangi şampiyon için olduğunu belirtmiyor: şampiyon seçiminde şampiyonu seçip yeniden içe aktarın",
+    import_io_error: "mod yazılamadı: {error}",
 
-    about_title: "SOBRE O DEKAN",
-    about_educational: "Projeto educacional e sem fins lucrativos, para estudo de engenharia reversa, formatos de arquivo do jogo e injeção no Windows. Use por sua conta e risco: alterar o cliente viola os Termos de Serviço da Riot Games e pode levar a banimento. Dekan não é afiliado à Riot Games.",
-    about_quote: "\u{201c}Eu sempre atiro primeiro.\u{201d} \u{2014} Miss Fortune",
-    about_dismiss: "FECHAR",
-};
-
-static SPANISH: Text = Text {
-    status_tools_missing: "Faltan las herramientas (inyección desactivada)",
-    status_waiting_league: "Esperando a League",
-    status_connected: "Conectado a League",
-    status_lobby: "En la sala",
-    status_matchmaking: "Buscando partida",
-    status_ready_check: "Partida encontrada",
-    status_champ_select: "Selección de campeones",
-    status_finalization: "Finalizando la selección",
-    status_injecting: "Inyectando el aspecto…",
-    status_in_game: "En partida",
-    status_in_game_confirmed: "En partida — aspecto activo",
-    status_in_game_unconfirmed: "En partida — aspecto NO confirmado",
-    status_in_game_failed: "En partida — fallo en la inyección",
-    status_reconnecting: "Reconectando",
-
-    party_off: "Party: desactivado",
-    party_unavailable: "Party: no disponible (relay sin configurar)",
-    party_connecting: "Party: conectando…",
-    party_in_room: "Party: en la sala ({n} en total)",
-    party_reconnecting: "Party: reconectando…",
-
-    menu_party_create: "Crear sala de party...",
-    menu_party_join: "Unirse a la sala de party...",
-    menu_party_leave: "Salir de la party",
-    menu_open_mods: "Abrir carpeta de mods",
-    menu_open_logs: "Abrir carpeta de registros",
-    menu_open_tools: "Abrir carpeta de herramientas",
-    menu_about: "Acerca de Dekan...",
-    menu_autostart: "Iniciar con Windows",
-    menu_auto_accept: "Aceptar partida automáticamente",
-    menu_quit: "Salir de Dekan",
-
-    already_running_title: "Dekan ya está abierto",
-    already_running_body: "Dekan ya se está ejecutando en segundo plano.\n\nBusca el icono de Dekan en la \
-                           bandeja de Windows.\nPara cerrarlo, haz clic derecho en el icono y elige \
-                           \"Salir de Dekan\".",
-
-    party_unavailable_title: "Party no disponible",
-    party_unavailable_body: "La party necesita un relay configurado.\n\n{reason}",
-    party_created_title: "Sala de party creada",
-    party_created_body: "Se copió el código de la sala. Pégalo a tus amigos — vale por 1 hora.\n\n\
-                         Quien tenga el código verá el aspecto que elijas.",
-    party_copy_failed_body: "No se pudo copiar el código. Cópialo a mano:\n\n{code}",
-    party_join_title: "Unirse a la party",
-    party_join_empty_clipboard: "Copia el código de la sala que te envió tu amigo e inténtalo de nuevo.",
-    party_join_clipboard_error: "No se pudo leer el portapapeles: {error}",
-    party_joining: "Entrando en la sala. El estado aparece en el menú de la bandeja.",
-    party_invalid_code: "Código de party no válido: {error}",
-
-    party_dialog_create_title: "Sala de Party Creada",
-    party_dialog_create_desc: "Envía este código a tus amigos en el mismo equipo para sincronizar aspectos:",
-    party_dialog_join_title: "Unirse a la Sala de Party",
-    party_dialog_join_desc: "Introduce o pega el código de sala que te envió tu amigo:",
-    party_dialog_label_code: "Código de Sala (Party)",
-    party_dialog_placeholder: "Pega el código aquí (DEKAN1:...)",
-    party_dialog_btn_copy: "Copiar Código",
-    party_dialog_btn_paste: "Pegar",
-    party_dialog_btn_ok: "Aceptar",
-    party_dialog_btn_join: "Entrar a la Sala",
-    party_dialog_btn_cancel: "Cancelar",
-    party_dialog_copied: "¡Copiado! ✓",
-    party_dialog_error_empty: "Por favor, introduce el código de la sala.",
-
-    import_title: "Dekan — importar mod",
-    import_refused: "El archivo no se importó:\n{reason}",
-    import_unsupported_extension: "solo se pueden importar mods .fantome y .zip",
-    import_not_a_mod: "no es un paquete de mod ({error})",
-    import_no_manifest: "falta el manifiesto META/info.json",
-    import_no_content: "el paquete no tiene contenido en WAD/ ni en RAW/",
-    import_no_champion: "el paquete no indica de qué campeón es: elige el campeón en la selección e impórtalo de nuevo",
-    import_io_error: "error al guardar el mod: {error}",
-
-    html_lang: "es",
-    welcome_active: "ACTIVO EN LA BANDEJA DEL SISTEMA",
-    welcome_background: "Dekan sigue minimizado en segundo plano",
-    welcome_author: "Compilación personalizada de Dekan.",
-    welcome_tray_hint: "Haz clic derecho en el icono de la bandeja para abrir mods, logs o gestionar la party.",
-    welcome_dismiss: "ENTENDIDO",
+    html_lang: "tr",
+    welcome_active: "SİSTEM TEPSİSİNDE AKTİF",
+    welcome_background: "Dekan arka planda küçültülmüş olarak çalışmaya devam eder",
+    welcome_author: "Proje Isllan Toso tarafından geliştirilmiştir.",
+    welcome_tray_hint: "Kontrol panelini açmak için sistem tepsisi simgesine tıklayın: seçenekler, parti, mod ve log klasörleri.",
+    welcome_dismiss: "ANLADIM",
     welcome_quote: "",
-    party_room_full: "La sala de party está llena. Pide que alguien salga e intenta entrar de nuevo.",
+    party_room_full: "Parti odası dolu. Birinin ayrılmasını isteyip tekrar katılmayı deneyin.",
 
-    about_title: "ACERCA DE DEKAN",
-    about_educational: "Proyecto educativo y sin fines de lucro, para el estudio de ingeniería inversa, formatos de archivo del juego e inyección en Windows. Úsalo bajo tu propio riesgo: modificar el cliente infringe los Términos de Servicio de Riot Games y puede provocar un baneo. Dekan no está afiliado a Riot Games.",
-    about_quote: "\u{201c}Siempre disparo primero.\u{201d} \u{2014} Miss Fortune",
-    about_dismiss: "CERRAR",
+    about_title: "DEKAN HAKKINDA",
+    about_educational: "Tersine mühendislik, oyunun dosya biçimleri ve Windows enjeksiyonu üzerine çalışma amacı taşıyan eğitimsel ve ticari olmayan bir projedir. Kullanım sorumluluğu size aittir: istemciyi değiştirmek Riot Games'in Hizmet Koşulları'nı ihlal eder ve hesabın yasaklanmasına yol açabilir. Dekan, Riot Games ile bağlantılı değildir.",
+    about_quote: "“Ben her zaman önce ateş ederim.” — Miss Fortune",
+    about_dismiss: "KAPAT",
 };
 
 static ENGLISH: Text = Text {
@@ -379,10 +348,14 @@ static ENGLISH: Text = Text {
     party_connecting: "Party: connecting…",
     party_in_room: "Party: in the room ({n} in total)",
     party_reconnecting: "Party: reconnecting…",
+    party_created_connecting: "Party created: connecting…",
+    party_created_in_room: "Party created: in the room ({n} in total)",
 
     menu_party_create: "Create party room...",
     menu_party_join: "Join party room...",
     menu_party_leave: "Leave party",
+    menu_group_party: "Party",
+    menu_group_folders: "Folders",
     menu_open_mods: "Open mods folder",
     menu_open_logs: "Open logs folder",
     menu_open_tools: "Open tools folder",
@@ -390,6 +363,38 @@ static ENGLISH: Text = Text {
     menu_autostart: "Start with Windows",
     menu_auto_accept: "Accept matches automatically",
     menu_quit: "Quit Dekan",
+    menu_open_panel: "Open Dekan",
+    menu_random_skin: "Random skin if none is chosen",
+    panel_section_options: "Options",
+    panel_section_diagnostics: "Diagnostics",
+    panel_random_skin_hint: "When your champion locks in with no skin chosen in Dekan, one is rolled so the match never starts without a skin.",
+    check_injector: "Injector (tools folder)",
+    check_game: "Installed game",
+    check_client: "League client",
+    check_dll: "Injector DLL validity",
+    check_privileges: "Dekan privileges",
+    detail_ok: "OK",
+    detail_injector_missing: "ltk_patcher_host.exe or ltk_patcher_dll.dll is missing",
+    detail_game_missing: "game folder not found",
+    detail_client_connected: "connected",
+    detail_client_waiting: "waiting for the client to open",
+    detail_dll_days_left: "accepts the current patch; refuses game builds made {n} day(s) from now or later",
+    detail_dll_refused: "the installed patch is newer than the DLL accepts: no skin loads until a refreshed DLL ships",
+    detail_dll_unknown: "game build not read",
+    detail_elevated: "running as administrator",
+    detail_not_elevated: "running without elevation",
+    update_available_title: "Dekan {version} is available",
+    update_available_body: "Click here to open the download page. Nothing is downloaded or installed without you.",
+    panel_update_line: "Version {version} is available (you have {current}).",
+    panel_update_download: "Open download page",
+    panel_mark_problem: "Mark a problem now",
+    panel_mark_problem_hint: "Without leaving the game: during a match, Ctrl+Shift+B marks the moment something looks wrong and F12 takes a screenshot. When the match ends the diagnostics are saved to the logs folder on their own.",
+    panel_export_diagnostics: "Export diagnostics",
+
+    missing_tools_title: "Dekan — Injector Required",
+    missing_tools_body: "Dekan requires the injection backend to operate:\n• ltk_patcher_host.exe\n• ltk_patcher_dll.dll\n\nCopy both from LTK Manager 1.21.0 through 1.24.0 (step 2 of the README) into the 'tools' folder and open Dekan again.\nThe folder has been opened for you.",
+    broken_tools_title: "Dekan — Invalid Injector",
+    broken_tools_body: "The injector files in the 'tools' folder do not match the audited versions.\n\nPlease replace them with the correct files before starting.\nThe folder has been opened for you.",
 
     already_running_title: "Dekan is already open",
     already_running_body: "Dekan is already running in the background.\n\nLook for the Dekan icon in the \
@@ -433,8 +438,8 @@ static ENGLISH: Text = Text {
     html_lang: "en",
     welcome_active: "ACTIVE IN THE SYSTEM TRAY",
     welcome_background: "Dekan stays minimized in the background",
-    welcome_author: "Dekan custom build.",
-    welcome_tray_hint: "Right-click the tray icon to open your mods folder, manage party rooms, or inspect logs.",
+    welcome_author: "Project developed by Isllan Toso.",
+    welcome_tray_hint: "Click the tray icon to open the control panel: options, party, and the mods and logs folders.",
     welcome_dismiss: "GOT IT",
     welcome_quote: "",
     party_room_full: "The party room is full. Ask someone to leave and try joining again.",

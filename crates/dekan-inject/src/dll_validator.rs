@@ -11,7 +11,6 @@ pub fn compute_sha256(data: &[u8]) -> String {
     to_hex(&Sha256::digest(data))
 }
 
-/// Lowercase hex of a digest; sha2's output array no longer implements `LowerHex`.
 #[must_use]
 pub fn to_hex(bytes: &[u8]) -> String {
     use std::fmt::Write;

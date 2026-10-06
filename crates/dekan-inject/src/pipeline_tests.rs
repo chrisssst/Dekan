@@ -38,10 +38,9 @@ fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> P
             overlay_dir: dir.join("overlay"),
             game_dir: dir.join("game"),
         },
-        state_dir: dir.join("state"),
         hook_timeout: Duration::from_millis(50),
         build_timeout: Duration::from_secs(5),
-        max_suspension: Duration::from_secs(30),
+        late_budget: Duration::from_secs(30),
     }
 }
 
@@ -95,7 +94,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_suspending_on_bad_dll_hash() {
+async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
     let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_hash");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -122,7 +121,7 @@ async fn test_pipeline_aborts_before_suspending_on_bad_dll_hash() {
 }
 
 #[tokio::test]
-async fn test_pipeline_resumes_game_when_the_overlay_cannot_be_built() {
+async fn test_pipeline_fails_loudly_when_the_overlay_cannot_be_built() {
     let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_resume");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -134,23 +133,14 @@ async fn test_pipeline_resumes_game_when_the_overlay_cannot_be_built() {
     let config = temp_config(&temp_dir, host_file, compute_sha256(host_bytes));
 
     let pipeline = InjectionPipeline::new(config, Some(tx));
-    let current_pid = std::process::id();
-    let current_tid = dekan_platform::process::ProcessFinder::find_first_thread_id(current_pid)
-        .unwrap()
-        .unwrap();
-
     let result = pipeline
-        .execute(&["my_skin_mod".into()], current_pid, current_tid)
+        .execute(&["my_skin_mod".into()], std::process::id(), 0)
         .await;
 
     assert!(result.is_err(), "an unbuildable overlay must fail loudly");
     assert!(
         matches!(rx.borrow().injection, InjectionStatus::Failed { .. }),
         "failure must be published, not swallowed"
-    );
-    assert!(
-        !temp_dir.join("state").join("suspend.lock").exists(),
-        "the suspension sentinel must be cleared, proving the thread was resumed"
     );
 
     std::fs::remove_dir_all(&temp_dir).ok();
@@ -230,7 +220,7 @@ async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
 }
 
 #[tokio::test]
-async fn test_spent_suspension_budget_resumes_unconfirmed() {
+async fn test_a_spent_late_budget_ends_unconfirmed() {
     let dir = std::env::temp_dir();
     let (config, args) = fake_runoverlay(&dir, "ping -n 4 127.0.0.1 >nul");
 

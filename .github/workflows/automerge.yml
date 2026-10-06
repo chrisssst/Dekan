@@ -1,12 +1,5 @@
 name: Auto-merge
 
-# Second half of the auto-merge flow. Runs in the base repository after `PR approved` finished, with a
-# GitHub App token: merges made with the default GITHUB_TOKEN do not trigger other workflows, and the
-# release pipeline has to run after the merge.
-#
-# This workflow only ENABLES auto-merge. GitHub performs the merge later, and only once every check
-# the `main` ruleset requires has passed on the exact approved commit. An approval can therefore never
-# merge red code, a commit pushed after the approval, or a change to a protected path.
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] no PR code is checked out or executed; the artifact is validated as untrusted input
     workflows: [PR approved]
@@ -28,7 +21,6 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # The artifact was written by a workflow that may have run for a fork: treat it as untrusted.
       - name: Validate approval record
         id: record
         run: |
@@ -69,8 +61,6 @@ jobs:
           [[ "$head" == "$SHA" ]] || { echo "::error::PR #$PR changed after the approval ($SHA -> $head); a new approval is required"; exit 1; }
           [[ ",$labels," != *",no-automerge,"* ]] || { echo "PR #$PR is labelled no-automerge"; exit 0; }
 
-          # The latest review of every reviewer counts; the approval must come from someone with
-          # write access, and nobody may still be requesting changes.
           reviews=$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" | jq -s 'add
             | map(select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED"))
             | group_by(.user.login) | map(max_by(.submitted_at))')
@@ -84,8 +74,6 @@ jobs:
           done
           [[ "$approved" == true ]] || { echo "::error::no approval of $SHA from a maintainer"; exit 1; }
 
-          # Safety net for a wrong approval: changes to what decides trust, permissions or what ships
-          # never merge automatically. A maintainer merges those by hand, as a second deliberate act.
           files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
           protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger\.rs$|crates/dekan-inject/src/(ltk_host|dll_validator|suspend)\.rs$|crates/dekan-party/src/(crypto|token)\.rs$|relay-worker/wrangler\.toml$|xtask/)'
           blocked=$(grep -E "$protected" <<<"$files" || true)

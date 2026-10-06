@@ -14,7 +14,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use crate::catalog::{self, Catalog, ModsPanel};
+use crate::catalog::{self, Catalog, ModsPanel, PreviewFetches};
 use crate::{historic_store, mods_store};
 
 const TRACK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
@@ -32,6 +32,35 @@ fn target_is_stale(target: Option<&OverlayTarget>, champion: Option<ChampionId>)
 #[must_use]
 fn wanted_for_phase(phase: &GamePhase) -> bool {
     matches!(phase, GamePhase::ChampSelect | GamePhase::Finalization)
+}
+
+async fn next_preview(fetches: &mut Option<PreviewFetches>) -> Option<(u32, Option<String>)> {
+    match fetches {
+        Some(stream) => futures_util::StreamExt::next(stream).await,
+        None => std::future::pending().await,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RandomFallback {
+    pub enabled: bool,
+    pub finalization: bool,
+    pub target_chosen: bool,
+    pub already_rolled: bool,
+    pub declined: bool,
+    pub lcu_skin: Option<dekan_core::selection::SkinId>,
+}
+
+#[must_use]
+pub fn should_roll_random(champion_id: ChampionId, fallback: RandomFallback) -> bool {
+    fallback.enabled
+        && fallback.finalization
+        && !fallback.target_chosen
+        && !fallback.already_rolled
+        && !fallback.declined
+        && fallback.lcu_skin.is_none_or(|skin| {
+            dekan_core::selection::SelectionMode::is_base_skin(skin, champion_id)
+        })
 }
 
 pub struct OverlaySession {
@@ -52,8 +81,13 @@ pub struct OverlaySession {
 
     historic_recorded: Option<OverlayTarget>,
 
-    /// Chroma previews already fetched for the current champion, as `data:` URIs.
+    random_rolled: Option<ChampionId>,
+
+    random_declined: Option<ChampionId>,
+
     chroma_previews: std::collections::HashMap<u32, String>,
+
+    preview_fetches: Option<PreviewFetches>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +98,8 @@ pub struct ModsConfig {
     pub state_dir: PathBuf,
 
     pub game_dir: PathBuf,
+
+    pub overlay_dir: PathBuf,
 
     pub injection_tools: Vec<PathBuf>,
 }
@@ -90,7 +126,10 @@ impl OverlaySession {
             historic_restored: None,
             historic_consulted: None,
             historic_recorded: None,
+            random_rolled: None,
+            random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
+            preview_fetches: None,
         }
     }
 
@@ -110,11 +149,12 @@ impl OverlaySession {
                         Some(OverlayCommand::OpenModsFolder) => self.open_mods_folder(),
                         Some(OverlayCommand::Clear) => {
                             self.dismiss_historic();
+                            self.random_declined = catalog_champion;
                             handle_command(&self.state_tx, OverlayCommand::Clear, catalog.as_ref());
                         }
                         Some(OverlayCommand::Random) => self.roll_random(catalog.as_ref()),
                         Some(OverlayCommand::ChromaPreview { id }) => {
-                            self.send_chroma_preview(id, catalog.as_ref()).await;
+                            self.send_chroma_preview(id, catalog.as_ref());
                         }
                         Some(OverlayCommand::ImportMod { category }) => {
                             let locale = catalog.as_ref().and_then(|c| c.locale.clone());
@@ -130,11 +170,17 @@ impl OverlaySession {
                         }
                     }
                 }
+                fetched = next_preview(&mut self.preview_fetches) => match fetched {
+                    Some((id, Some(uri))) => self.deliver_chroma_preview(id, uri),
+                    Some((id, None)) => debug!(chroma_id = id, "Chroma preview not fetched"),
+                    None => self.preview_fetches = None,
+                },
                 () = tokio::time::sleep(TRACK_INTERVAL) => {
-                    let (wanted, champion, target_stale, target, lcu_skin, confirmed) = {
+                    let (wanted, finalization, champion, target_stale, target, lcu_skin, confirmed) = {
                         let state = self.state_rx.borrow_and_update();
                         (
                             wanted_for_phase(&state.phase),
+                            state.phase == GamePhase::Finalization,
                             state.champion_id,
                             target_is_stale(state.overlay_target.as_ref(), state.champion_id),
                             state.overlay_target.clone(),
@@ -164,15 +210,20 @@ impl OverlaySession {
                         catalog_champion = champion;
                         self.chroma_previews.clear();
                         catalog = self.refresh_catalog(champion).await;
+                        self.preview_fetches = catalog
+                            .as_ref()
+                            .map(|built| catalog::chroma_preview_fetches(built.chroma_preview_paths()));
                         if champion.is_none() {
-
                             self.historic_consulted = None;
                             self.historic_restored = None;
+                            self.random_rolled = None;
+                            self.random_declined = None;
                         }
                     }
                     if let (Some(champion_id), Some(built)) = (champion, catalog.as_ref()) {
                         let target = if target_stale { None } else { target };
                         self.track_historic(champion_id, built, target.as_ref(), lcu_skin);
+                        self.random_when_nothing_chosen(champion_id, built, finalization, lcu_skin);
                     }
                 }
             }
@@ -214,6 +265,9 @@ impl OverlaySession {
                     "Skin catalog sent to the overlay"
                 );
                 self.controller.set_catalog(json);
+                if !classic {
+                    self.warm_companions(built.alias.clone());
+                }
                 Some(built)
             }
             Err(e) => {
@@ -225,6 +279,55 @@ impl OverlaySession {
 }
 
 impl OverlaySession {
+    fn warm_companions(&self, alias: Option<String>) {
+        let Some(alias) = alias else {
+            return;
+        };
+        let Some(game_dir) = dekan_platform::paths::normalize_game_dir(&self.mods.game_dir)
+            .or_else(dekan_platform::paths::discover_game_dir)
+        else {
+            return;
+        };
+        let cache_dir = self.mods.state_dir.clone();
+        let overlay_dir = self.mods.overlay_dir.clone();
+        drop(tokio::task::spawn_blocking(move || {
+            let started = std::time::Instant::now();
+            let companions =
+                match dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
+                    .map(|champion| champion.with_cache_dir(&cache_dir).companions())
+                {
+                    Ok(companions) => companions,
+                    Err(e) => {
+                        debug!(error = %e, "Companion characters not indexed ahead of the build");
+                        return;
+                    }
+                };
+            let skin_bins: Vec<u64> = std::iter::once(alias.to_ascii_lowercase())
+                .chain(companions.iter().cloned())
+                .map(|character| {
+                    dekan_wad::hash::wad_path_hash(&format!(
+                        "data/characters/{character}/skins/skin0.bin"
+                    ))
+                })
+                .collect();
+            match dekan_inject::overlay_builder::prewarm_shared_copies(
+                &game_dir,
+                &overlay_dir,
+                &skin_bins,
+            ) {
+                Ok(copied) => info!(
+                    companions = ?companions,
+                    copied,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Shared map WADs prepared in the background; the selection window stayed responsive"
+                ),
+                Err(e) => {
+                    warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it")
+                }
+            }
+        }));
+    }
+
     async fn refresh_mods(&mut self, champion_id: ChampionId, alias: Option<String>) -> ModsPanel {
         if alias.is_none() {
             debug!(
@@ -387,6 +490,32 @@ impl OverlaySession {
         }
     }
 
+    fn random_when_nothing_chosen(
+        &mut self,
+        champion_id: ChampionId,
+        catalog: &Catalog,
+        finalization: bool,
+        lcu_skin: Option<dekan_core::selection::SkinId>,
+    ) {
+        let fallback = RandomFallback {
+            enabled: dekan_platform::preferences::RANDOM_SKIN.is_enabled(),
+            finalization,
+            target_chosen: self.state_rx.borrow().overlay_target.is_some(),
+            already_rolled: self.random_rolled == Some(champion_id),
+            declined: self.random_declined == Some(champion_id),
+            lcu_skin,
+        };
+        if !should_roll_random(champion_id, fallback) {
+            return;
+        }
+        self.random_rolled = Some(champion_id);
+        info!(
+            champion_id,
+            "Champion locked with no skin chosen; rolling a random one so the match does not start without a skin"
+        );
+        self.roll_random(Some(catalog));
+    }
+
     fn roll_random(&self, catalog: Option<&Catalog>) {
         let Some(catalog) = catalog else {
             warn!("Random skin requested with no catalog loaded; ignoring it");
@@ -410,20 +539,30 @@ impl OverlaySession {
         }
     }
 
-    async fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
-        let uri = match self.chroma_previews.entry(chroma_id) {
-            std::collections::hash_map::Entry::Occupied(cached) => cached.into_mut(),
-            std::collections::hash_map::Entry::Vacant(slot) => {
-                let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
-                    debug!(chroma_id, "Chroma preview asked for an entry without one");
-                    return;
-                };
-                let Some(fetched) = catalog::fetch_chroma_preview(path).await else {
-                    return;
-                };
-                slot.insert(fetched)
-            }
+    fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
+        if let Some(uri) = self.chroma_previews.get(&chroma_id) {
+            self.push_chroma_preview(chroma_id, uri);
+            return;
+        }
+        if self.preview_fetches.is_some() {
+            return;
+        }
+        let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
+            debug!(chroma_id, "Chroma preview asked for an entry without one");
+            return;
         };
+        self.preview_fetches = Some(catalog::chroma_preview_fetches(vec![(
+            chroma_id,
+            path.to_owned(),
+        )]));
+    }
+
+    fn deliver_chroma_preview(&mut self, chroma_id: u32, uri: String) {
+        self.push_chroma_preview(chroma_id, &uri);
+        self.chroma_previews.insert(chroma_id, uri);
+    }
+
+    fn push_chroma_preview(&self, chroma_id: u32, uri: &str) {
         match serde_json::to_string(uri) {
             Ok(json) => self.controller.eval_script(format!(
                 "window.dekanOverlay.setChromaPreview({chroma_id}, {json});"

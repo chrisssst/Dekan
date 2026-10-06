@@ -70,7 +70,6 @@ fn test_a_half_extracted_mod_directory_is_rebuilt_not_trusted() {
         writer.finish().expect("finish archive");
     }
 
-    // An interrupted extraction: the directory exists, the WAD never landed.
     let target = root.join("81_81069");
     std::fs::create_dir_all(target.join("META")).expect("partial meta");
     assert!(
@@ -97,8 +96,6 @@ fn decide(state: &dekan_core::state::AppState, current: Option<ArmKey>) -> ArmDe
 fn test_arm_is_scheduled_for_a_valid_champ_select_selection() {
     let state = champ_select_state(Some(81), Some(target(81, 81065)));
 
-    // Initial selection (current.is_none()): uses INITIAL_ARM_DEBOUNCE (100ms) to avoid
-    // wasting 900ms before starting the build when entering champ select or finalization.
     match decide(&state, None) {
         ArmDecision::Schedule(request) => {
             assert_eq!(request.key.champ_id, 81);
@@ -123,8 +120,6 @@ fn test_arm_is_scheduled_for_a_valid_champ_select_selection() {
         ArmDecision::Settled => panic!("a valid selection must schedule an overlay build"),
     }
 
-    // Selection change (current is Some): uses ARM_DEBOUNCE (900ms) so carousel clicking
-    // does not trigger multiple multi-second overlay builds.
     let different_skin = ArmKey {
         champ_id: 81,
         entry_id: Some(81001),
@@ -151,31 +146,26 @@ fn test_arm_is_scheduled_for_a_valid_champ_select_selection() {
 
 #[test]
 fn test_arm_is_settled_when_there_is_nothing_to_build() {
-    // No target chosen yet.
     assert!(matches!(
         decide(&champ_select_state(Some(81), None), None),
         ArmDecision::Settled
     ));
 
-    // No champion known, so the target cannot be validated against one.
     assert!(matches!(
         decide(&champ_select_state(None, Some(target(81, 81065))), None),
         ArmDecision::Settled
     ));
 
-    // The target belongs to a champion the player is not on: a stale click from a dodge.
     assert!(matches!(
         decide(&champ_select_state(Some(25), Some(target(81, 81065))), None),
         ArmDecision::Settled
     ));
 
-    // The base skin is the one slot every account has; there is nothing to overlay.
     assert!(matches!(
         decide(&champ_select_state(Some(81), Some(target(81, 81000))), None),
         ArmDecision::Settled
     ));
 
-    // The patcher already armed (or being built) is for this exact skin.
     let same = ArmKey {
         champ_id: 81,
         entry_id: Some(81065),
@@ -211,7 +201,6 @@ fn test_custom_mods_alone_arm_a_build_without_a_skin() {
         other => panic!("mods alone must still build an overlay, got {other:?}"),
     }
 
-    // The base skin plus mods: the mods load, the base skin is not "installed".
     let base = with_mods(
         champ_select_state(Some(81), Some(target(81, 81000))),
         "dekan:maps/Winter",
@@ -248,8 +237,6 @@ fn test_an_unknown_champion_with_mods_is_silence_not_nothing() {
 
 #[test]
 fn test_rift_classic_ignores_mods_and_tracks_the_client_slot() {
-    // Annie in Classic is champion 60001; her skin 5 is entry 1005 (the catalog lists regular
-    // ids under the Classic champion).
     let mut state = with_mods(
         champ_select_state(Some(60_001), Some(target(60_001, 1005))),
         "dekan:maps/Winter",
@@ -275,7 +262,6 @@ fn test_rift_classic_ignores_mods_and_tracks_the_client_slot() {
         "the client moving to another slot must rebuild the Classic mod"
     );
 
-    // Number 0 is Classic's base: with no other reason to build, there is nothing to do.
     let base = champ_select_state(Some(60_001), Some(target(60_001, 1000)));
     assert_eq!(wanted_skin(&base), WantedSkin::Nothing);
 }

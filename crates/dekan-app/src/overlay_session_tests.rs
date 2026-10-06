@@ -184,3 +184,58 @@ fn the_empty_catalog_is_valid_json_the_ui_can_consume() {
     assert_eq!(value["championId"], 0);
     assert!(value["skins"].as_array().is_some_and(Vec::is_empty));
 }
+
+fn fallback() -> RandomFallback {
+    RandomFallback {
+        enabled: true,
+        finalization: true,
+        target_chosen: false,
+        already_rolled: false,
+        declined: false,
+        lcu_skin: Some(157_000),
+    }
+}
+
+#[test]
+fn test_a_locked_champion_without_a_skin_gets_a_random_one() {
+    assert!(should_roll_random(157, fallback()));
+    assert!(should_roll_random(
+        157,
+        RandomFallback {
+            lcu_skin: None,
+            ..fallback()
+        }
+    ));
+}
+
+#[test]
+fn test_the_random_skin_never_overrides_a_choice() {
+    for blocked in [
+        RandomFallback {
+            enabled: false,
+            ..fallback()
+        },
+        RandomFallback {
+            finalization: false,
+            ..fallback()
+        },
+        RandomFallback {
+            target_chosen: true,
+            ..fallback()
+        },
+        RandomFallback {
+            already_rolled: true,
+            ..fallback()
+        },
+        RandomFallback {
+            declined: true,
+            ..fallback()
+        },
+        RandomFallback {
+            lcu_skin: Some(157_005),
+            ..fallback()
+        },
+    ] {
+        assert!(!should_roll_random(157, blocked), "{blocked:?}");
+    }
+}

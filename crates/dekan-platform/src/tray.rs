@@ -7,16 +7,16 @@ use std::thread;
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::UI::Shell::{
-    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
-    Shell_NotifyIconW,
+    NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+    NIN_BALLOONUSERCLICK, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-    DispatchMessageW, GetCursorPos, GetMessageW, HICON, IDI_APPLICATION, LoadIconW, MF_CHECKED,
-    MF_DISABLED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, PostMessageW, PostQuitMessage,
-    RegisterClassW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RIGHTBUTTON, TrackPopupMenu,
-    TranslateMessage, WINDOW_EX_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP,
-    WM_USER, WNDCLASSW, WS_OVERLAPPED,
+    DispatchMessageW, GetCursorPos, GetMessageW, HICON, IDI_APPLICATION, LoadIconW, MF_DISABLED,
+    MF_GRAYED, MF_SEPARATOR, MF_STRING, PostMessageW, PostQuitMessage, RegisterClassW,
+    SetForegroundWindow, SetMenuDefaultItem, TPM_BOTTOMALIGN, TPM_RIGHTBUTTON, TrackPopupMenu,
+    TranslateMessage, WINDOW_EX_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP,
+    WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_OVERLAPPED,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -25,19 +25,11 @@ use crate::error::PlatformError;
 const WM_TRAY_CALLBACK: u32 = WM_USER + 100;
 const WM_UPDATE_STATUS: u32 = WM_USER + 101;
 const WM_TRAY_QUIT: u32 = WM_USER + 102;
+const WM_TRAY_BALLOON: u32 = WM_USER + 103;
 
 const ID_STATUS_ITEM: usize = 1001;
-const ID_OPEN_LOGS: usize = 1002;
 const ID_QUIT: usize = 1003;
-const ID_PARTY_STATUS: usize = 1004;
-const ID_PARTY_CREATE: usize = 1005;
-const ID_PARTY_JOIN: usize = 1006;
-const ID_PARTY_LEAVE: usize = 1007;
-const ID_OPEN_TOOLS: usize = 1008;
-const ID_OPEN_MODS: usize = 1009;
-const ID_ABOUT: usize = 1010;
-const ID_AUTOSTART: usize = 1011;
-const ID_AUTO_ACCEPT: usize = 1012;
+const ID_OPEN_PANEL: usize = 1013;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayEvent {
@@ -53,6 +45,8 @@ pub enum TrayEvent {
 
     ToggleAutoAccept,
 
+    ToggleRandomSkin,
+
     Quit,
 
     Activated,
@@ -62,6 +56,12 @@ pub enum TrayEvent {
     PartyJoin,
 
     PartyLeave,
+
+    OpenRelease,
+
+    MarkProblem,
+
+    ExportDiagnostics,
 }
 
 #[derive(Clone)]
@@ -70,6 +70,14 @@ pub struct TrayController {
     alive: Arc<AtomicBool>,
     status: Arc<std::sync::Mutex<String>>,
     party: Arc<std::sync::Mutex<PartyMenu>>,
+    balloon: Arc<std::sync::Mutex<Option<Balloon>>>,
+    events: Sender<TrayEvent>,
+}
+
+#[derive(Debug, Clone)]
+struct Balloon {
+    title: String,
+    body: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -92,10 +100,44 @@ impl TrayController {
         }
     }
 
+    #[must_use]
+    pub fn status(&self) -> String {
+        self.status.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn party(&self) -> (String, bool) {
+        self.party
+            .lock()
+            .map(|p| (p.line.clone(), p.in_room))
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn events(&self) -> Sender<TrayEvent> {
+        self.events.clone()
+    }
+
     pub fn update_party(&self, line: &str, in_room: bool) {
         if let Ok(mut party) = self.party.lock() {
             party.line = line.to_string();
             party.in_room = in_room;
+        }
+    }
+
+    pub fn notify(&self, title: &str, body: &str) {
+        if !self.alive.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Ok(mut pending) = self.balloon.lock() {
+            *pending = Some(Balloon {
+                title: title.to_string(),
+                body: body.to_string(),
+            });
+        }
+        let hwnd = HWND(self.hwnd_raw as *mut _);
+        unsafe {
+            let _ = PostMessageW(hwnd, WM_TRAY_BALLOON, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
         }
     }
 
@@ -127,10 +169,12 @@ impl SystemTray {
         let status_shared = Arc::new(std::sync::Mutex::new(initial_title.to_string()));
         let status_for_thread = Arc::clone(&status_shared);
         let party_shared = Arc::new(std::sync::Mutex::new(PartyMenu {
-            line: "Party: desligado".into(),
+            line: crate::i18n::text().party_off.into(),
             in_room: false,
         }));
-        let party_for_thread = Arc::clone(&party_shared);
+        let events_for_controller = event_tx.clone();
+        let balloon_shared = Arc::new(std::sync::Mutex::new(None));
+        let balloon_for_thread = Arc::clone(&balloon_shared);
 
         let join_handle = thread::Builder::new()
             .name("dekan-tray-pump".into())
@@ -141,7 +185,7 @@ impl SystemTray {
                     ready_tx,
                     alive_for_thread,
                     status_for_thread,
-                    party_for_thread,
+                    balloon_for_thread,
                 );
             })
             .map_err(|e| PlatformError::Io {
@@ -161,6 +205,8 @@ impl SystemTray {
                 alive: alive_flag,
                 status: status_shared,
                 party: party_shared,
+                balloon: balloon_shared,
+                events: events_for_controller,
             },
             join_handle: Some(join_handle),
         })
@@ -196,7 +242,7 @@ struct TrayState {
     event_tx: Sender<TrayEvent>,
     status_text: String,
     status_shared: Arc<std::sync::Mutex<String>>,
-    party_shared: Arc<std::sync::Mutex<PartyMenu>>,
+    balloon_shared: Arc<std::sync::Mutex<Option<Balloon>>>,
 }
 
 fn run_tray_message_loop(
@@ -205,7 +251,7 @@ fn run_tray_message_loop(
     ready_tx: Sender<isize>,
     alive: Arc<AtomicBool>,
     status_shared: Arc<std::sync::Mutex<String>>,
-    party_shared: Arc<std::sync::Mutex<PartyMenu>>,
+    balloon_shared: Arc<std::sync::Mutex<Option<Balloon>>>,
 ) {
     let class_name = w!("DekanTrayWindowClass");
 
@@ -281,7 +327,7 @@ fn run_tray_message_loop(
         event_tx,
         status_text: title,
         status_shared,
-        party_shared,
+        balloon_shared,
     });
 
     unsafe {
@@ -334,8 +380,11 @@ unsafe extern "system" fn tray_wnd_proc(
                 WM_RBUTTONUP => {
                     show_context_menu(hwnd, state);
                 }
-                WM_LBUTTONDBLCLK => {
+                WM_LBUTTONUP | WM_LBUTTONDBLCLK => {
                     let _ = state.event_tx.send(TrayEvent::Activated); // ignore-ok: the receiver is gone only when the app is already shutting down
+                }
+                NIN_BALLOONUSERCLICK => {
+                    let _ = state.event_tx.send(TrayEvent::OpenRelease); // ignore-ok: the receiver is gone only when the app is already shutting down
                 }
                 _ => {}
             }
@@ -344,32 +393,8 @@ unsafe extern "system" fn tray_wnd_proc(
         WM_COMMAND => {
             let cmd_id = wparam.0 & 0xFFFF;
             match cmd_id {
-                ID_OPEN_MODS => {
-                    let _ = state.event_tx.send(TrayEvent::OpenMods); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_OPEN_LOGS => {
-                    let _ = state.event_tx.send(TrayEvent::OpenLogs); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_OPEN_TOOLS => {
-                    let _ = state.event_tx.send(TrayEvent::OpenTools); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_ABOUT => {
-                    let _ = state.event_tx.send(TrayEvent::About); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_AUTOSTART => {
-                    let _ = state.event_tx.send(TrayEvent::ToggleAutostart); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_AUTO_ACCEPT => {
-                    let _ = state.event_tx.send(TrayEvent::ToggleAutoAccept); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_PARTY_CREATE => {
-                    let _ = state.event_tx.send(TrayEvent::PartyCreate); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_PARTY_JOIN => {
-                    let _ = state.event_tx.send(TrayEvent::PartyJoin); // ignore-ok: the receiver is gone only when the app is already shutting down
-                }
-                ID_PARTY_LEAVE => {
-                    let _ = state.event_tx.send(TrayEvent::PartyLeave); // ignore-ok: the receiver is gone only when the app is already shutting down
+                ID_OPEN_PANEL => {
+                    let _ = state.event_tx.send(TrayEvent::Activated); // ignore-ok: the receiver is gone only when the app is already shutting down
                 }
                 ID_QUIT => {
                     let _ = state.event_tx.send(TrayEvent::Quit); // ignore-ok: the receiver is gone only when the app is already shutting down
@@ -401,6 +426,28 @@ unsafe extern "system" fn tray_wnd_proc(
             }
             LRESULT(0)
         }
+        WM_TRAY_BALLOON => {
+            let pending = state
+                .balloon_shared
+                .lock()
+                .ok()
+                .and_then(|mut slot| slot.take());
+            if let Some(balloon) = pending {
+                fill_wide(&mut state.nid.szInfoTitle, &balloon.title);
+                fill_wide(&mut state.nid.szInfo, &balloon.body);
+                state.nid.dwInfoFlags = NIIF_INFO;
+                state.nid.uFlags = NIF_INFO;
+                unsafe {
+                    if !Shell_NotifyIconW(NIM_MODIFY, &state.nid).as_bool() {
+                        warn!(
+                            "Windows refused the tray notification; the notice stays in the control panel"
+                        );
+                    }
+                }
+                state.nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+            }
+            LRESULT(0)
+        }
         WM_TRAY_QUIT => {
             unsafe {
                 PostQuitMessage(0);
@@ -414,6 +461,14 @@ unsafe extern "system" fn tray_wnd_proc(
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+fn fill_wide(target: &mut [u16], text: &str) {
+    target.fill(0);
+    let limit = target.len().saturating_sub(1);
+    for (slot, unit) in target.iter_mut().zip(text.encode_utf16().take(limit)) {
+        *slot = unit;
     }
 }
 
@@ -433,6 +488,9 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
+        let text = crate::i18n::text();
+        let open_panel = HSTRING::from(text.menu_open_panel);
+        let quit = HSTRING::from(text.menu_quit);
 
         // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
         let _ = AppendMenuW(
@@ -441,82 +499,9 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             ID_STATUS_ITEM,
             PCWSTR(status_wide.as_ptr()),
         );
-
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-
-        let party = state
-            .party_shared
-            .lock()
-            .map(|p| p.clone())
-            .unwrap_or_default();
-        let party_wide: Vec<u16> = party
-            .line
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-
-        // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(
-            menu,
-            MF_STRING | MF_GRAYED | MF_DISABLED,
-            ID_PARTY_STATUS,
-            PCWSTR(party_wide.as_ptr()),
-        );
-
-        let text = crate::i18n::text();
-        let create = HSTRING::from(text.menu_party_create);
-        let join = HSTRING::from(text.menu_party_join);
-        let leave = HSTRING::from(text.menu_party_leave);
-        let open_mods = HSTRING::from(text.menu_open_mods);
-        let open_logs = HSTRING::from(text.menu_open_logs);
-        let open_tools = HSTRING::from(text.menu_open_tools);
-        let about = HSTRING::from(text.menu_about);
-        let autostart = HSTRING::from(text.menu_autostart);
-        let auto_accept = HSTRING::from(text.menu_auto_accept);
-        let quit = HSTRING::from(text.menu_quit);
-
-        let _ = AppendMenuW(menu, MF_STRING, ID_PARTY_CREATE, &create); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(menu, MF_STRING, ID_PARTY_JOIN, &join); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let leave_flags = if party.in_room {
-            MF_STRING
-        } else {
-            MF_STRING | MF_GRAYED | MF_DISABLED
-        };
-        let _ = AppendMenuW(menu, leave_flags, ID_PARTY_LEAVE, &leave); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-
-        let _ = AppendMenuW(menu, MF_STRING, ID_OPEN_MODS, &open_mods); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(menu, MF_STRING, ID_OPEN_LOGS, &open_logs); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(menu, MF_STRING, ID_OPEN_TOOLS, &open_tools); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-
-        let autostart_enabled = match crate::autostart::is_enabled() {
-            Ok(enabled) => enabled,
-            Err(e) => {
-                warn!(error = %e, "Could not read the Start with Windows setting; shown as off");
-                false
-            }
-        };
-        let autostart_check = if autostart_enabled {
-            MF_CHECKED
-        } else {
-            MF_UNCHECKED
-        };
-        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let auto_accept_check = if crate::auto_accept::is_enabled() {
-            MF_CHECKED
-        } else {
-            MF_UNCHECKED
-        };
-        // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(
-            menu,
-            MF_STRING | auto_accept_check,
-            ID_AUTO_ACCEPT,
-            &auto_accept,
-        );
-        let _ = AppendMenuW(menu, MF_STRING | autostart_check, ID_AUTOSTART, &autostart); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-        let _ = AppendMenuW(menu, MF_STRING, ID_ABOUT, &about); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
-
+        let _ = AppendMenuW(menu, MF_STRING, ID_OPEN_PANEL, &open_panel); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
+        let _ = SetMenuDefaultItem(menu, ID_OPEN_PANEL as u32, 0); // ignore-ok: without a default item the entry is only shown in regular weight
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
         let _ = AppendMenuW(menu, MF_STRING, ID_QUIT, &quit); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
 

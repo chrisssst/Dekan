@@ -22,9 +22,6 @@ fn main() {
         let mut res = winres::WindowsResource::new();
         res.set_icon(&icon_to_use.to_string_lossy());
 
-        // Shown in Explorer > Properties > Details. winres defaults ProductName to the crate name
-        // ("dekan-app"); ProductVersion/FileVersion default to CARGO_PKG_VERSION (e.g. 1.0.0).
-        // Format with two components when patch is 0 (e.g. "1.0", "1.1").
         let raw_version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
         let display_version = if let Some(stripped) = raw_version.strip_suffix(".0") {
             stripped.to_string()
@@ -40,12 +37,15 @@ fn main() {
             )
             .set("InternalName", "dekan")
             .set("OriginalFilename", "dekan.exe")
-            .set("Comments", "Dekan — modified from Bullet (MIT licensed)")
+            .set("Comments", "Dekan — customized from Bullet (MIT licensed)")
             .set("ProductVersion", &display_version)
             .set("FileVersion", &display_version);
 
         let profile = std::env::var("PROFILE").unwrap_or_default();
         if profile == "release" {
+            if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+                println!("cargo:rustc-link-arg-bins=/RELEASE");
+            }
             res.set_manifest(
                 r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
@@ -60,8 +60,6 @@ fn main() {
 "#,
             );
         }
-        // A silent failure here ships an exe without icon, version info and the asInvoker
-        // manifest that keeps it unelevated, so the build must stop.
         if let Err(e) = res.compile() {
             panic!("failed to compile Windows resources (icon, version info, manifest): {e}");
         }

@@ -35,6 +35,10 @@ each other directly. They exchange encrypted messages through a relay, and the r
 - The public relay runs on Cloudflare Workers (`relay-worker/` at the repository root).
 - `dekan-relay` is a Rust server that speaks the same protocol, for anyone who wants to host their own.
 
+Encryption fails instead of panicking when the operating system's random generator fails, so nothing is sent.
+Reconnects back off with jitter to spread them out. Member ids are random, non-zero and fit in 53 bits, so they
+survive as a JavaScript number in the relay worker.
+
 Rooms hold at most five members, one full team. A sixth player is turned away with a "room full" answer, and
 Dekan tells the user without retrying.
 

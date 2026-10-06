@@ -47,7 +47,6 @@ impl RoomCipher {
     }
 
     pub fn seal(&self, plaintext: &[u8]) -> Result<SealedBlob, PartyError> {
-        // Fallible on purpose: an OS RNG failure refuses to send instead of panicking.
         let nonce = XNonce::try_generate()
             .map_err(|e| PartyError::Crypto(format!("no randomness for a nonce: {e}")))?;
         let ciphertext = self

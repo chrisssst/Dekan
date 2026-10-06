@@ -234,7 +234,6 @@ impl std::fmt::Display for ImportRefusal {
 }
 
 impl ImportRefusal {
-    /// The reason in the user's language.
     #[must_use]
     pub fn describe(&self, text: &dekan_platform::i18n::Text) -> String {
         use dekan_platform::i18n::fill;

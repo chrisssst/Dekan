@@ -102,7 +102,6 @@ impl PartyClient {
             }
             set_party_peers(&self.state_tx, Vec::new());
 
-            // Jitter only spreads reconnects; without randomness a plain backoff is fine.
             let jitter = Duration::from_millis(u64::from(u32::try_generate().unwrap_or(0) % 500));
             tokio::select! {
                 () = cancel.cancelled() => break PartyExit::Left,

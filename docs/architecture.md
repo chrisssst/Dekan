@@ -30,7 +30,7 @@ view), never inside the client.
 | `dekan-wad` | WAD archives, BIN/PROP data files, `.fantome` packages, hash index | nothing |
 | `dekan-lcu` | League client REST and WebSocket, champion select | core |
 | `dekan-classic` | Skins and Classic Rift models generated from the installed game | wad |
-| `dekan-inject` | Mod checks, overlay builder, injector host, suspension guard | core, platform, wad |
+| `dekan-inject` | Mod checks, overlay builder, injector host | core, platform, wad |
 | `dekan-party` | Encrypted party rooms over a relay | core |
 | `dekan-relay` | Optional self-hosted relay server | none of the above |
 | `dekan-app` | The executable: composition, lifecycle, tray, catalog, injection trigger | all |
@@ -45,8 +45,7 @@ so most of the logic can be tested without either.
 2. **User profile.** The desktop user is resolved through the Windows API, and data goes to that user's
    `%LOCALAPPDATA%\Dekan`.
 3. **Logging.** A non-blocking daily log file starts in `%LOCALAPPDATA%\Dekan\logs`.
-4. **Recovery.** If a previous run died while the game was suspended, the game is resumed.
-5. **Discovery.** The game install (from Riot's metadata or the running process) and the injector tools (from
+4. **Discovery.** The game install (from Riot's metadata or the running process) and the injector tools (from
    Dekan's own folder, hash-checked) are located.
 6. **Warm-up.** The index of the game's archives is built on a background thread so champion select never
    waits for it.

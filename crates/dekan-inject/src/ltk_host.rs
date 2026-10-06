@@ -151,18 +151,26 @@ pub fn parse_host_event(line: &str) -> Option<HostEvent> {
 }
 
 #[must_use]
+pub fn redirected_wad(message: &str) -> Option<&str> {
+    message
+        .split_once("redirected wad:")
+        .map(|(_, wad)| wad.trim())
+        .filter(|wad| !wad.is_empty())
+}
+
+#[must_use]
 pub fn is_end_of_life(message: &str) -> bool {
     message.contains("end of life reached")
 }
 
 #[must_use]
-pub fn is_antihack_bypassed(message: &str) -> bool {
+pub fn is_expected_status(message: &str) -> bool {
     message.contains("c0000229")
 }
 
 #[must_use]
 pub fn is_dll_failure(level: &str, message: &str) -> bool {
-    if is_antihack_bypassed(message) {
+    if is_expected_status(message) {
         return false;
     }
     if level.eq_ignore_ascii_case("error") {
@@ -348,7 +356,7 @@ mod tests {
             HostEvent::DllLog { level, message } => {
                 assert_eq!(level, "ERROR");
                 assert!(message.contains("WAD scan failed status with c0000229"));
-                assert!(is_antihack_bypassed(&message));
+                assert!(is_expected_status(&message));
 
                 assert!(!is_dll_failure(&level, &message));
             }
@@ -356,6 +364,18 @@ mod tests {
         }
 
         assert!(is_dll_failure("ERROR", "failed to patch CreateFileA"));
+    }
+
+    #[test]
+    fn a_redirected_archive_is_named() {
+        assert_eq!(
+            redirected_wad(
+                "ltk_patcher_dll::hooks::fsov::imp: redirected wad: DATA/FINAL/Maps/Shipping/Map11.wad.client"
+            ),
+            Some("DATA/FINAL/Maps/Shipping/Map11.wad.client")
+        );
+        assert_eq!(redirected_wad("ltk_patcher_dll::entry: init done"), None);
+        assert_eq!(redirected_wad("redirected wad:   "), None);
     }
 
     #[test]

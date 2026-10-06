@@ -6,11 +6,12 @@ members = [
 ]
 
 [workspace.package]
-version = "1.1.0"
+version = "1.2.1"
 authors = ["Dekan contributors"]
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
+repository = "https://github.com/chrisssst/Dekan"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -29,14 +30,12 @@ zstd = "0.14"
 flate2 = "1"
 memmap2 = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
-windows = { version = "0.58", features = [] }  # features added per-crate
+windows = { version = "0.58", features = [] }
 base64 = "0.23"
 sha2 = "0.11"
-# Party payload encryption: XChaCha20-Poly1305, RustCrypto.
 chacha20poly1305 = "0.11"
 uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
-# Selection window: hosts a WebView2 child inside our own Win32 window.
 wry = { version = "0.57", default-features = false }
 raw-window-handle = "0.6"
 

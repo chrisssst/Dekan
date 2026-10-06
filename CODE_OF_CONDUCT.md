@@ -13,11 +13,11 @@ Dekan follows the [Contributor Covenant, version 2.1](https://www.contributor-co
 ## Scope
 
 This applies to the GitHub repository (issues, pull requests, discussions) and to the
-project community channel configured by the maintainer.
+[Dekan Discord](https://discord.gg/e2dH2nUjd9).
 
 ## Enforcement
 
-Report unacceptable behavior privately through the contact method configured for your Dekan repository, or
-through its private security reporting channel if it involves a
+Report unacceptable behavior privately to the maintainer, Isllan Toso, through [isllan.dev](https://isllan.dev/), or
+through a [private security advisory](https://github.com/chrisssst/Dekan/security/advisories/new) if it involves a
 security issue. Reports are handled confidentially. Maintainers may remove content and warn, suspend or ban
 participants, following the enforcement guidelines of the Contributor Covenant.

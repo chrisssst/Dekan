@@ -1,7 +1,5 @@
 name: Scorecard
 
-# OpenSSF Scorecard grades the repository's security practices (pinned dependencies, branch protection,
-# token permissions, signed releases, fuzzing, SAST…) and publishes the result behind the README badge.
 on:
   push:
     branches: [main]
@@ -32,8 +30,6 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
-          # The default token cannot read rulesets, so Branch-Protection scores 0 even when the ruleset
-          # exists. SCORECARD_TOKEN: fine-grained PAT, this repo only, "Administration: Read-only".
           repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
 
       - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2

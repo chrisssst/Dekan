@@ -1,9 +1,11 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use dekan_core::party::PartyStatus;
-use dekan_core::state::{StateReceiver, StateSender, set_party_status};
+use dekan_core::state::{StateReceiver, StateSender, set_party_hosting, set_party_status};
 use dekan_party::client::{PartyClient, PartyExit};
 use dekan_party::token::{PartyToken, random_member_id, unix_now};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -22,6 +24,25 @@ struct Running {
     task: Pin<Box<dyn Future<Output = PartyExit> + Send>>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct QueuedClicks {
+    pub ignored: usize,
+    pub leave: bool,
+}
+
+#[must_use]
+pub fn sort_queued_clicks(commands: impl IntoIterator<Item = PartyCommand>) -> QueuedClicks {
+    commands
+        .into_iter()
+        .fold(QueuedClicks::default(), |mut clicks, command| {
+            match command {
+                PartyCommand::Leave => clicks.leave = true,
+                PartyCommand::Create | PartyCommand::Join => clicks.ignored += 1,
+            }
+            clicks
+        })
+}
+
 async fn next_finished(running: &mut Option<Running>) -> PartyExit {
     match running {
         Some(r) => r.task.as_mut().await,
@@ -33,6 +54,7 @@ pub struct PartyManager {
     state_tx: StateSender,
     state_rx: StateReceiver,
     state_dir: PathBuf,
+    created_dialog_open: Arc<AtomicBool>,
 }
 
 impl PartyManager {
@@ -42,6 +64,7 @@ impl PartyManager {
             state_tx,
             state_rx,
             state_dir,
+            created_dialog_open: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -59,12 +82,19 @@ impl PartyManager {
                     info!(?command, "Party command from the tray");
                     match command {
                         PartyCommand::Create => self.create(&mut running).await,
-                        PartyCommand::Join => self.join(&mut running).await,
-                        PartyCommand::Leave => Self::stop(&mut running).await,
+                        PartyCommand::Join => {
+                            self.join(&mut running).await;
+                            self.settle_queued_clicks(&mut commands, &mut running).await;
+                        }
+                        PartyCommand::Leave => {
+                            Self::stop(&mut running).await;
+                            set_party_hosting(&self.state_tx, false);
+                        }
                     }
                 }
                 exit = next_finished(&mut running) => {
                     running = None;
+                    set_party_hosting(&self.state_tx, false);
                     if exit == PartyExit::RoomFull {
 
                         let ui = dekan_platform::i18n::text();
@@ -74,6 +104,24 @@ impl PartyManager {
             }
         }
         Self::stop(&mut running).await;
+    }
+
+    async fn settle_queued_clicks(
+        &self,
+        commands: &mut UnboundedReceiver<PartyCommand>,
+        running: &mut Option<Running>,
+    ) {
+        let clicks = sort_queued_clicks(std::iter::from_fn(|| commands.try_recv().ok()));
+        if clicks.ignored > 0 {
+            info!(
+                ignored = clicks.ignored,
+                "Party clicks made while the join window was open were ignored"
+            );
+        }
+        if clicks.leave {
+            Self::stop(running).await;
+            set_party_hosting(&self.state_tx, false);
+        }
     }
 
     async fn stop(running: &mut Option<Running>) {
@@ -110,7 +158,6 @@ impl PartyManager {
         }
     }
 
-    /// The OS random generator failed: nothing secret can be made, so the party is not started.
     fn explain_no_randomness(&self, e: &dekan_party::error::PartyError) {
         error!(error = %e, "Party not started: no secure randomness for the room key or member id");
         set_party_status(
@@ -150,6 +197,10 @@ impl PartyManager {
     }
 
     async fn create(&self, running: &mut Option<Running>) {
+        if self.created_dialog_open.load(Ordering::Acquire) {
+            info!("The party room window is already open; no second room is created");
+            return;
+        }
         let Some(relay) = self.relay_or_explain() else {
             return;
         };
@@ -177,7 +228,8 @@ impl PartyManager {
         }
 
         if self.start(running, relay, token) {
-            show_created_dialog(code);
+            set_party_hosting(&self.state_tx, true);
+            show_created_dialog(code, Arc::clone(&self.created_dialog_open));
         }
     }
 
@@ -248,6 +300,7 @@ impl PartyManager {
         match PartyToken::decode(&code, unix_now()) {
             Ok(token) => {
                 Self::stop(running).await;
+                set_party_hosting(&self.state_tx, false);
                 info!(
                     issued_at = token.issued_at,
                     "Joining a party room from an entered code"
@@ -267,9 +320,12 @@ impl PartyManager {
     }
 }
 
-fn show_created_dialog(code: String) {
+fn show_created_dialog(code: String, open: Arc<AtomicBool>) {
+    open.store(true, Ordering::Release);
     drop(tokio::task::spawn_blocking(move || {
-        if let Err(e) = dekan_platform::party_dialog::show_party_created_dialog(&code) {
+        let shown = dekan_platform::party_dialog::show_party_created_dialog(&code);
+        open.store(false, Ordering::Release);
+        if let Err(e) = shown {
             warn!(error = %e, "Party room dialog could not be shown; the code goes in a notice");
             let ui = dekan_platform::i18n::text();
 
@@ -286,3 +342,7 @@ fn notify(title: &'static str, text: String) {
         dekan_platform::shell::message_box(title, &text);
     }));
 }
+
+#[cfg(test)]
+#[path = "party_manager_tests.rs"]
+mod tests;

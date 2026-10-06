@@ -53,6 +53,8 @@ pub struct AppState {
 
     pub party_status: PartyStatus,
 
+    pub party_hosting: bool,
+
     pub party_peers: Vec<PartyPeer>,
 }
 
@@ -73,6 +75,7 @@ impl Default for AppState {
             local_puuid: None,
             team: Vec::new(),
             party_status: PartyStatus::Off,
+            party_hosting: false,
             party_peers: Vec::new(),
         }
     }
@@ -182,6 +185,16 @@ pub fn set_party_status(tx: &StateSender, status: PartyStatus) {
             return false;
         }
         state.party_status = status;
+        true
+    });
+}
+
+pub fn set_party_hosting(tx: &StateSender, hosting: bool) {
+    tx.send_if_modified(|state| {
+        if state.party_hosting == hosting {
+            return false;
+        }
+        state.party_hosting = hosting;
         true
     });
 }

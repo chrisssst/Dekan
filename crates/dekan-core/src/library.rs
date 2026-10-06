@@ -261,11 +261,11 @@ mod tests {
 
         impl TempRoot {
             pub fn new(tag: &str) -> Self {
-                let unique = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0);
-                let path = std::env::temp_dir().join(format!("{tag}_{unique}"));
+                static NEXT: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(0);
+                let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let path =
+                    std::env::temp_dir().join(format!("{tag}_{}_{unique}", std::process::id()));
                 std::fs::create_dir_all(&path).unwrap();
                 Self(path)
             }

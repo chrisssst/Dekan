@@ -16,6 +16,7 @@ dekan-app = { path = "../crates/dekan-app" }
 dekan-core = { path = "../crates/dekan-core" }
 dekan-classic = { path = "../crates/dekan-classic" }
 dekan-inject = { path = "../crates/dekan-inject" }
+dekan-lcu = { path = "../crates/dekan-lcu" }
 dekan-party = { path = "../crates/dekan-party" }
 dekan-platform = { path = "../crates/dekan-platform" }
 dekan-wad = { path = "../crates/dekan-wad" }

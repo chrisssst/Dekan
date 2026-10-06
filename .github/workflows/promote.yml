@@ -1,8 +1,5 @@
 name: Promote release
 
-# The one step that stays manual: turning a pre-release into the release users are pointed at. It
-# requires the `production` environment, whose required reviewers are configured in the repository
-# settings, and it refuses an installer that this repository's release workflow did not build.
 on:
   workflow_dispatch:
     inputs:
@@ -75,7 +72,7 @@ jobs:
 
           webhook_url = os.environ.get("DISCORD_WEBHOOK")
           tag = os.environ.get("TAG", "")
-          repo = os.environ.get("REPO", "OWNER/REPOSITORY")
+          repo = os.environ.get("REPO", "chrisssst/Dekan")
           repo_url = f"https://github.com/{repo}"
           release_url = f"{repo_url}/releases/tag/{tag}"
 
@@ -105,13 +102,13 @@ jobs:
 
           fields = [
               {
-                  "name": "🏷️ Versão",
+                  "name": "🏷️ Sürüm",
                   "value": f"**{tag}**",
                   "inline": True
               },
               {
-                  "name": "📦 Instalador",
-                  "value": f"[{installer_name}]({download_url})" if installer_name else f"[Acessar Release]({release_url})",
+                  "name": "📦 Kurulum dosyası",
+                  "value": f"[{installer_name}]({download_url})" if installer_name else f"[Yayın sayfasını aç]({release_url})",
                   "inline": True
               }
           ]
@@ -124,24 +121,24 @@ jobs:
               })
 
           fields.append({
-              "name": "🔗 Links Úteis",
-              "value": f"[Notas da Versão e Código no GitHub]({release_url})",
+              "name": "🔗 Bağlantılar",
+              "value": f"[Sürüm notları ve kaynak kod]({release_url})",
               "inline": False
           })
 
           payload = {
               "username": "Dekan Releases",
-              "avatar_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png",
+              "avatar_url": "https://raw.githubusercontent.com/chrisssst/Dekan/main/assets/dekan.png",
               "embeds": [
                   {
-                      "title": f"🎉 Nova versão lançada: {tag}!",
-                      "description": body if body else "Uma nova versão estável do Dekan está disponível para download!",
+                      "title": f"🎉 Yeni sürüm yayınlandı: {tag}!",
+                      "description": body if body else "Dekan'ın yeni kararlı sürümü indirilebilir!",
                       "url": release_url,
                       "color": 5763719,
                       "fields": fields,
                       "footer": {
                           "text": "Dekan • League of Legends Skin Changer",
-                          "icon_url": "https://raw.githubusercontent.com/{repo}/main/assets/dekan.png"
+                          "icon_url": "https://raw.githubusercontent.com/chrisssst/Dekan/main/assets/dekan.png"
                       },
                       "timestamp": datetime.now(timezone.utc).isoformat()
                   }

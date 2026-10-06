@@ -1,9 +1,5 @@
 name: Release
 
-# Runs after a merge to main. When the workspace version in Cargo.toml has no release yet, it builds the
-# installer on a clean runner, attests where it was built, and publishes it as a PRE-RELEASE. Users
-# are only pointed at a build once a maintainer promotes it (promote.yml) after testing it in a real
-# match, so a wrong approval can at worst produce a pre-release nobody is told to install.
 on:
   push:
     branches: [main]
@@ -63,13 +59,15 @@ jobs:
     needs: plan
     if: needs.plan.outputs.release == 'true'
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       id-token: write
       attestations: write
+      actions: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
+      SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,8 +76,6 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
-      # Same gate as CI, on the exact commit being shipped. No cache: a release never reuses build
-      # output from another run.
       - name: Quality gate (cargo xtask check)
         run: cargo xtask check
 
@@ -89,8 +85,67 @@ jobs:
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
-      - name: Build installer (cargo xtask installer)
-        run: cargo xtask installer
+      - name: Build the release binary (cargo xtask package)
+        run: cargo xtask package
+
+      - id: unsigned-exe
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-dekan-exe-${{ env.VERSION }}
+          if-no-files-found: error
+          path: dist/dekan.exe
+
+      - name: Sign dekan.exe (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          connector-url: https://githubactions.connectors.signpath.io
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_EXE_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist
+
+      - name: Build installer around that binary (cargo xtask installer --prebuilt)
+        run: cargo xtask installer --prebuilt
+
+      - id: unsigned-setup
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-setup-${{ env.VERSION }}
+          if-no-files-found: error
+          path: dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
+
+      - name: Sign the installer (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          connector-url: https://githubactions.connectors.signpath.io
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/installer
+
+      - name: Verify the Authenticode signatures
+        if: env.SIGNING == 'true'
+        shell: pwsh
+        run: |
+          foreach ($file in @('dist/dekan.exe', "dist/installer/Dekan-Setup-$env:VERSION-x64.exe")) {
+            $signature = Get-AuthenticodeSignature $file
+            "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
+            if ($signature.Status -ne 'Valid') { throw "$file is not validly signed" }
+          }
 
       - name: Checksums
         shell: pwsh
@@ -100,15 +155,11 @@ jobs:
           "$hash *$name" | Set-Content -NoNewline -Encoding ascii dist/installer/SHA256SUMS
           Get-Content dist/installer/SHA256SUMS
 
-      # Anyone can check that the installer was built by this workflow from this commit:
-      #   gh attestation verify Dekan-Setup-<version>-x64.exe --repo OWNER/REPOSITORY
       - id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
 
-      # The same Sigstore bundle, shipped next to the installer: verifiable offline
-      # (`gh attestation verify <exe> --bundle <exe>.sigstore.json --repo OWNER/REPOSITORY`).
       - name: Attach the provenance bundle
         shell: pwsh
         env:
@@ -129,7 +180,6 @@ jobs:
     needs: [plan, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Write access only here, only for the job that creates the tag and the release.
     permissions:
       contents: write
     steps:

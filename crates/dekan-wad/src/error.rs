@@ -52,8 +52,6 @@ pub enum WadError {
     #[error("{what} is {value}, beyond what WAD v3.4 can store")]
     TooLarge { what: &'static str, value: u64 },
 
-    /// A structure built by this crate contradicted itself (a layout missing an entry it listed).
-    /// Never expected; reported instead of panicking.
     #[error("internal inconsistency: {0}")]
     Internal(&'static str),
 

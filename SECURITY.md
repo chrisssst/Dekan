@@ -2,13 +2,17 @@
 
 ## Reporting a vulnerability
 
-Report security issues privately through the security contact you configure for your published Dekan repository. Do not post vulnerability details publicly.
+Please report security issues **privately** through
+[GitHub Security Advisories](https://github.com/chrisssst/Dekan/security/advisories/new). Do not open a
+public issue or post details on Discord.
 
 Useful details to include:
 
 - the Dekan version (Explorer → `dekan.exe` → Properties → Details),
 - what an attacker could do, and under which conditions,
 - steps to reproduce, and the log from `%LOCALAPPDATA%\Dekan\logs` if relevant.
+
+Maintainer: Isllan Toso, [isllan.dev](https://isllan.dev/).
 
 You will get an acknowledgement within a few days. Fixes ship as a new pre-release first and are credited in
 the release notes unless you prefer otherwise.
@@ -39,5 +43,5 @@ attestation:
 
 ```powershell
 Get-FileHash .\Dekan-Setup-<version>-x64.exe -Algorithm SHA256
-gh attestation verify .\Dekan-Setup-<version>-x64.exe --repo OWNER/REPOSITORY
+gh attestation verify .\Dekan-Setup-<version>-x64.exe --repo Isllanrx/Dekan
 ```

@@ -20,7 +20,6 @@ fn builder_identity() -> (&'static str, u32) {
     ("native", OVERLAY_BUILDER_REVISION)
 }
 
-/// Fingerprint of one file inside a mod package.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModFileRecord {
     pub rel_path: String,
@@ -28,7 +27,6 @@ pub struct ModFileRecord {
     pub mtime_secs: u64,
 }
 
-/// Fingerprint of a base game WAD.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GameWadRecord {
     pub rel_path: String,
@@ -36,7 +34,6 @@ pub struct GameWadRecord {
     pub header_checksum: u64,
 }
 
-/// Fingerprint of an overlay WAD produced on disk.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OverlayWadRecord {
     pub rel_path: String,
@@ -44,13 +41,10 @@ pub struct OverlayWadRecord {
     pub header_checksum: u64,
 }
 
-/// Full fingerprint recording the inputs and outputs of an overlay build.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OverlayFingerprint {
     pub version: u32,
-    /// Which builder wrote the overlay (`native`); an unknown value invalidates the cache.
     pub builder: String,
-    /// The revision of that builder's output ([`OVERLAY_BUILDER_REVISION`] for the native one).
     pub builder_revision: u32,
     pub mods: Vec<String>,
     pub mod_files: BTreeMap<String, Vec<ModFileRecord>>,

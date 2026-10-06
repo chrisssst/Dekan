@@ -152,8 +152,6 @@ pub fn overlay_placement(client: WindowRect, width: i32, height: i32, padding: i
     overlay_placement_on(client, monitor, width, height, padding)
 }
 
-/// Pure placement, with the work area of the monitor holding the client when it is known. Kept apart
-/// from [`overlay_placement`] so tests do not depend on a real League client being open.
 #[must_use]
 pub fn overlay_placement_on(
     client: WindowRect,

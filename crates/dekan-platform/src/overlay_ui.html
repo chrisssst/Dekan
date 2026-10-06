@@ -1,12 +1,11 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="tr">
   <head>
     <meta charset="utf-8" />
     <meta name="color-scheme" content="dark" />
     <title>Dekan</title>
     <style>
       :root {
-        /* Hextech-inspired palette, matched to the League client's own panels. */
         --bg-0: #05080c;
         --bg-1: #0a1428;
         --bg-2: #0e1c2e;
@@ -34,12 +33,6 @@
         margin: 0;
       }
 
-      /* Attribute-based visibility must always win over a class that also sets `display` — without
-         this, `.empty{display:flex}` (or `.list{display:flex}`) out-specs the `hidden` attribute in
-         the user-agent stylesheet, because author rules beat UA rules regardless of specificity. The
-         catalog then renders with the placeholder and the real list both visible, and the placeholder
-         (full-height) pushes the list below the fold — the exact "have to scroll after locking a
-         champion" report. */
       [hidden] {
         display: none !important;
       }
@@ -53,9 +46,6 @@
         font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
         overflow: hidden;
         user-select: none;
-        /* Matches OVERLAY_CORNER_RADIUS in overlay_window.rs: the window itself is clipped to the
-           same rounded rect via SetWindowRgn, so the content radius has to line up with it or the
-           two edges show as a mismatched notch. */
         border-radius: 14px;
       }
 
@@ -98,8 +88,6 @@
       }
 
       header::after {
-        /* Thin gold hairline under the hairline border, the way League panel headers double their
-           edge — cheap to fake with a gradient, no extra asset. */
         content: "";
         position: absolute;
         left: 0;
@@ -260,9 +248,6 @@
         transition: border-color 0.12s, background 0.12s, transform 0.08s;
       }
 
-      /* Only the first paint of a freshly locked champion's catalog animates in — re-renders caused
-         by typing in search or clicking a card must not replay this, or the whole list flashes on
-         every keystroke and every selection. */
       .skin.enter {
         animation: rise 0.16s ease both;
       }
@@ -322,8 +307,6 @@
         border-color: var(--gold);
       }
 
-      /* Everything to the right of the icon — name on top, chromas directly below it. Never a
-         sibling of `.row`: that would span the card's full width and sit under the icon too. */
       .info {
         display: flex;
         flex-direction: column;
@@ -338,16 +321,10 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        /* The client itself renders skin names in caps; the underlying string stays as the client
-           sent it — this is a pure display transform, so search and the id-based click contract
-           are unaffected. */
         text-transform: uppercase;
         letter-spacing: 0.02em;
       }
 
-      /* Historic mode: the pick Dekan restored from the last game with this champion. Shown only
-         while that restored pick is still the selection, so the user always knows where it came
-         from and that one click on it clears it. */
       .historic-tag {
         display: none;
         align-self: flex-start;
@@ -360,7 +337,6 @@
         text-transform: uppercase;
       }
 
-      /* A special form (weapon, track, transformation) is not a recolor: a diamond, not a gem. */
       .chroma.form .chroma-gem {
         border-radius: 1px;
         transform: rotate(45deg) scale(0.8);
@@ -464,7 +440,6 @@
         pointer-events: none;
       }
 
-      /* Something that blocks the result of a pick (e.g. missing injection tools). */
       .notice {
         margin: 8px 12px 0;
         padding: 8px 10px;
@@ -577,7 +552,6 @@
           transform: translateY(0);
         }
       }
-      /* Skins | Mods switch. Same gold-on-panel language as the cards below it. */
       .tabs {
         display: flex;
         gap: 4px;
@@ -742,7 +716,6 @@
         border-color: var(--gold);
       }
 
-      /* Wider overlay (the user dragged the grip): cards flow into columns instead of stretching. */
       @media (min-width: 560px) {
         .list {
           display: grid;
@@ -750,8 +723,6 @@
         }
       }
 
-      /* Starts the native resize loop from Rust. Inset from the corner: the window region is
-         rounded, so the very corner pixels are clipped away. */
       .resize-grip {
         position: fixed;
         right: 5px;
@@ -782,7 +753,6 @@
         margin-right: 12px;
       }
 
-      /* Chroma preview: the client's own chroma render, fetched by id on first hover. */
       .chroma-preview {
         position: fixed;
         z-index: 20;
@@ -827,16 +797,16 @@
       <div class="title">DEKAN <span class="version-tag">v{{version}}</span></div>
       <div class="champion">
         <div class="champion-portrait placeholder" id="championPortrait">?</div>
-        <span class="champion-name" id="championName">nenhum campeão</span>
+        <span class="champion-name" id="championName">şampiyon yok</span>
       </div>
-      <button class="win-btn" type="button" id="btnClose" title="Ocultar overlay">&#x2715;</button>
+      <button class="win-btn" type="button" id="btnClose" title="Overlay'i gizle">&#x2715;</button>
     </header>
 
     <div class="search">
       <div class="box">
         <span class="glyph">&#9906;</span>
-        <input id="search" type="text" placeholder="Buscar skin…" autocomplete="off" />
-        <button class="dice" type="button" id="dice" title="Sortear skin">&#9860;</button>
+        <input id="search" type="text" placeholder="Skin ara…" autocomplete="off" />
+        <button class="dice" type="button" id="dice" title="Rastgele skin seç">&#9860;</button>
       </div>
     </div>
 
@@ -850,15 +820,15 @@
     <main>
       <div class="empty" id="empty">
         <img class="mark" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAABlWSURBVHhe7ZsJeBvVufcD7VegFyiFshUohX6ESxpb0mhmpNFqSZbt2Emcxc4eAgmE0tyUtDTsXAOl7EnDhbaELaVhs0liW9LsWr1l8xcChIQYZ7EjW/s6oxlJNpnvGQcZeQATwLnP/b769zx5MvN/33NGGs+cc973PZoyZZJJJplkkkkmmQAOO+uu+tix5FqpPsnnxAnd2hhquEeqT/I5GRJs5CnAIdUnGUE4K0uU+rNUSeJAU/2PpNZ/OQ546s9nfXqApbU39++YA8cI/UKhXSYIO+VCijLdOkDO03Ju7YokjUA9WNWF0vb/YznUsvKCQ821lRHM8MTJrrrzpPbxON5qvY5zIQ/zbnhPzq3sz3rAgawb2bv/3QXTMxT0tLBXJgjdciHjVD37QeOSEt6N7M66wECOBgeytLKbc8MNSdpyvbTf8TjUorkgQpT96Rg2V72fXPZvUvuEcnTbvGsPvT3jN/5m0/M5SsGnUeUzUp+vIo7Des4N01kvFMp5YV/eA63NuHXKY57aiwo+ftpyyZCzlBlyyfhAp/Wygn6sufaijFul5GloLe+GfTkvHM56VV7erbOMXmAcGIf89SylONH22tpLD7bWWfuoRT+X+kwIn7ZW/vqj7TU3+16aC8RQjWOobXp/rk0eCNjnTj+xwzQvghlmSdukUMvUbDuI8z5wgG9XP5VymW6U+hTD0TIsSwIeqV5MCjfdmPGCT+ba4EC2Xe1mSOt0qU8QNc7pt1UZj20vVw+1ydNDbnlf2KZ9etdrC2R9tpl3xF3VE7uUONJqvtzfYvnDlHrhB0nSeH+cLFsTQ1ULhcOAMNwJxJOYZqmfqLozglmgQhvODT+Qa4NCfCe0MUDOHX0ixoMhlY+Kr5pU/yoGsbpLcx3q53KdcJT3qh8r6Eca9XCfzXxHGNcuGG6Xx4SDoBCmymqSKPhUGtXc7vlL7UURh2l9pEVzwdgevwd+m+WpttdmT2NpdRXjVJHCgVOzDEPBfxI+AARhd6nAUaoH/aj5NyccZao4qtqYbVfuy7SrlNK+xiNAWs2DjooqqT4erNegyPqU+1O46oW+98rBvmbT6gyueFTYLROE9+UCS0EPin5JQn1xioD2JAklvP/dudPDlHmdtK/vBEshlXGb5i99O7T3pylwV4zQXzPGjmtuGWqX5YUPSgXeBf35eHP18ihhaGhqavpBsd/p8Pzzz5/zPIadI9W/iYaGhrP9rfqHjzVV3pIjoReEj+RCvl3BJZ2qRcV+caeuNEWAHw80G5YkKe3TCa9BUWz/LpyVwLV/5V3KfSwJNjJO1eVSB5EoplXnOuSHhYOAkPXBjRGyYnWAKL810lL+rQbEfmfdVUds9b+Q6uMxiOku7WstW+FvMa/hvcB7wicKYahD+VEY++ovn0J1UxkctHOUej9DGf4ktX9r4rjyoRQKdicI45zAduSyyDb1Ev8OyyVSv09sxp/lfEqb8KlSGG5TRFOU7rEAar4ngurNUt+vI05p/yNGGv4g1b+OAUyr63dUrg9jyDOfeUtiQo9SyHmBZnHmk/qKs2TYoVvc59D9NGJTL0lh0Icpt+Euqd93IunQXZ8mNA8yGPh/YjZkS5LQboiQhtVpSnd73GUanRH67ear8k5g/3AbSAgdcoHzwq9EcMsjSbJsjeBp+OHYXr8MTynf4V3gDqkupaFhytlhVH9bwFH2WNoNvvGZTybkvHIXT8u6/TvmjP7xopjx6jCBrBxstayOE8YNEbvuXQYDdyUI6O5Ii+ZbPd2nRYQygv126/QUrnyZ90Db06TutzFC80SC0K/rwapGxo7et5GRJ4YhIYdwHBRyXqUripueiqP6jWmH4SZpn8XkqJJEjpZxUr2YMKW6IYzpnhhEDU/mvDKvcBQSeCfQItoOt1hV4v/iZwlhxrURXP9oklCvZWl4R5JQbwo7zUDCo5FL+zwj8C75hnyb/GAGV9YmadPqGGl4IeqsgYnGVReLdvKfy/4t40Q2CAdAYbi9ZDCJaZ5L4PqtMQwZM3CKcJ2IhnUhD+U8ys6cW9XFufQPc516jRifFfslUM38GKbbEnfAG/K+0qCwHxB4N/xkYYXc9Y+6q2K4BYkR+r9GnfpVaUI1f8irOMw7oSeK+/lvg0OntyZR6FXxuJ+og6OY7sUkqvpHsU+SUi/ItwOM0C0TOBJ+JU5qm1mXdsOhV1deELLpK3gv0j20E+7LOOHXR/slkb8P7VT1ZX3q7gBqMvdsXXphmoA3xDFVM4PBrwt7S4XhDnkiQyBziq8VbVW+GyYMz/S0VqnFm8ugqtc4FNhe7PPfRvsbq3+RsqncMdSyUDw/QtTAJ1CrOUMqX87Q6re7bat/XPA9YS+/IeeT7xV6ISFN637LkkDLUJfiSJzWrsh1GhT9jV+O6USN7dDIQ47yeblOsJcjodYYqvyDcFghDPmArkCr/rqCb7dt5o8ZStXEkqq/9NnKdYftNbCo85TuVtYBUztbf/eVs+8ZI+GpvShGWDelcGBfzgnRBT1Oau8PovrbGBzqOWKfA3+A3XO1INSPrIeamhp+xHWZlgTtptuHfKXRfLsixGCwL4rrygvtQ5iuLoybFhTOIyhizlLyweF2eXrIJwtEcf0tTId+6ZQpwtmiXWiq/8Fe/PYr/S0WRcKm2DVoN9aFHchDhfY5Urkzg4HdcdTwzMmO2RO3cv4meEr9GEdDtiAGq4c6FBznUr2QcBjlfnvVyohd+wiLKruyHqjDT89XHLbXwQca60bGpb5tZQujdsMDUUL/H+IYFSDMcN6rSGbdqtdObDdenaVK0zmnLBnGK69M49BGYZdS4J2Kx3oa6y6Nk9o1UcK4rq/ZOhLzicuKXnQ+eNw5F8hQCle8Fcb6t+ka/MSsmX1Y1a9SLmhzvkPBxO0mGUfIHSwFPyD9HmcET4Pxhzyt6BfDDvF80GG6lnEhj0dQ85oIaV6WoE3rU1TNDdk25ZtpHH6rt7V68c636nWH3psPBrCyexkn/CRDKLs4QrNUbB9qVVcxLvXmkN20IU+VRsR8UBQ3P8uS4N4MoZgv+iRR9RKGgDoYl+rPA3bjul773OmHWqpNA+iMJWlC/U/Oq3g5TZXfFEHN94TcNZVhzLoq5Uae8PtOrfpTJDgrQwLHBGHsoH9GSOOqeVkS+HTK11wsRQIrWFy9mUU1t7EeoCOA6+rppvqfHGmq/4n4JBx407Lkw7d0yiwFuTM0vKXQLmIvv5ungHfytCwbtlsebuz6/ci4lCJUr2ZIkBrAK4GB1vLFPY23XnqoZfYFPVurLoxgxmWcB3IxuK4+jStfi+HQ6OtZjBj2cKTyWIrQzZTaJhyOAEmegp+U6gUYXFaWa5PzHKHYHKFu/Pn+1lnXiUkrMYN4oKn6ijim395vnzuSosg4wZfTLvidsK3MGMb0q4bpUmyYLhmK09qHBlvM0xIYvClFq14UfftJ6/QohjTu3z73MvEGif/EsIT3yH7JEeCrebeMEwNR6ecpwBLghgyltEv1CaV78+r/lSWVQcYJm6S2AnEC3pKiwLc6XSuv5XfVnZppBOGsAFmzKEEbyxLk2NBj0GG4KUHq7gmT1hlDVMlHQodMiLosawdx0/LjvmWjM5VIjNBVhakyY8RRubygHe2cd+37zjuuYijovRQGvVTsX0wSgys4HBhoqj81aZwRMqROyVNAOLpr6dfmiKNY1YUHmurP9++ec0nCZzUzFPLSoKP8pqjTDA+5lQnOq7r3sL1mUffmmaPLgBCuf2QANwN5qiQopl1TNLwygmqXnHAuKj2yY85UMVrvs1Us5NrKHsh5wHiIqJDF7bCMIVRNg1S5sb+r7uIebOmF4+WuU7TlEp4AQmmneZrUNmFkCOVajgb2S/Xx4Ah4R4YCA2kCujPl+LWG9airehqrLi32ibssD/vRGVOzlCx+cu/0IZaU3ZKwm+cmMdOvOLfq/RgFlPSScy/LtJvnJu1qOEoorRwFRDLYtysRcbTyI5ZUr5LqEwZHwi9nSOhdqT4eIYdped4t/89cmyLAt4NN7O7qK6Q+fqJ24UfNtdfEcORxrkO7+WijzniEXv6LNAbdJ/QCAk9/kWXknMDdvE8Z5V2lT0VR7c1jexofDgNaWALeJNUnjAwJ4hlKdVpxzYGmhh+FbLpbj7bMvjFM1RnFBD3XBj8w5FMd53zaPxb8hIaGs4/tqFz8ydu6UqFNIQzvgv1BurqWcykeEjplgvAhIGRcqnnHthjPTZDaNzka3pLwGH/Z56nX9VLzbkhSpsWnm5zjSWgTS3xztuA7w5NAZ8YJfmOqsq9FA3KE8v0cJWdYUrM97qnSFWxpDJ6W8yK7My71Vs8W47knsapzwqjuD73/tF6WpvT/laTVW3MdyiNZpzLJUyVcxqV47gChvjiMGV9iXbrRwTnmq9AwTqQl75THeRrojGLfPLaI6VeOAt1SfcJIo9AenoDulOrFbNiw4Ty/zfxg3A4sTWDIEzytHg0lismQ8OsDrfDiQy2aGwMOgynpWPJTbqfKMbQbCLE0vL5nx6yZQZsGOeD57fkR0ro+TBlukPbBEEprHNNuSVK6O4M26+/r64VxnySWgv/IU0qfVJ8wGAzs4Enwt1K9wKcEeA3vUbVxpH4kHko4DC+EMFNFwc57VL9kKJ0lgeuBAwcafnSMmPnvfY0VVr/NumaoTdmf361ujTjKagNk3XVB3IIEsVnqo+Q8Q8xXe03OY5zO0LpynvwiSE22qqs4Am4Vj1lctTHrgvG0zfizgl0KR8ANWUJOSPUJgyFgG+eC75fqIoM2AxRG9X/LucGj4pQqxlMxh/G1vndM98Udqvs4J/x6xqV6k6M1f+Fc+k1RvKY8g4Gr823KdJaWD/FtmudYHH5guBtI5FzII0fe080cdFiXiQFp3GW8j3Xpn2dp9Sbeo30zS+teTaDwPaFtqo2xFvitUJPx/CT2619labg3Spg3xChDifTziXAE9FcWhd+U6hMGS0EvsoR6s1QXi3T9thm3iTNchoYeEbVIh+aCBG58NNyieSKJIW8wXs2YxWWS1CmFnQpBeB8QOLd+YQTTWYQPQEFMguVdyB+PvGecGXQYR17Pg/TyMTnwhPgUotBLwRbkhVCr9nExPhR1FlO+yJLI34NU2d1JTzlY3EaEI5U48/nnOyOwFHA7Q4Bj3mExg+fHZi9iSNUyjlIeFYSGs8OYRRGhyn+e9hh/lnJq1/npNZeIi77idhyu2igcVAlpEmkUz0N2aIWwRykI3YCQdcHrj+0wzIiSX7yexQy0V+kOeOqvSOOa34hPT9Chuz5iM/77SdpyCUfLBmIUUDNAla+Lecc+SRlCeThFqr9UAZ4wxJwyR0BHQp7688VzP155YwCvvCXkga7gnUCKIxEDQ6lLMgR4WHzFBrFyo+iXxKA7Uxg4Wv0U4UnlsxlC0THoqF6eJHRiRL9A2CveIKWQp+H1/fayyqTTbC1uUyBBwJujhGGleBwlq1VhVDeVxeFDEUrzc4aQL+Eouf8gbbkk4jTfG3WarxL9xAQbR8gHBtvGLlInGOEsjlT0ph2QQdzDE6KrRwZslgBaWBp8QTxOk5AhaVe8kkBV81lKvWtEoxQ3ZUhon/gFCj2lSJUq44Kf6n3HMKO3UT33ZIdmoXhzCjfoqF1fGf38BomhRqFdDId+zeDQxxm7euSLZyhgXww1z0hhyhejlGKkKMBSUDNHKjdFOlZeEKHK7xU1jgQXcSRwoNDPGSNDgW+mSOjRQXTOjBhRew1rl8vEmyZ4Vpxb8Dneops21CYfzlGy3oKWoLVlYdLwu66uuvP68Bq9qIWp8uqAw7T+2DZVNedWLxX2AoL4FOVp9ZgbJCbl/b75Go9nxblBXPtQBNWMji9ZsiQy5FKk/EXjVNCpupwhFX1pTH6puF9gAJtZwVCKLQxxenX/70WCNMoHUf1TR5pPfUkGV/wjQ8jHVCiTlHEx60HuS2HqFQm87EnWYxwJL1IeozqCap4fwM0jbUX6Wkw3H281zkwQ4K3CPkAQ9imFLK1e32fTVyTc5aNbXGLequq407CRdZlk4jlHVFyTwNSbGApakKK1fxZvdsFXJIMpX2YpcIN4HMQrZ4cx09NBx7fbW/SdERdxYcy4KGq3zuUpoD1FQ1MLtqam+h9E0bIHCiWbBGlexXuQ7flO1Y4UjbySJMduaAgQZQv7bIZZMYfijpNdcuFkp0zIU6p7+5vLKotvkEiERMwZp/6NXAe8nXUh2xhaM1Iw6G4q/0mI0I+GLyI8rSrjCIUjSJVbgqRh7oBt5pgKyBlj0FGhDLRUm8QpM0mqFmUINVZsj2K6aSxlGElyFfB4jD88ueurUxFJT/nigMNSE94+7eEMoUA5EnAOOYEnj7boVGHc8mya1n9p3RXvLv+JuG+gWEsS+ucDJDK6zUac3VIovJkhNCaOArAB53x9BJ897v6k741YoRjEaqsZDHomS8o+iONmPUdqxkTHKRxCMpR6a7E2HkmndVHQUb44ZNOuCbTCqyIO3WqGNv4+ThhnhkhrXc4J7OF90HvSdsUIwpSzWBrZKgaxxXqKUL1ywq6V8URpgKGQu4/umFVbbJ9wgo6a6wfQBdo8Wdqbdyl3hGxl88OtY9Ov4o4OBoebxKemWP86YpRp8aDDuDyJm9dEbKblgW3aVSlM/8cwoV+YIK3ylEtzo3AQFpKEZq20bYH+xoqLGUr/Xr9kzyRDKv4WwrS6LC3/KEeWuHuwxcZg66IzVyML4NU1cdRws1jZzDrBxgSqmxPHoWeLfdI4XMvSupH46HRIEBUrA46ymtA24P6MCz7MORW9WVL+sN9RWR531ug/ba64RugGhbxL9qG0bTEZCsACDmCkNl9AnEDCJGLIkrLuYWdJPohX1wYc1V+bLv5eiLvKQmjFzXFK3SDslwtDbtnhFFmmYin4rWK/LKWazTmBg8XaeITsJlkM1W8caLH8zm9D/jxgVz8+4CirPdhYZezu3vxjFlc8JPSMJM1QadsCDULD2RwFHEtg4OieoAGb8seMHdqeIvSaYVcJI67Sw4R5nd9RecvY1hOEuJUkgZWtOuhbeiVLg8+JMVOMQO6OE5odfTbjaL7nuM0M5N3QIEtrR1a638Qnnpk/CzRrNoVbkP8KN6tfjNh0m4KOsgfJZ63XhRyIRgw98l0AL+ahpW0LMBj4GE8D/Qdsy0c3X/lbdItirUpbBDUs+WyvIpOk4Ac+bF10eQw1332s2fil/UPfm3CLRSFetHFD3Xn99ppKoQsUOLf69R7M9CvRfnBr5ZViIMhR4C6eVHQKbYAQIK1jqhJfxQlP1dXihvEUZqhOOzX6hBdR9LxdpUg5tXd9tgsQhvYoj4ZJk0HarkDcbtALuxQCg8rbWULeJcZxYm5JtA3aECiKazczhKpl3/YFMs+WFecONlfecWJ71dXSfr43YZseCDZrlxxvgaclMFUXQxpGB+c0Dd6f8yo++8wnF3K0vI13wh2cE2oVKxxje/lm4rSmlu9Uv8t3Qfu5LuU90a3j9xHFqq7OeWBvlpa7stT03UKnXBhuBxiW0twu2k92qc9LEcjf45h626fN+mv8261rDjeeis8mlDCuvzJJaO9jKPAlloBHIvpIy+wLcu2Qe3infDjfBTeEqfLb//bWkz+dMmX8zJ4UwWP8YdCm+U0Y0z3DtiP3cXvEvUGnT33Tqesd8tz1y4THeHuuXfGMsAcQsu3IyHKjp2ftORlCcSyNwQ0hzPzYgO2LktMEIpzFknBjllJwcQcysu0ug8mo4V2KD4OowRpCkcfDpH5VnFbfz49TWJQiLujCRPl/xjDDarEwKbWfLhkSviNK6NfFKN2dSZf+/iQFVQ51KYMMdSp/lcI1yJBbIcQI3WkVHb4TLAGvzJDKtpFjHFzOkdDHAzZrRZTUvhynVLNFXcwL5bxwMNeuelTa/qsIuGaZ/XglIh4POpdOG6C/GGhPh763an7Ke1Vv5zxwTwxVa0WNdWtXxCnjhjBmquacisGE0zDyB+Mo8OMYgXyrp/Nb0YP973OSOPIG02q+nMcUu+OYdtYxrKo63T02DxymLVNz7fCufDu8L+PVjpug6sHWjo4xKVr1SNqpPe3CHu/T35Ztg45mffA7+/9pHfNDFXGC6HPO17MUdFuOUtgHbOW/SODaL2VDJ5wUbkHilOmlIZ8yHKas9VJ7MZl25K5cu/oo74baObdqYQ+2dtxN4iwBtPMk+IZUL0acoTJuZDXnhvdl25Fu1qudIfX5AuGsKKVfl/eUDAw6LE/7UctoUH1GidLG8twuuDVFwWqpTcrIVjo3/EDeBx/MeaCjnAt8KU2q58bp8jGvUshRfUXeVTqcpUr9YtHxC4twVhi1TE1SyOKsF3o751Ufz7apdnJtumXF7b+OlAeZyXfBrSHiVJrkfzRJSl/Ju1Vv591gb9YJBng30MM7EfQgunAqR0AbhT0yQditEBha/fuAsw7OutWerBM6mqWVwZwH/oRzI38Xf2An7ff/S4K05fpMG1zHOjUNHzmW35R2Qg8Ku+WCWOlIkapb+rEFUNanfTjj1M6KOmsmft3y/xq9pPWyIXfJcJaSBTyC57QyAf9y8FTJBzxd2izVJ/kcjpJvFn/rJdUn+ZwIaVwWxE9VUyf5Ct5vvuuiAVvDmYiTJplkkkkmmeRfkP8L9icoT1a6hMMAAAAASUVORK5CYII=" />
-        <div class="big">Aguardando a seleção de campeões</div>
-        <div class="sub">O catálogo de skins aparece aqui assim que um campeão for travado.</div>
+        <div class="big">Şampiyon seçimi bekleniyor</div>
+        <div class="sub">Bir şampiyon kilitlendiğinde skin kataloğu burada görünür.</div>
       </div>
       <div class="list" id="list" hidden></div>
       <div class="mods" id="mods" hidden></div>
     </main>
 
     <footer>
-      <span class="status"><span class="dot" id="statusDot"></span> <span id="connLabel">conectado ao cliente</span></span>
+      <span class="status"><span class="dot" id="statusDot"></span> <span id="connLabel">istemciye bağlı</span></span>
       <span id="footerRight">0 skins</span>
     </footer>
 
@@ -874,14 +844,11 @@
         const el = (id) => document.getElementById(id);
         let catalog = { championName: "", skins: [] };
         let selectedId = null;
-        // Where the current selection came from when Rust made it: "historic" or "random".
-        // Never set by a click.
         let selectionOrigin = null;
         let tab = "skins";
 
         const EMPTY_MODS = { skin: [], map: [], font: [], announcer: [], others: [] };
         const EMPTY_SELECTION = { skin: null, map: null, font: null, announcer: null, others: [] };
-        // `available` and `selection` come from Rust; the UI only ever sends ids it was given.
         let mods = { available: EMPTY_MODS, selection: EMPTY_SELECTION };
         const OTHER_CATEGORIES = ["ui", "voiceover", "loadingScreen", "vfx", "sfx", "other"];
         let lastImportCategory = "skin";
@@ -1036,8 +1003,6 @@
 
           const actions = document.createElement("div");
           actions.className = "mod-actions";
-          // Import (#147): the category is chosen here; the file is chosen in Windows' own dialog,
-          // opened by Rust — no path ever travels from this page.
           const category = document.createElement("select");
           category.id = "importCategory";
           const choices = [
@@ -1067,91 +1032,46 @@
           root.append(actions);
         }
 
-        // Hand-written dictionaries: Portuguese, English and Spanish. The client offers about two
-        // dozen locales (`product_settings.yaml`); one without a dictionary uses its language's if
-        // there is one, else English — see `setLocale` below. Skin names already come translated
-        // from the client.
         const STRINGS = {
-          pt_BR: {
-            searchPlaceholder: "Buscar skin…",
-            noChampion: "nenhum campeão",
-            historicTag: "última usada · clique para limpar",
-            randomTag: "sorteada · clique para limpar",
-            diceTitle: "Sortear skin",
-            waitingBig: "Aguardando a seleção de campeões",
-            waitingSub: "O catálogo de skins aparece aqui assim que um campeão for travado.",
-            noResultsBig: "Nenhuma skin encontrada",
-            noResultsSub: (term) => "Nenhuma skin da biblioteca casa com “" + term + "”.",
-            noLibraryBig: (champ) => "Nenhuma skin na biblioteca para " + champ,
-            noLibrarySub: "Adicione um pacote de skin desse campeão à sua biblioteca.",
-            connected: "conectado ao cliente",
-            skinCount: (n) => n + (n === 1 ? " skin" : " skins"),
-            tabSkins: "Skins",
-            tabMods: "Mods",
-            searchModsPlaceholder: "Buscar mod…",
-            slotSkin: "Mod de skin",
-            slotMap: "Mapa",
-            slotFont: "Fonte",
-            slotAnnouncer: "Anunciador",
-            slotOthers: "Outros",
-            none: "Nenhum",
-            openFolder: "Abrir pasta de mods",
-            importMod: "Importar mod…",
-            noModsBig: "Nenhum mod encontrado",
-            noModsSub: "Coloque mods (pasta com META/info.json, ou um .fantome/.zip) na pasta de mods do Dekan.",
-            noModsMatch: (term) => "Nenhum mod casa com “" + term + "”.",
+          tr_TR: {
+            searchPlaceholder: "Skin ara…",
+            noChampion: "şampiyon yok",
+            historicTag: "son kullanılan · temizlemek için tıkla",
+            randomTag: "rastgele seçildi · temizlemek için tıkla",
+            diceTitle: "Rastgele skin seç",
+            waitingBig: "Şampiyon seçimi bekleniyor",
+            waitingSub: "Bir şampiyon kilitlendiğinde skin kataloğu burada görünür.",
+            noResultsBig: "Skin bulunamadı",
+            noResultsSub: (term) => "Kütüphanede “" + term + "” ile eşleşen skin yok.",
+            noLibraryBig: (champ) => champ + " için kütüphanede skin yok",
+            noLibrarySub: "Bu şampiyon için kütüphanenize bir skin paketi ekleyin.",
+            connected: "istemciye bağlı",
+            skinCount: (n) => n + " skin",
+            tabSkins: "Skinler",
+            tabMods: "Modlar",
+            searchModsPlaceholder: "Mod ara…",
+            slotSkin: "Skin modu",
+            slotMap: "Harita",
+            slotFont: "Yazı tipi",
+            slotAnnouncer: "Spiker",
+            slotOthers: "Diğer",
+            none: "Yok",
+            openFolder: "Mod klasörünü aç",
+            importMod: "Mod içe aktar…",
+            noModsBig: "Mod bulunamadı",
+            noModsSub: "Modları (META/info.json içeren klasör veya .fantome/.zip) Dekan'ın mod klasörüne ekleyin.",
+            noModsMatch: (term) => "“" + term + "” ile eşleşen mod yok.",
             notices: {
               toolsMissing:
-                "Ferramentas de injeção ausentes: nada escolhido aqui será aplicado. Use “Abrir pasta de ferramentas” no ícone do Dekan na bandeja.",
+                "Enjeksiyon araçları eksik: burada seçtiğiniz hiçbir şey uygulanmayacak. Sistem tepsisindeki Dekan simgesinden “Araçlar klasörünü aç” seçeneğini kullanın.",
             },
             categories: {
-              ui: "Interface",
-              voiceover: "Voz",
-              loadingScreen: "Tela de carregamento",
-              vfx: "Efeitos visuais",
-              sfx: "Efeitos sonoros",
-              other: "Outros",
-            },
-          },
-          es_ES: {
-            searchPlaceholder: "Buscar aspecto…",
-            noChampion: "ningún campeón",
-            historicTag: "último usado · clic para quitar",
-            randomTag: "sorteado · clic para quitar",
-            diceTitle: "Sortear un aspecto",
-            waitingBig: "Esperando la selección de campeones",
-            waitingSub: "El catálogo de aspectos aparece aquí en cuanto se fija un campeón.",
-            noResultsBig: "No se encontró ningún aspecto",
-            noResultsSub: (term) => "Ningún aspecto de la biblioteca coincide con “" + term + "”.",
-            noLibraryBig: (champ) => "No hay aspectos en la biblioteca para " + champ,
-            noLibrarySub: "Añade un paquete de aspecto de este campeón a tu biblioteca.",
-            connected: "conectado al cliente",
-            skinCount: (n) => n + (n === 1 ? " aspecto" : " aspectos"),
-            tabSkins: "Aspectos",
-            tabMods: "Mods",
-            searchModsPlaceholder: "Buscar mod…",
-            slotSkin: "Mod de aspecto",
-            slotMap: "Mapa",
-            slotFont: "Fuente",
-            slotAnnouncer: "Narrador",
-            slotOthers: "Otros",
-            none: "Ninguno",
-            openFolder: "Abrir carpeta de mods",
-            importMod: "Importar mod…",
-            noModsBig: "No se encontró ningún mod",
-            noModsSub: "Coloca mods (una carpeta con META/info.json, o un .fantome/.zip) en la carpeta de mods de Dekan.",
-            noModsMatch: (term) => "Ningún mod coincide con “" + term + "”.",
-            notices: {
-              toolsMissing:
-                "Faltan las herramientas de inyección: nada de lo que elijas aquí se aplicará. Usa “Abrir carpeta de herramientas” en el icono de Dekan de la bandeja.",
-            },
-            categories: {
-              ui: "Interfaz",
-              voiceover: "Voces",
-              loadingScreen: "Pantalla de carga",
-              vfx: "Efectos visuales",
-              sfx: "Efectos de sonido",
-              other: "Otros",
+              ui: "Arayüz",
+              voiceover: "Seslendirme",
+              loadingScreen: "Yükleme ekranı",
+              vfx: "Görsel efektler",
+              sfx: "Ses efektleri",
+              other: "Diğer",
             },
           },
           en_US: {
@@ -1196,15 +1116,13 @@
             },
           },
         };
-        let locale = "pt_BR";
-        const t = () => STRINGS[locale] || STRINGS.en_US;
+        let locale = "tr_TR";
+        const t = () => STRINGS[locale] || STRINGS.tr_TR;
 
-        // The client's exact locale when there is a dictionary for it, else the same language
-        // (`es_MX` → `es_ES`, `pt_PT` → `pt_BR`), else English.
         function setLocale(clientLocale) {
-          const language = String(clientLocale || "").split("_")[0];
+          const language = String(clientLocale || "").split("_")[0].toLowerCase();
           const family = Object.keys(STRINGS).find((key) => key.split("_")[0] === language);
-          locale = STRINGS[clientLocale] ? clientLocale : family || "en_US";
+          locale = STRINGS[clientLocale] ? clientLocale : family || "tr_TR";
           updateTabs();
         }
 
@@ -1220,8 +1138,6 @@
           node.textContent = text || "";
         }
 
-        // Everything the user can see is built with textContent, never innerHTML: skin names come
-        // from the client and are data, not markup we control.
         function card(skin, index, animate) {
           const node = document.createElement("div");
           const isSelected =
@@ -1236,8 +1152,6 @@
           const row = document.createElement("div");
           row.className = "row";
 
-          // The tile is a same-origin `data:` URI the Rust side already fetched and embedded — set
-          // as `.src`, never through markup, so nothing here parses as HTML either way.
           let thumb;
           if (skin.tile) {
             thumb = document.createElement("img");
@@ -1275,7 +1189,6 @@
                 "chroma" + (chroma.form ? " form" : "") + (selectedId === chroma.id ? " selected" : "");
               dot.dataset.id = String(chroma.id);
               dot.dataset.name = chroma.name;
-              // With a preview the popup shows the name; the native tooltip would cover it.
               if (chroma.hasPreview) dot.dataset.preview = "1";
               else dot.title = chroma.name;
               const gem = document.createElement("span");
@@ -1315,9 +1228,7 @@
 
         function updateFooterRight() {
           const node = el("footerRight");
-          // A quote is curated pt-BR only for now (see catalog.rs); showing it in another
-          // language's UI would mean an untranslated line sitting next to translated ones.
-          if (catalog.quote && locale === "pt_BR") {
+          if (catalog.quote && locale === "tr_TR") {
             node.textContent = "“" + catalog.quote + "”";
             node.classList.add("quote");
           } else {
@@ -1379,13 +1290,9 @@
           }
         }
 
-        // Toggling `.selected` in place, instead of calling `render()`, is what keeps a click instant:
-        // no DOM rebuild, so the `.enter` fade never replays across the whole list on every pick.
         function updateSelection() {
           for (const node of el("list").querySelectorAll(".skin")) {
             const chromaMatch = !!node.querySelector('.chroma[data-id="' + selectedId + '"]');
-            // A chroma pick lights up its whole card too, the way the client's own mythic/chroma
-            // picker does — not just the small gem the click landed on.
             const selected = Number(node.dataset.id) === selectedId || chromaMatch;
             node.classList.toggle("selected", selected);
             node.classList.toggle("historic", selected && selectionOrigin === "historic");
@@ -1397,13 +1304,10 @@
         }
 
         function choose(id) {
-          // A second click on the current pick clears it — the only way to say "inject nothing",
-          // and how a skin restored by historic mode is dismissed.
           const clearing = selectedId === id;
           selectedId = clearing ? null : id;
           selectionOrigin = null;
           updateSelection();
-          // The Rust side owns what a choice means; the UI only reports it.
           post(clearing ? { type: "clear" } : { type: "select", id });
         }
 
@@ -1419,8 +1323,6 @@
         });
 
         const searchInput = el("search");
-        // Only ask Rust while the page lacks focus: once the host moves focus into the WebView the
-        // input's own `focus` fires again, and re-asking would bounce focus for nothing.
         const requestFocus = () => {
           if (!document.hasFocus()) post({ type: "focus" });
         };
@@ -1434,7 +1336,6 @@
         });
         searchInput.addEventListener("input", () => render(false));
 
-        // Random mode: Rust rolls against the catalog it sent and answers with `setSelection`.
         el("dice").addEventListener("click", () => post({ type: "random" }));
 
         for (const button of [el("tabSkins"), el("tabMods")]) {
@@ -1471,7 +1372,6 @@
           } else {
             next[slot] = id;
           }
-          // Optimistic, then corrected by Rust's echo (`setModSelection`) if it refused anything.
           mods.selection = next;
           render(false);
           post({ type: "setMods", selection: next });
@@ -1479,7 +1379,6 @@
 
         const preview = el("chromaPreview");
         const previewImg = el("chromaPreviewImg");
-        // Filled by Rust through `setChromaPreview`; only `data:image/` URIs are accepted.
         const previewCache = new Map();
         let previewFor = null;
         let previewAnchor = null;
@@ -1548,14 +1447,11 @@
               if (previewAnchor) placePreview(previewAnchor);
             }
           },
-          // A selection decided on the Rust side (historic mode restoring, or dropping, a pick).
-          // Never posted back: Rust already published it.
           setSelection(id, origin) {
             selectedId = typeof id === "number" ? id : null;
             selectionOrigin = selectedId !== null && typeof origin === "string" ? origin : null;
             updateSelection();
           },
-          // The whole mods tab again, after an import added an entry. The skin selection is untouched.
           setMods(panel) {
             mods = {
               available: normalizeAvailable(panel && panel.available),

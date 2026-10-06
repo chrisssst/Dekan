@@ -89,7 +89,6 @@ impl<'a> WadArchive<'a> {
             });
         }
 
-        // 1. Magic check (offset 0..2: 'R', 'W')
         let magic: [u8; 2] = [data[0], data[1]];
         if &magic != b"RW" {
             warn!(magic = ?magic, "Buffer is not a WAD archive (bad magic)");
@@ -99,13 +98,10 @@ impl<'a> WadArchive<'a> {
         let major = data[2];
         let minor = data[3];
         if major != 3 {
-            // A new major version after a patch is exactly the kind of break that must be legible
-            // in a log instead of surfacing as "the skin did not load".
             warn!(major, minor, "Unsupported WAD version");
             return Err(WadError::UnsupportedVersion(major, minor));
         }
 
-        // Offset 260..268: checksum (u64 LE)
         let checksum = u64::from_le_bytes(data[260..268].try_into().map_err(|_| {
             WadError::InvalidHeaderSize {
                 actual: data.len(),
@@ -113,7 +109,6 @@ impl<'a> WadArchive<'a> {
             }
         })?);
 
-        // Offset 268..272: entry count (u32 LE)
         let entry_count = u32::from_le_bytes(data[268..272].try_into().map_err(|_| {
             WadError::InvalidHeaderSize {
                 actual: data.len(),
@@ -146,7 +141,6 @@ impl<'a> WadArchive<'a> {
             });
         }
 
-        // 2. Parse TOC entries
         let mut entries = Vec::with_capacity(entry_count);
         for i in 0..entry_count {
             let entry_offset = WAD_HEADER_SIZE + (i * WAD_ENTRY_SIZE);
@@ -175,9 +169,6 @@ impl<'a> WadArchive<'a> {
         })
     }
 
-    /// Load the archive's `.subchunktoc`, named after the WAD's path relative to the game folder
-    /// (see [`subchunk_toc_name`]). Returns whether a table was found and loaded; without one,
-    /// type-4 entries that start with a stored subchunk cannot be decoded.
     pub fn load_subchunk_toc(&mut self, toc_name: &str) -> bool {
         let Some(entry) = self
             .find_by_hash(crate::hash::wad_path_hash(toc_name))
@@ -200,27 +191,21 @@ impl<'a> WadArchive<'a> {
         }
     }
 
-    /// Access the parsed header.
     #[must_use]
     pub fn header(&self) -> &WadHeader {
         &self.header
     }
 
-    /// Access the list of parsed entries.
     #[must_use]
     pub fn entries(&self) -> &[WadEntry] {
         &self.entries
     }
 
-    /// Find an entry by path hash.
     #[must_use]
     pub fn find_by_hash(&self, hash: u64) -> Option<&WadEntry> {
         self.entries.iter().find(|e| e.path_hash == hash)
     }
 
-    /// Access the raw (possibly compressed) payload slice of a WAD entry.
-    ///
-    /// Bounds-checked against the archive buffer: returns a typed error rather than panicking.
     pub fn raw_payload(&self, entry: &WadEntry) -> Result<&'a [u8], WadError> {
         let end =
             entry
@@ -532,6 +517,7 @@ pub struct WadFile {
     subchunk_toc: Option<SubchunkToc>,
 
     signature: [u8; WAD_SIGNATURE_SIZE],
+    checksum: u64,
     minor: u8,
 }
 
@@ -628,11 +614,14 @@ impl WadFile {
         );
         let mut signature = [0u8; WAD_SIGNATURE_SIZE];
         signature.copy_from_slice(&header[4..4 + WAD_SIGNATURE_SIZE]);
+        let mut checksum = [0u8; 8];
+        checksum.copy_from_slice(&header[260..268]);
         Ok(Self {
             path: path.to_path_buf(),
             entries,
             subchunk_toc: None,
             signature,
+            checksum: u64::from_le_bytes(checksum),
             minor: header[3],
         })
     }
@@ -640,6 +629,11 @@ impl WadFile {
     #[must_use]
     pub fn signature(&self) -> &[u8; WAD_SIGNATURE_SIZE] {
         &self.signature
+    }
+
+    #[must_use]
+    pub fn checksum(&self) -> u64 {
+        self.checksum
     }
 
     #[must_use]
@@ -663,7 +657,6 @@ impl WadFile {
             .map(|entry| (entry.path_hash, entry.uncompressed_size))
     }
 
-    /// Every descriptor of the table of contents, in no particular order.
     pub fn toc(&self) -> impl Iterator<Item = &WadEntry> + '_ {
         self.entries.values()
     }
@@ -696,6 +689,46 @@ impl WadFile {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub fn read_prefix(&self, path_hash: u64, len: usize) -> Result<Option<Vec<u8>>, WadError> {
+        use std::io::Seek;
+
+        let Some(entry) = self.entries.get(&path_hash) else {
+            return Ok(None);
+        };
+        let io = |source: std::io::Error| WadError::FileIo {
+            path: self.path.display().to_string(),
+            source,
+        };
+        let mut file = std::fs::File::open(&self.path).map_err(io)?;
+        file.seek(std::io::SeekFrom::Start(entry.offset as u64))
+            .map_err(io)?;
+        let payload = std::io::BufReader::new(file.take(entry.compressed_size as u64));
+        let wanted = len.min(entry.uncompressed_size) as u64;
+        let mut prefix = Vec::with_capacity(len.min(MAX_PREALLOCATION));
+        let read = match entry.compression {
+            CompressionType::Redirection | CompressionType::Raw => {
+                payload.take(wanted).read_to_end(&mut prefix)
+            }
+            CompressionType::Gzip => GzDecoder::new(payload)
+                .take(wanted)
+                .read_to_end(&mut prefix),
+            CompressionType::Zstd | CompressionType::ZstdChunked => {
+                let mut payload = payload;
+                let starts_compressed = std::io::BufRead::fill_buf(&mut payload)
+                    .map(|head| head.starts_with(&ZSTD_MAGIC))
+                    .map_err(io)?;
+                if starts_compressed {
+                    zstd::Decoder::with_buffer(payload)
+                        .and_then(|decoder| decoder.take(wanted).read_to_end(&mut prefix))
+                } else {
+                    payload.take(wanted).read_to_end(&mut prefix)
+                }
+            }
+        };
+        read.map_err(WadError::Decompression)?;
+        Ok(Some(prefix))
     }
 
     pub fn read(&self, path_hash: u64) -> Result<Option<Vec<u8>>, WadError> {

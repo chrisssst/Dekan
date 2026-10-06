@@ -20,6 +20,25 @@ pub struct ChampionChroma {
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct QuestTier {
+    #[serde(default)]
+    pub id: u32,
+    #[serde(default)]
+    pub name: String,
+
+    #[serde(default)]
+    pub tile_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestSkinInfo {
+    #[serde(default)]
+    pub tiers: Vec<QuestTier>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ChampionSkin {
     #[serde(default)]
     pub id: u32,
@@ -32,6 +51,18 @@ pub struct ChampionSkin {
 
     #[serde(default)]
     pub tile_path: Option<String>,
+
+    #[serde(default)]
+    pub quest_skin_info: Option<QuestSkinInfo>,
+}
+
+impl ChampionSkin {
+    pub fn forms(&self) -> impl Iterator<Item = &QuestTier> + '_ {
+        self.quest_skin_info
+            .iter()
+            .flat_map(|info| info.tiers.iter())
+            .filter(move |tier| tier.id != self.id)
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -58,8 +89,31 @@ impl ChampionAssets {
             if let Some(chroma) = skin.chromas.iter().find(|c| c.id == id) {
                 return Some(&chroma.name);
             }
+            if let Some(form) = skin.forms().find(|f| f.id == id) {
+                return Some(&form.name);
+            }
         }
         None
+    }
+
+    #[must_use]
+    pub fn form(&self, id: u32) -> Option<&QuestTier> {
+        self.skins
+            .iter()
+            .flat_map(ChampionSkin::forms)
+            .find(|f| f.id == id)
+    }
+
+    #[must_use]
+    pub fn base_skin_of(&self, id: u32) -> Option<u32> {
+        self.skins
+            .iter()
+            .find(|skin| {
+                skin.id == id
+                    || skin.chromas.iter().any(|c| c.id == id)
+                    || skin.forms().any(|f| f.id == id)
+            })
+            .map(|skin| skin.id)
     }
 
     #[must_use]
@@ -203,5 +257,77 @@ mod tests {
         let assets: ChampionAssets = serde_json::from_str("{}").expect("tolerates empty body");
         assert!(assets.skins.is_empty());
         assert_eq!(assets.name_of(1), None);
+    }
+
+    const SERAPHINE: &str = r##"{
+        "id": 147, "name": "Seraphine", "alias": "Seraphine",
+        "skins": [
+            { "id": 147000, "name": "Seraphine", "isBase": true },
+            { "id": 147001, "name": "K/DA ALL OUT Seraphine Indie",
+              "questSkinInfo": { "name": "K/DA ALL OUT Seraphine", "tiers": [
+                { "id": 147001, "name": "K/DA ALL OUT Seraphine Indie", "stage": 1 },
+                { "id": 147002, "name": "K/DA ALL OUT Seraphine Rising Star", "stage": 2,
+                  "tilePath": "/lol-game-data/assets/ASSETS/Characters/Seraphine/Skins/Skin02/Images/seraphine_splash_tile_2.jpg" },
+                { "id": 147003, "name": "K/DA ALL OUT Seraphine Superstar", "stage": 3 }
+              ] } }
+        ]
+    }"##;
+
+    #[test]
+    fn test_the_base_skin_of_a_skin_a_chroma_and_an_unknown_id() {
+        let assets = zed();
+        assert_eq!(
+            assets.base_skin_of(238_001),
+            Some(238_001),
+            "a skin is its own base"
+        );
+        assert_eq!(
+            assets.base_skin_of(238_005),
+            Some(238_001),
+            "a chroma belongs to its skin"
+        );
+        assert_eq!(assets.base_skin_of(238_002), Some(238_002));
+        assert_eq!(assets.base_skin_of(238_999), None);
+    }
+
+    #[test]
+    fn test_a_chroma_is_never_attributed_to_a_skin_with_forms() {
+        let assets: ChampionAssets = serde_json::from_str(
+            r##"{
+                "id": 147, "name": "Seraphine", "alias": "Seraphine",
+                "skins": [
+                    { "id": 147001, "name": "Indie",
+                      "questSkinInfo": { "tiers": [ { "id": 147001 }, { "id": 147002 } ] } },
+                    { "id": 147010, "name": "Ocean Song",
+                      "chromas": [ { "id": 147011, "name": "Ruby" } ] }
+                ]
+            }"##,
+        )
+        .expect("fixture parses");
+        assert_eq!(assets.base_skin_of(147_011), Some(147_010));
+        assert_eq!(assets.base_skin_of(147_002), Some(147_001));
+    }
+
+    #[test]
+    fn test_quest_tiers_are_the_skin_forms_the_client_lists() {
+        let assets: ChampionAssets = serde_json::from_str(SERAPHINE).expect("real shape parses");
+        let forms: Vec<u32> = assets.skins[1].forms().map(|f| f.id).collect();
+        assert_eq!(
+            forms,
+            vec![147_002, 147_003],
+            "the tier equal to the skin is the skin itself"
+        );
+        assert_eq!(assets.base_skin_of(147_003), Some(147_001));
+        assert_eq!(
+            assets.name_of(147_002),
+            Some("K/DA ALL OUT Seraphine Rising Star")
+        );
+        assert!(
+            assets
+                .form(147_002)
+                .and_then(|f| f.tile_path.as_deref())
+                .is_some()
+        );
+        assert!(assets.skins[0].forms().next().is_none());
     }
 }

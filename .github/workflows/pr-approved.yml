@@ -1,9 +1,5 @@
 name: PR approved
 
-# First half of the auto-merge flow. A review event on a pull request from a fork only gets a
-# read-only token, so this workflow does nothing privileged: it records which pull request and which
-# commit were approved. `automerge.yml` picks that up in the base repository's context, re-checks
-# everything through the API and never runs code from the pull request.
 on:
   pull_request_review:
     types: [submitted]

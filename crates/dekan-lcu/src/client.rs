@@ -145,8 +145,6 @@ impl LcuClient {
         Ok(value.locale)
     }
 
-    /// Accept the match found. `Ok(false)` means the client refused it (e.g. the ready check
-    /// already ended), which is not an error for the caller.
     pub async fn accept_ready_check(&self) -> Result<bool, LcuError> {
         let path = "/lol-matchmaking/v1/ready-check/accept";
         let url = format!("{}{path}", self.base_url);

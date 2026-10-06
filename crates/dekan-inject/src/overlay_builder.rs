@@ -6,14 +6,20 @@ use std::time::{Duration, Instant};
 
 use dekan_wad::hash::{content_checksum, mount_name, relative_path_hash, wad_path_hash};
 use dekan_wad::wad::{CompressionType, WadFile};
-use dekan_wad::writer::{WadWriter, WriteOutcome, WriterEntry, optimal_raw, optimal_stored};
+use dekan_wad::writer::{
+    WadWriter, WriteOutcome, WriterEntry, base_stamp_path, optimal_raw, optimal_stored,
+};
 use tracing::{debug, info, warn};
 
 use crate::error::InjectError;
 
 const TFT_MOUNTS: [&str; 2] = ["map21", "map22"];
 
-pub const OVERLAY_BUILDER_REVISION: u32 = 3;
+const BASE_STORE_DIR: &str = "overlay_base";
+
+static GAME_COPY_LOCK: Mutex<()> = Mutex::new(());
+
+pub const OVERLAY_BUILDER_REVISION: u32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeBuild {
@@ -204,35 +210,51 @@ pub fn build(
             "Mod entries identical to the game were dropped as no-ops (H3, #165)"
         );
     }
-    if mounts.withheld > 0 {
-        warn!(
-            mods = ?mods,
-            withheld = mounts.withheld,
-            "Mod entries that a map WAD also holds were left as the game has them; those assets keep their original look"
-        );
-    }
 
+    let base_store = base_store_for(overlay_dir);
+    let revision = OVERLAY_BUILDER_REVISION.to_string();
+    let _copies = GAME_COPY_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (mut written, mut bytes) = (0usize, 0u64);
+    let mut manifest = Vec::with_capacity(overlay.len());
     for (name, wad) in &overlay {
         let out = overlay_dir.join(&wad.relpath);
-        let outcome = wad
+        let failed = |e: dekan_wad::error::WadError| match e {
+            dekan_wad::error::WadError::Cancelled => stop(),
+            other => InjectError::Overlay(format!("could not write '{}': {other}", out.display())),
+        };
+        if let Some(store) = &base_store {
+            restore_base(&store.join(&wad.relpath), &out);
+        }
+        let (outcome, mode) = match wad
             .writer
-            .write_to_file(&out, &cancelled)
-            .map_err(|e| match e {
-                dekan_wad::error::WadError::Cancelled => stop(),
-                other => {
-                    InjectError::Overlay(format!("could not write '{}': {other}", out.display()))
-                }
-            })?;
+            .write_over_game_copy(&out, &revision, &cancelled)
+            .map_err(failed)?
+        {
+            Some(outcome) => (outcome, "game copy + appended entries"),
+            None => (
+                wad.writer.write_to_file(&out, &cancelled).map_err(failed)?,
+                "full rewrite",
+            ),
+        };
         if matches!(outcome, WriteOutcome::Written { .. }) {
             written += 1;
         }
         bytes += outcome.bytes();
-        debug!(mount = %name, entries = wad.writer.len(), outcome = ?outcome, "Overlay WAD ready");
+        manifest.push(log_overlay_wad(
+            game.get(name),
+            name,
+            wad,
+            outcome,
+            mode,
+            &out,
+        ));
     }
+    write_overlay_manifest(overlay_dir, mods, &manifest);
 
     let keep: HashSet<&str> = overlay.keys().map(String::as_str).collect();
-    let removed = remove_strays(overlay_dir, &keep);
+    let removed = remove_strays(overlay_dir, &keep, base_store.as_deref());
 
     let build = NativeBuild {
         wad_files: overlay.len(),
@@ -475,8 +497,6 @@ struct MountRoles {
     bases: HashSet<String>,
     shared: HashSet<String>,
 
-    withheld: usize,
-
     identical: usize,
 }
 
@@ -536,13 +556,12 @@ fn add_overlay_mod(
             );
         }
 
-        let entries = mergeable_entries(game, &base_name, &effective);
-        mounts.withheld += effective.len() - entries.len();
+        let entries = effective;
         if entries.is_empty() {
             debug!(
                 mod_name = %index.name,
                 mount = %mount,
-                "Nothing of this mount is merged (identical to the game, or held by a map WAD)"
+                "Nothing of this mount is merged (identical to the game)"
             );
             continue;
         }
@@ -623,29 +642,6 @@ fn drop_entries_identical_to_game(
         .collect()
 }
 
-fn is_map(wad: &GameWad) -> bool {
-    wad.relpath
-        .components()
-        .nth(2)
-        .is_some_and(|c| c.as_os_str().eq_ignore_ascii_case("Maps"))
-}
-
-fn mergeable_entries(
-    game: &BTreeMap<String, GameWad>,
-    base: &str,
-    entries: &BTreeMap<u64, WriterEntry>,
-) -> BTreeMap<u64, WriterEntry> {
-    if game.get(base).is_some_and(is_map) {
-        return entries.clone();
-    }
-    let maps: Vec<&GameWad> = game.values().filter(|wad| is_map(wad)).collect();
-    entries
-        .iter()
-        .filter(|(hash, _)| !maps.iter().any(|map| map.contains(**hash)))
-        .map(|(hash, entry)| (*hash, entry.clone()))
-        .collect()
-}
-
 fn find_by_overlap(
     game: &BTreeMap<String, GameWad>,
     entries: &BTreeMap<u64, WriterEntry>,
@@ -675,7 +671,7 @@ fn clone_into<'a>(
                 source.path.display()
             ))
         })?;
-        let mut writer = WadWriter::new(*wad.signature());
+        let mut writer = WadWriter::rebased_on(&wad);
         let index = writer.add_source(&source.path);
         for entry in wad.toc() {
             writer.insert(entry.path_hash, WriterEntry::from_wad(index, entry));
@@ -693,9 +689,178 @@ fn clone_into<'a>(
         .ok_or_else(|| InjectError::Overlay(format!("overlay mount '{name}' vanished")))
 }
 
-/// Remove `.wad.client` files of earlier builds that this overlay no longer has, and partial files
-/// a crash left behind (including the partials this writer creates).
-fn remove_strays(dir: &Path, keep: &HashSet<&str>) -> usize {
+fn header_hex(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut head = [0u8; 272];
+    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    Some(head.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn log_overlay_wad(
+    game_wad: Option<&GameWad>,
+    mount: &str,
+    wad: &OverlayWad,
+    outcome: WriteOutcome,
+    mode: &str,
+    out: &Path,
+) -> serde_json::Value {
+    let game_toc = game_wad.and_then(|g| WadFile::open_toc_only(&g.path).ok());
+    let mut entries = Vec::new();
+    let (mut replaced, mut added) = (0usize, 0usize);
+    for (hash, entry) in wad.writer.inserted() {
+        let original = game_toc.as_ref().and_then(|t| t.entry(hash));
+        if original.is_some() {
+            replaced += 1;
+        } else {
+            added += 1;
+        }
+        let record = serde_json::json!({
+            "path_hash": format!("{hash:016x}"),
+            "change": if original.is_some() { "replaced" } else { "added" },
+            "stored_bytes": WadWriter::stored_len_of(entry),
+            "decoded_bytes": entry.uncompressed_size,
+            "kind": entry.kind,
+            "checksum": format!("{:016x}", entry.checksum),
+            "game_stored_bytes": original.map(|o| o.compressed_size),
+            "game_decoded_bytes": original.map(|o| o.uncompressed_size),
+            "game_kind": original.map(|o| o.compression as u8),
+            "game_checksum": original.map(|o| format!("{:016x}", o.checksum)),
+        });
+        debug!(mount, entry = %record, "Overlay entry");
+        entries.push(record);
+    }
+    let game_header = game_wad.and_then(|g| header_hex(&g.path));
+    let overlay_header = header_hex(out);
+    let mode = if matches!(outcome, WriteOutcome::Unchanged { .. }) {
+        "unchanged since last build"
+    } else {
+        mode
+    };
+    info!(
+        mount,
+        file = %wad.relpath.display(),
+        map = game_wad.is_some_and(is_map),
+        mode,
+        entries = wad.writer.len(),
+        replaced,
+        added,
+        header_matches_game = game_header.is_some() && game_header == overlay_header,
+        bytes = outcome.bytes(),
+        "Overlay WAD written"
+    );
+    serde_json::json!({
+        "mount": mount,
+        "file": wad.relpath.display().to_string(),
+        "map": game_wad.is_some_and(is_map),
+        "mode": mode,
+        "entries": wad.writer.len(),
+        "replaced": replaced,
+        "added": added,
+        "bytes": outcome.bytes(),
+        "game_header": game_header,
+        "overlay_header": overlay_header,
+        "changes": entries,
+    })
+}
+
+fn write_overlay_manifest(overlay_dir: &Path, mods: &[String], wads: &[serde_json::Value]) {
+    let Some(parent) = overlay_dir.parent() else {
+        return;
+    };
+    let manifest = serde_json::json!({
+        "builder_revision": OVERLAY_BUILDER_REVISION,
+        "mods": mods,
+        "wads": wads,
+    });
+    let path = parent.join("overlay_manifest.json");
+    match serde_json::to_vec_pretty(&manifest) {
+        Ok(bytes) => {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                warn!(file = %path.display(), error = %e, "Overlay manifest not written");
+            }
+        }
+        Err(e) => warn!(error = %e, "Overlay manifest not serialized"),
+    }
+}
+
+fn is_map(wad: &GameWad) -> bool {
+    wad.relpath
+        .components()
+        .any(|c| c.as_os_str().eq_ignore_ascii_case("Maps"))
+}
+
+pub fn prewarm_shared_copies(
+    game_dir: &Path,
+    overlay_dir: &Path,
+    names: &[u64],
+) -> Result<usize, InjectError> {
+    let Some(store) = base_store_for(overlay_dir) else {
+        return Ok(0);
+    };
+    let game = get_or_index_game(game_dir)?;
+    let revision = OVERLAY_BUILDER_REVISION.to_string();
+    let _copies = GAME_COPY_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut copied = 0usize;
+    for (mount, wad) in game.iter() {
+        if !is_map(wad)
+            || TFT_MOUNTS.contains(&mount.as_str())
+            || !names.iter().any(|name| wad.contains(*name))
+        {
+            continue;
+        }
+        let served = overlay_dir.join(&wad.relpath);
+        if served.is_file() && base_stamp_path(&served).is_file() {
+            continue;
+        }
+        let started = Instant::now();
+        let made = dekan_wad::writer::ensure_game_copy(
+            &wad.path,
+            &store.join(&wad.relpath),
+            &revision,
+            &|| false,
+        )
+        .map_err(|e| {
+            InjectError::Overlay(format!("could not copy '{}': {e}", wad.path.display()))
+        })?;
+        if made {
+            copied += 1;
+            info!(
+                mount = %mount,
+                elapsed_ms = started.elapsed().as_millis(),
+                "Map WAD copied ahead of the build; skins that share its paths build in milliseconds"
+            );
+        }
+    }
+    Ok(copied)
+}
+
+fn base_store_for(overlay_dir: &Path) -> Option<PathBuf> {
+    overlay_dir
+        .parent()
+        .map(|parent| parent.join(BASE_STORE_DIR))
+}
+
+fn move_with_stamp(from: &Path, to: &Path) -> std::io::Result<()> {
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let _ = std::fs::remove_file(base_stamp_path(to)); // ignore-ok: an older stamp at the destination is replaced below
+    std::fs::rename(from, to)?;
+    std::fs::rename(base_stamp_path(from), base_stamp_path(to))
+}
+
+fn restore_base(stored: &Path, out: &Path) {
+    if out.exists() || !stored.is_file() || !base_stamp_path(stored).is_file() {
+        return;
+    }
+    if let Err(e) = move_with_stamp(stored, out) {
+        debug!(file = %stored.display(), error = %e, "Kept game WAD copy not restored; it is copied again");
+    }
+}
+
+fn remove_strays(dir: &Path, keep: &HashSet<&str>, base_store: Option<&Path>) -> usize {
     let mut removed = 0usize;
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
@@ -711,7 +876,22 @@ fn remove_strays(dir: &Path, keep: &HashSet<&str>) -> usize {
                     let stray = name.ends_with(".wad.client.partial")
                         || (name.ends_with(".wad.client")
                             && !keep.contains(mount_name(&name).as_str()));
+                    let kept_copy = base_store.zip(path.strip_prefix(dir).ok()).filter(|_| {
+                        name.ends_with(".wad.client") && base_stamp_path(&path).is_file()
+                    });
                     if stray {
+                        if let Some((store, relative)) = kept_copy {
+                            match move_with_stamp(&path, &store.join(relative)) {
+                                Ok(()) => {
+                                    removed += 1;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    debug!(file = %path.display(), error = %e, "Game WAD copy not kept; it is removed")
+                                }
+                            }
+                        }
+                        let _ = std::fs::remove_file(base_stamp_path(&path)); // ignore-ok: the stamp only describes the WAD removed below
                         match std::fs::remove_file(&path) {
                             Ok(()) => removed += 1,
                             Err(e) => {

@@ -1,6 +1,3 @@
-//! Application version helpers.
-
-/// Returns the display version formatted with two components when patch is zero (e.g. "1.0" for "1.0.0", "1.1" for "1.1.0").
 #[must_use]
 pub fn display_version() -> &'static str {
     const RAW: &str = env!("CARGO_PKG_VERSION");

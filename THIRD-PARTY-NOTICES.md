@@ -1,6 +1,9 @@
+Dekan is a customized fork of **Bullet** by Isllan Toso. The original Bullet source is MIT licensed; the original copyright notice is preserved in `LICENSE`. See `UPSTREAM-NOTICE.md` for provenance.
+
 # Third-party notices
 
-Dekan is a customized fork of **Bullet** by Isllan Toso. The original Bullet source is MIT licensed; the original copyright notice is preserved in `LICENSE`. See `UPSTREAM-NOTICE.md` for provenance.
+Dekan's own source code is licensed under the [MIT License](LICENSE). This file lists the third-party
+components Dekan uses or depends on and the terms they come with.
 
 ## LTK patcher (injector)
 
