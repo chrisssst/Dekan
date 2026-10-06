@@ -1,0 +1,25 @@
+[package]
+name = "xtask"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+dekan-app = { path = "../crates/dekan-app" }
+dekan-core = { path = "../crates/dekan-core" }
+dekan-classic = { path = "../crates/dekan-classic" }
+dekan-inject = { path = "../crates/dekan-inject" }
+dekan-lcu = { path = "../crates/dekan-lcu" }
+dekan-party = { path = "../crates/dekan-party" }
+dekan-platform = { path = "../crates/dekan-platform" }
+dekan-wad = { path = "../crates/dekan-wad" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true }

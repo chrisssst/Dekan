@@ -1,0 +1,25 @@
+[package]
+name = "dekan-lcu"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "League Client (LCU) REST and WebSocket client"
+
+[dependencies]
+dekan-core = { path = "../dekan-core" }
+dekan-platform = { path = "../dekan-platform" }
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+tokio-tungstenite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+futures-util.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls-pki-types = "1"

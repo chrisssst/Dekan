@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Dekan</title>
+    <style>
+      :root {
+        --bg-0: #05080c;
+        --bg-1: #0a1428;
+        --card: #141c28;
+        --card-hover: #1a2436;
+        --line: #243040;
+        --line-gold: #4a3d22;
+        --gold: #c8aa6e;
+        --gold-bright: #f0e6d2;
+        --gold-dim: #785a28;
+        --cyan: #0ac8b9;
+        --red: #e05a4f;
+        --text: #f0e6d2;
+        --muted: #a09b8c;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        user-select: none;
+        background: radial-gradient(120% 140% at 50% -10%, var(--bg-1) 0%, var(--bg-0) 80%);
+        color: var(--text);
+        font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--line-gold);
+        flex: none;
+      }
+
+      .logo {
+        width: 34px;
+        height: 34px;
+        flex: none;
+        filter: drop-shadow(0 0 6px rgba(200, 170, 110, 0.4));
+      }
+
+      .title {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--gold-bright);
+      }
+
+      .version {
+        font-size: 11px;
+        color: var(--gold);
+        letter-spacing: 0.04em;
+        margin-left: 6px;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 6px var(--cyan);
+        flex: none;
+      }
+
+      main {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px 20px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+
+      h2 {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin-bottom: 8px;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        cursor: pointer;
+      }
+
+      .toggle + .toggle {
+        border-top: 1px solid var(--line);
+      }
+
+      .toggle small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 2px;
+      }
+
+      .switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        border-radius: 10px;
+        background: #2a3446;
+        flex: none;
+        margin-top: 1px;
+        transition: background 0.15s;
+      }
+
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: transform 0.15s, background 0.15s;
+      }
+
+      .toggle[aria-checked="true"] .switch {
+        background: var(--gold-dim);
+      }
+
+      .toggle[aria-checked="true"] .switch::after {
+        transform: translateX(16px);
+        background: var(--gold-bright);
+      }
+
+      .toggle:focus-visible,
+      button:focus-visible {
+        outline: 1px solid var(--gold);
+        outline-offset: 2px;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      button {
+        flex: 1 1 auto;
+        min-width: 110px;
+        padding: 7px 12px;
+        border: 1px solid var(--line-gold);
+        border-radius: 6px;
+        background: #0f1622;
+        color: var(--gold-bright);
+        font: 600 12px "Segoe UI", system-ui, sans-serif;
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--card-hover);
+        border-color: var(--gold);
+      }
+
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      button.danger {
+        border-color: #5a2a26;
+        color: #f2b8b2;
+      }
+
+      ul.checks {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      ul.checks li {
+        display: grid;
+        grid-template-columns: 14px 1fr;
+        column-gap: 8px;
+      }
+
+      ul.checks .mark {
+        font-weight: 700;
+        color: var(--cyan);
+      }
+
+      ul.checks li.bad .mark {
+        color: var(--red);
+      }
+
+      ul.checks .detail {
+        grid-column: 2;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      section.update {
+        border-color: var(--gold-dim);
+        background: linear-gradient(180deg, #1c1a14 0%, var(--card) 100%);
+      }
+
+      section.update p {
+        color: var(--gold-bright);
+        margin-bottom: 8px;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      footer {
+        flex: none;
+        display: flex;
+        gap: 8px;
+        padding: 12px 20px 16px;
+        border-top: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <svg class="logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="18" stroke="#c8aa6e" stroke-width="2" fill="#141c28" />
+        <circle cx="20" cy="20" r="14" stroke="#785a28" stroke-width="1" stroke-dasharray="3 3" />
+        <path d="M20 7L24 15H16L20 7Z" fill="#f0e6d2" />
+        <rect x="18" y="15" width="4" height="13" rx="2" fill="#c8aa6e" />
+        <circle cx="20" cy="21" r="3" fill="#0ac8b9" />
+      </svg>
+      <div>
+        <div class="title">DEKAN<span class="version" id="version"></span></div>
+        <div class="status"><span class="dot"></span><span id="status"></span></div>
+      </div>
+    </header>
+
+    <main>
+      <section class="update" id="update" role="status" hidden>
+        <p id="update-line"></p>
+        <div class="row">
+          <button id="b-openRelease" onclick="send('open:release')"></button>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="h-options"></h2>
+        <div class="toggle" role="switch" tabindex="0" id="t-randomSkin" data-message="toggle:randomSkin">
+          <span><span id="l-randomSkin"></span><small id="l-randomSkinHint"></small></span>
+          <span class="switch"></span>
+        </div>
+        <div class="toggle" role="switch" tabindex="0" id="t-autoAccept" data-message="toggle:autoAccept">
+          <span id="l-autoAccept"></span>
+          <span class="switch"></span>
+        </div>
+        <div class="toggle" role="switch" tabindex="0" id="t-autostart" data-message="toggle:autostart">
+          <span id="l-autostart"></span>
+          <span class="switch"></span>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="h-party"></h2>
+        <p class="muted" id="party-line"></p>
+        <div class="row">
+          <button id="b-partyCreate" onclick="send('party:create')"></button>
+          <button id="b-partyJoin" onclick="send('party:join')"></button>
+          <button id="b-partyLeave" onclick="send('party:leave')"></button>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="h-folders"></h2>
+        <div class="row">
+          <button id="b-openMods" onclick="send('open:mods')"></button>
+          <button id="b-openTools" onclick="send('open:tools')"></button>
+          <button id="b-openLogs" onclick="send('open:logs')"></button>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="h-diagnostics"></h2>
+        <ul class="checks" id="checks"></ul>
+        <p class="muted" id="mark-hint"></p>
+        <div class="row">
+          <button id="b-markProblem" onclick="send('diag:mark')"></button>
+          <button id="b-exportDiagnostics" onclick="send('diag:export')"></button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <button id="b-about" onclick="send('about')"></button>
+      <button id="b-quit" class="danger" onclick="send('quit')"></button>
+    </footer>
+
+    <script>
+      const labels = {{labels}};
+
+      function send(message) {
+        window.ipc.postMessage(message);
+      }
+
+      function setText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value || "";
+      }
+
+      setText("version", "v" + labels.version);
+      setText("h-options", labels.sectionOptions);
+      setText("h-party", labels.sectionParty);
+      setText("h-folders", labels.sectionFolders);
+      setText("h-diagnostics", labels.sectionDiagnostics);
+      setText("l-randomSkin", labels.randomSkin);
+      setText("l-randomSkinHint", labels.randomSkinHint);
+      setText("l-autoAccept", labels.autoAccept);
+      setText("l-autostart", labels.autostart);
+      setText("b-partyCreate", labels.partyCreate);
+      setText("b-partyJoin", labels.partyJoin);
+      setText("b-partyLeave", labels.partyLeave);
+      setText("b-openMods", labels.openMods);
+      setText("b-openTools", labels.openTools);
+      setText("b-openLogs", labels.openLogs);
+      setText("b-about", labels.about);
+      setText("b-quit", labels.quit);
+      setText("b-openRelease", labels.updateDownload);
+      setText("b-markProblem", labels.markProblem);
+      setText("mark-hint", labels.markProblemHint);
+      setText("b-exportDiagnostics", labels.exportDiagnostics);
+
+      document.querySelectorAll(".toggle").forEach((toggle) => {
+        const flip = () => {
+          toggle.setAttribute("aria-checked", toggle.getAttribute("aria-checked") === "true" ? "false" : "true");
+          send(toggle.dataset.message);
+        };
+        toggle.addEventListener("click", flip);
+        toggle.addEventListener("keydown", (event) => {
+          if (event.key === " " || event.key === "Enter") {
+            event.preventDefault();
+            flip();
+          }
+        });
+      });
+
+      function setSwitch(id, on) {
+        document.getElementById(id).setAttribute("aria-checked", on ? "true" : "false");
+      }
+
+      window.dekanPanel = {
+        render(state) {
+          setText("status", state.status);
+          setText("party-line", state.partyLine);
+          setSwitch("t-randomSkin", state.randomSkin);
+          setSwitch("t-autoAccept", state.autoAccept);
+          setSwitch("t-autostart", state.autostart);
+          setText("update-line", state.updateLine);
+          document.getElementById("update").hidden = !state.updateLine;
+          document.getElementById("b-partyCreate").disabled = state.inRoom;
+          document.getElementById("b-partyJoin").disabled = state.inRoom;
+          document.getElementById("b-partyLeave").disabled = !state.inRoom;
+          const list = document.getElementById("checks");
+          list.replaceChildren(
+            ...state.checks.map((check) => {
+              const item = document.createElement("li");
+              item.className = check.ok ? "ok" : "bad";
+              const mark = document.createElement("span");
+              mark.className = "mark";
+              mark.textContent = check.ok ? "✓" : "!";
+              const label = document.createElement("span");
+              label.textContent = check.label;
+              const detail = document.createElement("span");
+              detail.className = "detail";
+              detail.textContent = check.detail;
+              item.append(mark, label, detail);
+              return item;
+            }),
+          );
+        },
+      };
+
+      send("ready");
+    </script>
+  </body>
+</html>

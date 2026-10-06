@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "xtask",
+]
+
+[workspace.package]
+version = "1.2.1"
+authors = ["Dekan contributors"]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/chrisssst/Dekan"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+xxhash-rust = { version = "0.8", features = ["xxh64", "xxh3"] }
+zstd = "0.14"
+flate2 = "1"
+memmap2 = "0.9"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+windows = { version = "0.58", features = [] }
+base64 = "0.23"
+sha2 = "0.11"
+chacha20poly1305 = "0.11"
+uuid = { version = "1", features = ["v4"] }
+futures-util = "0.3"
+wry = { version = "0.57", default-features = false }
+raw-window-handle = "0.6"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

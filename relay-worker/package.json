@@ -1,0 +1,16 @@
+{
+  "name": "dekan-party-relay",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^5.20260923.1",
+    "typescript": "^7.0.2"
+  }
+}

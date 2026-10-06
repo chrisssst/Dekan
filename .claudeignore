@@ -1,0 +1,70 @@
+# Rust
+target/
+**/target/
+
+# Dependências
+node_modules/
+vendor/
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+
+# Build / outputs
+dist/
+build/
+out/
+installer/Output/
+relay-worker/.wrangler/
+
+# Locks (ler apenas quando necessário)
+Cargo.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Dados e binários do jogo / mods
+*.wad
+*.wad.client
+*.fantome
+*.bin
+hashes.game.txt
+wad_index.bin
+*.csv
+*.parquet
+*.xlsx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.ico
+*.woff
+*.woff2
+*.dll
+*.exe
+*.zip
+
+# Diagnósticos locais e saídas de ferramentas
+vanguard_logs_*/
+graphify-out/
+sessoes/
+META/
+
+# Temporários e cache
+.cache/
+.temp/
+tmp/
+*.log
+*.log.*
+*.tmp
+
+# Secrets (nunca ler)
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.key
+*.p12
+*.pfx
