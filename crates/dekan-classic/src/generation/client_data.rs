@@ -111,8 +111,7 @@ mod tests {
     use super::*;
 
     fn client_with_summary(name: &str, summary: &str) -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("dekan_client_{name}_{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("dekan_client_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture may not exist yet
         let plugin = root.join("Plugins").join(GAME_DATA_PLUGIN);
         std::fs::create_dir_all(&plugin).expect("fixture dir");

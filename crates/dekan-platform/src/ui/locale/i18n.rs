@@ -35,9 +35,7 @@ impl Language {
 
     #[must_use]
     pub fn for_locale(locale: Option<&str>) -> Self {
-        locale
-            .and_then(Self::from_locale)
-            .unwrap_or(Self::Turkish)
+        locale.and_then(Self::from_locale).unwrap_or(Self::Turkish)
     }
 
     #[must_use]

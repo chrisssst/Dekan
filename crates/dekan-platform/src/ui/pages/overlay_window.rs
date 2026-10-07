@@ -541,8 +541,7 @@ impl Overlay {
             .collect();
         self.view
             .set_lobby_champions(ModelRc::new(VecModel::from(choices)));
-        let (footer, quote) =
-            model::footer(&self.catalog, false, text);
+        let (footer, quote) = model::footer(&self.catalog, false, text);
         self.view.set_footer_right(footer.into());
         self.view.set_footer_quote(quote);
         self.view.set_mods_tab(self.mods_tab);

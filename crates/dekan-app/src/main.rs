@@ -406,9 +406,7 @@ async fn main() -> Result<()> {
         });
 
         if dekan_app::update_check::is_enabled(
-            std::env::var(dekan_core::env::UPDATE_CHECK)
-                .ok()
-                .as_deref(),
+            std::env::var(dekan_core::env::UPDATE_CHECK).ok().as_deref(),
         ) {
             let update_tray = tray_controller.clone();
             let check = dekan_app::update_check::UpdateCheck {
@@ -619,9 +617,7 @@ fn tray_status(
 
 async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<String> {
     let online = dekan_app::update_check::is_enabled(
-        std::env::var(dekan_core::env::UPDATE_CHECK)
-            .ok()
-            .as_deref(),
+        std::env::var(dekan_core::env::UPDATE_CHECK).ok().as_deref(),
     );
     let cached = || {
         dekan_app::ltk_release::load_verdicts(state_dir)

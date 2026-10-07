@@ -89,11 +89,7 @@ pub fn elevated_parameters(staging: &Path, tools: &Path) -> String {
 }
 
 #[must_use]
-pub fn is_dekan_tools_folder(
-    tools: &Path,
-    install_dir: Option<&Path>,
-    exe: Option<&Path>,
-) -> bool {
+pub fn is_dekan_tools_folder(tools: &Path, install_dir: Option<&Path>, exe: Option<&Path>) -> bool {
     [install_dir, exe.and_then(Path::parent)]
         .into_iter()
         .flatten()

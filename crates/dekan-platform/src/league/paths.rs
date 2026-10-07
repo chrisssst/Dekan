@@ -168,8 +168,7 @@ mod tests {
 
     #[test]
     fn test_is_valid_game_dir_distinguishes_game_from_client_root() {
-        let temp =
-            std::env::temp_dir().join(format!("dekan_test_game_dir_{}", std::process::id()));
+        let temp = std::env::temp_dir().join(format!("dekan_test_game_dir_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp); // ignore-ok: cleanup fixture before test
 
         let client_root = temp.join("League of Legends");

@@ -85,8 +85,7 @@ pub(crate) fn run_package() {
         let relay_dest = dist_dir.join("dekan-relay.exe");
         if std::fs::copy(relay_bin, &relay_dest).is_ok() {
             if let Ok(bytes_relay) = std::fs::read(&relay_dest) {
-                let hash_relay =
-                    dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_relay));
+                let hash_relay = dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_relay));
                 checksum_content.push_str(&format!("{hash_relay} *dekan-relay.exe\n"));
                 println!(
                     "  Relay:    {} ({} bytes, SHA-256: {})",

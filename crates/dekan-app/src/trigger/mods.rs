@@ -610,8 +610,7 @@ pub(super) fn prepare_mod_directory(archive_path: &Path, target_dir: &Path) -> s
     }
 
     if archive_path.is_dir() {
-        dekan_platform::fs::mirror_tree(archive_path, target_dir)
-            .map_err(std::io::Error::other)?;
+        dekan_platform::fs::mirror_tree(archive_path, target_dir).map_err(std::io::Error::other)?;
         return Ok(());
     }
 
