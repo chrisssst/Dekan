@@ -29,7 +29,10 @@ mod tests {
     #[test]
     fn every_name_is_dekan_prefixed_and_unique() {
         for name in ALL {
-            assert!(name.starts_with("DEKAN_"), "{name} is not DEKAN_-prefixed");
+            assert!(
+                name.starts_with("DEKAN_"),
+                "{name} is not DEKAN_-prefixed"
+            );
         }
         let mut seen = std::collections::HashSet::new();
         for name in ALL {

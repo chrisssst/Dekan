@@ -1,13 +1,16 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod auto_accept;
-pub mod catalog;
-pub mod control_panel;
-pub mod historic_store;
-pub mod live_game;
-pub mod mods_store;
-pub mod overlay_session;
-pub mod party_manager;
-pub mod skin_sync;
-pub mod startup;
-pub mod update_check;
+mod diagnostics;
+mod game;
+mod party;
+mod selection;
+mod updates;
+
+pub use diagnostics::{control_panel, startup};
+pub use game::{auto_accept, live_game};
+pub use party::party_manager;
+pub(crate) use selection::book_store;
+pub use selection::{
+    catalog, historic_store, mods_store, overlay_session, preset_store, skin_sync,
+};
+pub use updates::{injector_install, ltk_release, update_check};

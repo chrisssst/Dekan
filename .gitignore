@@ -58,6 +58,7 @@ relay-worker/.dev.vars
 # No exceptions: internal skills and notes never ship with the public repository.
 .claude/
 .agents/
+CLAUDE.local.md
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
@@ -76,3 +77,4 @@ strip_rust_comments.py
 __pycache__/
 *.pyc
 .mypy_cache/
+resultados_ltk/

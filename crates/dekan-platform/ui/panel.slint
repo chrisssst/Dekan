@@ -1,0 +1,397 @@
+import { Theme, ExposeLayer, GoldButton, Switch, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct PanelLabels {
+    version: string,
+    section-options: string,
+    section-party: string,
+    section-folders: string,
+    section-diagnostics: string,
+    random-skin: string,
+    random-skin-hint: string,
+    light-loading: string,
+    light-loading-hint: string,
+    auto-accept: string,
+    autostart: string,
+    party-create: string,
+    party-join: string,
+    party-leave: string,
+    open-mods: string,
+    open-tools: string,
+    open-logs: string,
+    about: string,
+    quit: string,
+    update-download: string,
+    mark-problem: string,
+    mark-problem-hint: string,
+    export-diagnostics: string,
+}
+
+export struct PanelCheckRow {
+    label: string,
+    ok: bool,
+    detail: string,
+}
+
+export enum PanelAction {
+    toggle-random-skin,
+    toggle-light-loading,
+    toggle-auto-accept,
+    toggle-autostart,
+    party-create,
+    party-join,
+    party-leave,
+    open-mods,
+    open-tools,
+    open-logs,
+    open-release,
+    install-injector,
+    mark-problem,
+    export-diagnostics,
+    about,
+    quit,
+}
+
+component Section inherits Rectangle {
+    in property <string> heading;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.surface-line;
+    background: Theme.surface;
+    VerticalLayout {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        Caps {
+            text: root.heading.to-uppercase();
+            font-size: Theme.text-sm;
+            letter-spacing: 1.3px;
+        }
+        @children
+    }
+}
+
+component CheckRow inherits Rectangle {
+    in property <PanelCheckRow> check;
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            width: 14px;
+            text: root.check.ok ? "✓" : "!";
+            color: root.check.ok ? Theme.cyan : #e05a4f;
+            font-size: Theme.text-base;
+            font-weight: 700;
+        }
+        VerticalLayout {
+            alignment: start;
+            Text {
+                text: root.check.label;
+                color: Theme.text;
+                font-size: Theme.text-base;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.check.detail;
+                color: Theme.muted;
+                font-size: Theme.text-sm;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component Toggle inherits Rectangle {
+    in property <string> label;
+    in property <string> hint;
+    in property <bool> checked;
+    in property <bool> divider: true;
+    callback toggled();
+    VerticalLayout {
+        if root.divider: Rectangle {
+            height: 1px;
+            background: Theme.surface-line;
+        }
+        HorizontalLayout {
+            padding-top: 7px;
+            padding-bottom: 7px;
+            spacing: 12px;
+            VerticalLayout {
+                alignment: start;
+                spacing: 2px;
+                Text {
+                    text: root.label;
+                    color: Theme.text;
+                    font-size: Theme.text-base;
+                    wrap: word-wrap;
+                }
+                if root.hint != "": Text {
+                    text: root.hint;
+                    color: Theme.muted;
+                    font-size: Theme.text-sm;
+                    wrap: word-wrap;
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                padding-top: 1px;
+                Switch {
+                    checked: root.checked;
+                }
+            }
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => { root.toggled(); }
+}
+
+component Notice inherits Rectangle {
+    in property <string> line;
+    in property <string> action;
+    callback activated();
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.gold-dim;
+    background: @linear-gradient(180deg, #1c1a14 0%, #141c28 100%);
+    VerticalLayout {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        Text {
+            text: root.line;
+            color: Theme.gold-bright;
+            font-size: Theme.text-base;
+            wrap: word-wrap;
+        }
+        if root.action != "": GoldButton {
+            text: root.action;
+            clicked => { root.activated(); }
+        }
+    }
+}
+
+export component ControlPanel inherits Window {
+    in property <bool> expose-flip;
+    in property <PanelLabels> labels;
+    in property <string> status;
+    in property <string> party-line;
+    in property <bool> in-room;
+    in property <bool> random-skin;
+    in property <bool> light-loading;
+    in property <bool> auto-accept;
+    in property <bool> autostart;
+    in property <string> update-line;
+    in property <string> ltk-line;
+    in property <string> ltk-download;
+    in property <[PanelCheckRow]> checks;
+    callback action(PanelAction);
+    title: "Dekan";
+    icon: @image-url("assets/logo.png");
+    preferred-width: 460px;
+    preferred-height: 640px;
+    min-width: 380px;
+    min-height: 420px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+
+    VerticalLayout {
+        Rectangle {
+            vertical-stretch: 0;
+            VerticalLayout {
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    padding-top: 16px;
+                    padding-bottom: 12px;
+                    spacing: 12px;
+                    Image {
+                        source: @image-url("assets/logo.png");
+                        width: 34px;
+                        height: 34px;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 3px;
+                        Wordmark {
+                            version: root.labels.version;
+                            size: 18px;
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                StatusDot { }
+                            }
+                            Text {
+                                text: root.status;
+                                color: Theme.muted;
+                                font-size: Theme.text-md;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+                Hairline { }
+            }
+        }
+        scroll := ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                width: scroll.visible-width;
+                alignment: start;
+                padding-top: 14px;
+                padding-bottom: 18px;
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 14px;
+                if root.update-line != "": Notice {
+                    line: root.update-line;
+                    action: root.labels.update-download;
+                    activated => { root.action(PanelAction.open-release); }
+                }
+                if root.ltk-line != "": Notice {
+                    line: root.ltk-line;
+                    action: root.ltk-download;
+                    activated => { root.action(PanelAction.install-injector); }
+                }
+                Section {
+                    heading: root.labels.section-options;
+                    Toggle {
+                        divider: false;
+                        label: root.labels.random-skin;
+                        hint: root.labels.random-skin-hint;
+                        checked: root.random-skin;
+                        toggled => { root.action(PanelAction.toggle-random-skin); }
+                    }
+                    Toggle {
+                        label: root.labels.light-loading;
+                        hint: root.labels.light-loading-hint;
+                        checked: root.light-loading;
+                        toggled => { root.action(PanelAction.toggle-light-loading); }
+                    }
+                    Toggle {
+                        label: root.labels.auto-accept;
+                        checked: root.auto-accept;
+                        toggled => { root.action(PanelAction.toggle-auto-accept); }
+                    }
+                    Toggle {
+                        label: root.labels.autostart;
+                        checked: root.autostart;
+                        toggled => { root.action(PanelAction.toggle-autostart); }
+                    }
+                }
+                Section {
+                    heading: root.labels.section-party;
+                    if root.party-line != "": Text {
+                        text: root.party-line;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        GoldButton {
+                            text: root.labels.party-create;
+                            enabled: !root.in-room;
+                            clicked => { root.action(PanelAction.party-create); }
+                        }
+                        GoldButton {
+                            text: root.labels.party-join;
+                            enabled: !root.in-room;
+                            clicked => { root.action(PanelAction.party-join); }
+                        }
+                    }
+                    GoldButton {
+                        text: root.labels.party-leave;
+                        enabled: root.in-room;
+                        clicked => { root.action(PanelAction.party-leave); }
+                    }
+                }
+                Section {
+                    heading: root.labels.section-folders;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        GoldButton {
+                            text: root.labels.open-mods;
+                            clicked => { root.action(PanelAction.open-mods); }
+                        }
+                        GoldButton {
+                            text: root.labels.open-tools;
+                            clicked => { root.action(PanelAction.open-tools); }
+                        }
+                        GoldButton {
+                            text: root.labels.open-logs;
+                            clicked => { root.action(PanelAction.open-logs); }
+                        }
+                    }
+                }
+                Section {
+                    heading: root.labels.section-diagnostics;
+                    VerticalLayout {
+                        spacing: 6px;
+                        for check in root.checks: CheckRow {
+                            check: check;
+                        }
+                    }
+                    Text {
+                        text: root.labels.mark-problem-hint;
+                        color: Theme.muted;
+                        font-size: Theme.text-sm;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        GoldButton {
+                            text: root.labels.mark-problem;
+                            clicked => { root.action(PanelAction.mark-problem); }
+                        }
+                        GoldButton {
+                            text: root.labels.export-diagnostics;
+                            clicked => { root.action(PanelAction.export-diagnostics); }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            vertical-stretch: 0;
+            VerticalLayout {
+                Rectangle {
+                    height: 1px;
+                    background: Theme.surface-line;
+                }
+                HorizontalLayout {
+                    padding-top: 12px;
+                    padding-bottom: 16px;
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    spacing: 8px;
+                    GoldButton {
+                        text: root.labels.about;
+                        clicked => { root.action(PanelAction.about); }
+                    }
+                    GoldButton {
+                        text: root.labels.quit;
+                        danger: true;
+                        clicked => { root.action(PanelAction.quit); }
+                    }
+                }
+            }
+        }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}

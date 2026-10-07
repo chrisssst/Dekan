@@ -1,0 +1,266 @@
+export global Theme {
+    out property <color> bg-0: #05080c;
+    out property <color> bg-1: #0a1428;
+    out property <color> bg-2: #0e1c2e;
+    out property <color> panel: #10161f;
+    out property <color> card: #1a2230;
+    out property <color> card-hover: #202a3b;
+    out property <color> line: #2a3542;
+    out property <color> line-gold: #4a3d22;
+    out property <color> gold: #c8aa6e;
+    out property <color> gold-bright: #f0e6d2;
+    out property <color> gold-dim: #785a28;
+    out property <color> cyan: #0ac8b9;
+    out property <color> text: #f0e6d2;
+    out property <color> muted: #a09b8c;
+    out property <color> muted-dim: #85817a;
+    out property <color> control-line: #5a6a82;
+    out property <color> button-line: #9b7b45;
+    out property <color> danger: #c24b4b;
+    out property <color> danger-text: #e8a0a0;
+    out property <color> surface: #141c28;
+    out property <color> surface-hover: #1a2436;
+    out property <color> surface-line: #243040;
+    out property <color> button: #0f1622;
+    out property <color> input: #09121d;
+    out property <brush> backdrop: @linear-gradient(180deg, #0a1428 0%, #070d18 45%, #05080c 100%);
+    out property <brush> header: @linear-gradient(180deg, #0e1c2e 0%, #10161f 100%);
+    out property <brush> card-fill: @linear-gradient(180deg, #1a2230 0%, #10161f 100%);
+    out property <brush> card-fill-hover: @linear-gradient(180deg, #202a3b 0%, #10161f 100%);
+    out property <brush> card-fill-selected: @linear-gradient(180deg, #2c2a25 0%, #1a2230 100%);
+    out property <string> sans: "Segoe UI";
+    out property <string> serif: "Georgia";
+    out property <length> text-xs: 10px;
+    out property <length> text-sm: 11px;
+    out property <length> text-md: 12px;
+    out property <length> text-base: 13px;
+    out property <length> text-lg: 15px;
+    out property <length> text-xl: 22px;
+}
+
+export component ExposeLayer inherits Rectangle {
+    in property <bool> flip;
+    background: root.flip ? #00000001 : #00000000;
+}
+
+export component Hairline inherits Rectangle {
+    in property <bool> gold;
+    height: 1px;
+    background: root.gold ? Theme.gold-dim : Theme.line-gold;
+}
+
+export component Caps inherits Text {
+    color: Theme.gold;
+    font-size: Theme.text-xs;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+export component Wordmark inherits HorizontalLayout {
+    in property <string> version;
+    in property <length> size: 15px;
+    spacing: 6px;
+    alignment: start;
+    Text {
+        text: "DEKAN";
+        font-family: Theme.serif;
+        font-size: root.size;
+        font-weight: 700;
+        letter-spacing: root.size * 0.14;
+        color: Theme.gold-bright;
+        vertical-alignment: center;
+    }
+    Text {
+        text: "v" + root.version;
+        font-size: Theme.text-xs;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        color: Theme.gold;
+        vertical-alignment: center;
+    }
+}
+
+export component StatusDot inherits Rectangle {
+    in property <bool> online: true;
+    width: 7px;
+    height: 7px;
+    border-radius: 3.5px;
+    background: root.online ? Theme.cyan : Theme.muted-dim;
+    drop-shadow-blur: root.online ? 5px : 0;
+    drop-shadow-color: Theme.cyan;
+}
+
+export component GoldButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> primary;
+    in property <bool> danger;
+    in property <bool> caps;
+    in property <length> font-size: Theme.text-md;
+    in property <length> tracking: 0px;
+    callback clicked();
+    property <bool> hot: touch.has-hover && root.enabled;
+    property <bool> focused: keys.has-focus && root.enabled;
+    min-height: 32px;
+    vertical-stretch: 0;
+    horizontal-stretch: 1;
+    border-radius: 6px;
+    border-width: root.focused ? 2px : 1px;
+    border-color: !root.enabled ? Theme.control-line : root.focused ? Theme.gold-bright : root.primary ? (root.hot ? Theme.gold-bright : Theme.gold) : root.danger ? (root.hot ? #ef7468 : #d8584d) : root.hot ? Theme.gold : Theme.button-line;
+    background: root.primary ? (touch.pressed ? @linear-gradient(180deg, #a8884f 0%, #8c6d3c 100%) : root.hot ? @linear-gradient(180deg, #e0c48a 0%, #b8975a 100%) : @linear-gradient(180deg, #d1b47a 0%, #a8884f 100%)) : root.danger ? (root.hot ? #3a2022 : #2a1a1c) : touch.pressed ? #1c2838 : root.hot ? @linear-gradient(180deg, #2e4160 0%, #22324a 100%) : @linear-gradient(180deg, #26364f 0%, #1c2838 100%);
+    drop-shadow-blur: root.primary ? (root.hot ? 12px : 6px) : 0px;
+    drop-shadow-color: Theme.gold.with-alpha(root.hot ? 0.45 : 0.25);
+    opacity: root.enabled ? 1 : 0.45;
+    animate border-color, drop-shadow-blur { duration: 150ms; }
+    Text {
+        x: 12px;
+        y: touch.pressed && root.enabled ? 1px : 0px;
+        width: parent.width - 24px;
+        height: parent.height;
+        text: root.caps ? root.text.to-uppercase() : root.text;
+        color: root.primary ? #0a1428 : root.danger ? #f2b8b2 : Theme.gold-bright;
+        font-family: Theme.sans;
+        font-size: root.font-size;
+        font-weight: root.caps || root.primary ? 700 : 600;
+        letter-spacing: root.tracking;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+}
+
+export component Switch inherits Rectangle {
+    in property <bool> checked;
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    border-width: 0;
+    background: root.checked ? Theme.gold-dim : #2a3446;
+    animate background { duration: 150ms; }
+    Rectangle {
+        y: 3px;
+        x: root.checked ? root.width - self.width - 3px : 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: root.checked ? Theme.gold-bright : Theme.muted;
+        animate x { duration: 150ms; easing: ease-out; }
+    }
+}
+
+export component Diamond inherits Text {
+    text: "◆";
+    color: Theme.gold;
+    font-size: 9px;
+    vertical-alignment: top;
+}
+
+export component SearchGlyph inherits Path {
+    width: 13px;
+    height: 13px;
+    viewbox-width: 13;
+    viewbox-height: 13;
+    stroke: Theme.muted-dim;
+    stroke-width: 1.4px;
+    fill: transparent;
+    commands: "M 5.5 1 A 4.5 4.5 0 1 1 5.49 1 Z M 8.8 8.8 L 12 12";
+}
+
+export component Field inherits Rectangle {
+    in property <string> placeholder;
+    in property <bool> read-only;
+    in property <bool> search-icon;
+    in property <bool> monospace;
+    in property <length> trailing: 0px;
+    in-out property <string> text;
+    out property <bool> has-focus: input.has-focus;
+    callback accepted();
+    callback cancelled();
+    callback edited();
+    callback focus-requested();
+    min-height: 38px;
+    vertical-stretch: 0;
+    clip: true;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.gold : Theme.control-line;
+    background: root.monospace ? Theme.input : Theme.bg-0;
+    drop-shadow-blur: input.has-focus ? 10px : 0px;
+    drop-shadow-color: Theme.gold.with-alpha(0.25);
+    animate border-color, drop-shadow-blur { duration: 200ms; }
+    if root.search-icon: SearchGlyph {
+        x: 11px;
+        y: (parent.height - self.height) / 2;
+    }
+    Text {
+        x: input.x;
+        visible: root.text == "";
+        text: root.placeholder;
+        color: Theme.muted-dim;
+        font-family: Theme.sans;
+        font-size: input.font-size;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+    input := TextInput {
+        x: root.search-icon ? 32px : 12px;
+        width: parent.width - self.x - 12px - root.trailing;
+        height: parent.height;
+        text <=> root.text;
+        read-only: root.read-only;
+        color: root.monospace ? Theme.gold-bright : Theme.text;
+        font-family: root.monospace ? "Consolas" : Theme.sans;
+        font-size: Theme.text-base;
+        vertical-alignment: center;
+        single-line: true;
+        selection-background-color: Theme.gold-dim;
+        selection-foreground-color: Theme.gold-bright;
+        accepted => { root.accepted(); }
+        edited => { root.edited(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            reject
+        }
+        changed has-focus => {
+            if self.has-focus {
+                root.focus-requested();
+            }
+        }
+    }
+    @children
+    public function take-focus() {
+        input.focus();
+    }
+    public function select-all() {
+        input.select-all();
+    }
+    public function release-focus() {
+        input.clear-focus();
+    }
+}

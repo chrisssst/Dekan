@@ -1,12 +1,10 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod champ_select;
-pub mod champion_assets;
-pub mod client;
+mod connection;
+mod session;
+
+pub use connection::{client, lockfile, observer, websocket};
+pub use session::{champ_select, champion_assets, live_selection, lobby, skin_registration};
+
 pub mod error;
-pub mod live_selection;
-pub mod lockfile;
-pub mod observer;
-pub mod skin_registration;
-pub mod websocket;

@@ -25,6 +25,9 @@ pub enum WadError {
         actual: usize,
     },
 
+    #[error("entry {path_hash:#018x} declares {size} bytes, more than an entry may hold")]
+    EntryTooLarge { path_hash: u64, size: usize },
+
     #[error("invalid subchunk table: {0}")]
     InvalidSubchunkToc(String),
 
@@ -42,6 +45,9 @@ pub enum WadError {
 
     #[error("invalid .fantome: {0}")]
     InvalidFantome(String),
+
+    #[error("invalid .modpkg: {0}")]
+    InvalidModpkg(String),
 
     #[error("I/O error on '{path}': {source}")]
     FileIo {

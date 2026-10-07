@@ -92,7 +92,7 @@ First public release.
 - Custom `.fantome` mods in ten categories, with a compatibility check that drops mods broken by a patch.
 - Classic Rift models generated from the installed game.
 - Party mode: teammates see each other's skins through an encrypted relay that cannot read the content.
-- Tray application with Turkish and English, start with Windows, single instance.
+- Tray application with Turkish and English, Turkish default, start with Windows, single instance.
 - Installer and uninstaller with an install audit, file details and a manifest that runs Dekan without
   administrator rights.
 

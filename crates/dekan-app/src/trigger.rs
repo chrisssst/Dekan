@@ -9,131 +9,10 @@ use dekan_platform::process::ProcessFinder;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-pub const AUDITED_LTK_DLL_HASH: &str =
-    "07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b";
+mod mods;
+mod paths;
 
-pub const AUDITED_LTK_HOST_HASH: &str =
-    "a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c";
-
-#[derive(Debug, Clone)]
-pub struct ResolvedPaths {
-    pub tools_dir: PathBuf,
-    pub tools_source: ToolsSource,
-    pub ltk_host_exe: PathBuf,
-    pub ltk_dll_path: PathBuf,
-    pub library_dir: PathBuf,
-    pub mods_dir: PathBuf,
-    pub overlay_dir: PathBuf,
-    pub state_dir: PathBuf,
-    pub game_dir: PathBuf,
-
-    pub mod_roots: Vec<dekan_core::mods::ModRoot>,
-
-    pub custom_mods_root: PathBuf,
-}
-
-impl ResolvedPaths {
-    pub fn discover() -> Self {
-        let app_state_dir =
-            state_dir().unwrap_or_else(|_| std::env::temp_dir().join("Dekan_state"));
-        let app_data_dir = data_dir().unwrap_or_else(|_| std::env::temp_dir().join("Dekan"));
-        Self::discover_in(app_state_dir, app_data_dir)
-    }
-
-    pub fn discover_in(app_state_dir: PathBuf, app_data_dir: PathBuf) -> Self {
-        let candidate_tools_dirs = tools_dir_candidates(&app_data_dir);
-        let (tools_dir, source) = resolve_tools_dir(&candidate_tools_dirs);
-
-        match source {
-            ToolsSource::Own => {
-                info!(tools = %tools_dir.display(), "Injection tools found in Dekan's own folder");
-            }
-            ToolsSource::Missing => {
-                error!(
-                    expected = %tools_dir.display(),
-                    "Injection tools not found. Place ltk_patcher_host.exe and ltk_patcher_dll.dll \
-                     in that folder — no skin can be injected until then"
-                );
-            }
-        }
-
-        let ltk_host_exe = tools_dir.join("ltk_patcher_host.exe");
-        let ltk_dll_path = tools_dir.join("ltk_patcher_dll.dll");
-
-        let mut candidate_library_dirs =
-            vec![app_data_dir.join("library"), app_data_dir.join("skins")];
-        if let Some(tool_lib) = tools_dir.parent().map(|p| p.join("library")) {
-            candidate_library_dirs.push(tool_lib);
-        }
-
-        let library_dir = candidate_library_dirs
-            .iter()
-            .find(|p| p.is_dir())
-            .cloned()
-            .unwrap_or_else(|| candidate_library_dirs[0].clone());
-
-        let game_dir = match dekan_platform::paths::discover_game_dir() {
-            Some(dir) => dir,
-            None => {
-                warn!(
-                    "League install not found yet (client closed and no install registered by the \
-                     Riot Client); it will be looked up again when a skin is prepared"
-                );
-                PathBuf::new()
-            }
-        };
-
-        let overlay_dir = app_data_dir.join("overlay");
-        let mods_dir = app_data_dir.join("mods");
-        let custom_mods_root = dekan_app::mods_store::dekan_mods_root(&app_data_dir);
-        let mod_roots = dekan_app::mods_store::mod_roots(&app_data_dir);
-
-        Self {
-            tools_dir,
-            tools_source: source,
-            ltk_host_exe,
-            ltk_dll_path,
-            library_dir,
-            mods_dir,
-            overlay_dir,
-            state_dir: app_state_dir,
-            game_dir,
-            mod_roots,
-            custom_mods_root,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolsSource {
-    Own,
-
-    Missing,
-}
-
-fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
-    let complete = |dir: &PathBuf| {
-        dir.join("ltk_patcher_host.exe").is_file() && dir.join("ltk_patcher_dll.dll").is_file()
-    };
-
-    if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
-        info!(tools = %dir.display(), "Injection backend (LTK host + DLL) found");
-        return (dir.clone(), ToolsSource::Own);
-    }
-
-    (
-        candidates.first().cloned().unwrap_or_default(),
-        ToolsSource::Missing,
-    )
-}
-
-pub fn required_tool_files(paths: &ResolvedPaths) -> Vec<PathBuf> {
-    vec![paths.ltk_host_exe.clone(), paths.ltk_dll_path.clone()]
-}
-
-pub fn tools_ready(paths: &ResolvedPaths) -> bool {
-    required_tool_files(paths).iter().all(|file| file.is_file())
-}
+pub use paths::{ResolvedPaths, ToolsSource, required_tool_files, tools_ready};
 
 pub struct InjectionTrigger {
     state_tx: StateSender,
@@ -148,10 +27,6 @@ impl InjectionTrigger {
             state_rx,
             paths,
         }
-    }
-
-    fn tools_ready(&self) -> bool {
-        tools_ready(&self.paths)
     }
 
     pub async fn run(&self, token: CancellationToken) {
@@ -188,7 +63,7 @@ impl InjectionTrigger {
                 } => {
                     if let Some(request) = pending_arm.take() {
 
-                        if !self.tools_ready() {
+                        if !tools_ready(&self.paths) {
                             if !tools_missing_reported {
                                 tools_missing_reported = true;
                                 warn!(
@@ -263,7 +138,7 @@ impl InjectionTrigger {
                             }
                         }
 
-                        if armed.is_none() && !self.tools_ready() {
+                        if armed.is_none() && !tools_ready(&self.paths) {
                             if !tools_missing_reported {
                                 tools_missing_reported = true;
                                 warn!(
@@ -280,7 +155,7 @@ impl InjectionTrigger {
                             "Game entered in-game phase; completing the injection"
                         );
                         active_overlay = self.handle_game_start(&state, armed.take(), &token).await;
-                    } else if state.phase.is_champ_select() && !injected_session {
+                    } else if (state.phase.is_champ_select() || arms_in_lobby(&state)) && !injected_session {
                         let wanted = wanted_skin(&state);
 
                         let current = armed
@@ -308,7 +183,7 @@ impl InjectionTrigger {
                             }
                         }
 
-                        let divergence = armed.as_ref().and_then(|a| {
+                        let divergence = armed.as_ref().filter(|a| !a.key.lobby).and_then(|a| {
                             let registered = a.lcu_skin?;
                             let live = state.selected_skin_id?;
                             (live != registered && lcu_divergence_seen != Some(live))
@@ -396,12 +271,16 @@ impl InjectionTrigger {
             champ_id,
             entry_id,
             mods,
+            second,
+            lobby,
             ..
         } = key;
 
         info!(
             champ_id,
             entry_id = ?entry_id,
+            second = ?second,
+            lobby,
             mods_fingerprint = mods,
             "Preparing the overlay for the chosen skin and mods, before the game starts"
         );
@@ -409,6 +288,10 @@ impl InjectionTrigger {
         let registration = async {
             match entry_id {
                 Some(_) if is_classic(champ_id) => None,
+                Some(_) if lobby => {
+                    self.register_in_lobby(&key.picks()).await;
+                    None
+                }
                 Some(entry_id) => self.register_in_champ_select(champ_id, entry_id).await,
                 None => None,
             }
@@ -417,7 +300,7 @@ impl InjectionTrigger {
         let (overlay, build) = armed?;
 
         let game_already_running = matches!(
-            ProcessFinder::find_process_by_name(GAME_PROCESS_NAME),
+            ProcessFinder::find_any_process(&dekan_platform::game_version::GAME_EXES),
             Ok(Some(_))
         );
         if game_already_running {
@@ -453,6 +336,9 @@ impl InjectionTrigger {
     )> {
         let mods = self.collect_mods(key).await?;
         let game_dir = self.effective_game_dir(None);
+        if dekan_platform::preferences::LIGHT_LOADING.is_enabled() {
+            prefer_lazy_wad_checks(&game_dir);
+        }
         let pipeline =
             InjectionPipeline::new(self.pipeline_config(game_dir), Some(self.state_tx.clone()));
 
@@ -476,28 +362,11 @@ impl InjectionTrigger {
     ) -> (Option<u32>, Option<u32>) {
         let from_state = (state.champion_id, state.selected_skin_id);
 
-        let discovery =
-            tokio::task::spawn_blocking(|| dekan_lcu::lockfile::Lockfile::discover(None)).await;
-
-        let lockfile = match discovery {
-            Ok(Ok(lockfile)) => lockfile,
-            Ok(Err(e)) => {
-                warn!(error = %e, "Rule #1 re-read skipped: no lockfile; using the published state");
-                return from_state;
-            }
-            Err(e) => {
-                warn!(error = %e, "Rule #1 re-read skipped: lockfile discovery task failed");
-                return from_state;
-            }
-        };
-
-        let client = match dekan_lcu::client::LcuClient::new(
-            &lockfile,
-            dekan_lcu::client::DEFAULT_LCU_TIMEOUT,
-        ) {
+        let discovery = dekan_lcu::client::LcuClient::discover().await;
+        let client = match discovery {
             Ok(client) => client,
             Err(e) => {
-                warn!(error = %e, "Rule #1 re-read skipped: LCU client unavailable");
+                warn!(error = %e, "Rule #1 re-read skipped: no LCU client; using the published state");
                 return from_state;
             }
         };
@@ -545,13 +414,14 @@ impl InjectionTrigger {
 
         let (champion_id, live_skin_id) = self.reread_selection(state).await;
 
-        let (target, mods, party) = {
+        let (target, mods, party, lobby) = {
             let state = self.state_rx.borrow();
             let (party, _) = party_skins(&state);
             (
                 state.overlay_target.clone(),
                 state.mods.clone(),
                 dekan_core::party::party_fingerprint(&party),
+                state.lobby.clone(),
             )
         };
 
@@ -571,6 +441,28 @@ impl InjectionTrigger {
             return None;
         };
 
+        let armed_in_lobby = armed
+            .as_ref()
+            .map(|a| a.key)
+            .filter(|key| key.lobby && key.covers(champ_id));
+        if let Some(armed_key) = armed_in_lobby {
+            info!(
+                champ_id,
+                entry_id = ?armed_key.entry_for(champ_id),
+                armed_for = ?armed_key.picks(),
+                "Injecting the skin picked in the lobby for the champion this match gave"
+            );
+            dekan_core::state::focus_lobby_champion(&self.state_tx, champ_id);
+            if let Some(armed) = armed {
+                return self.confirm_armed(armed, champ_id, started_at).await;
+            }
+        }
+
+        let target = match &lobby {
+            Some(lobby) => lobby.target_for(champ_id).cloned().or(target),
+            None => target,
+        };
+
         let entry_id = match &target {
             None => None,
             Some(target) if !target.matches_champion(champ_id) => {
@@ -583,7 +475,7 @@ impl InjectionTrigger {
             }
             Some(target) => {
                 let entry_id = target.package_entry_id();
-                if dekan_core::selection::SelectionMode::is_base_skin(entry_id, champ_id) {
+                if dekan_core::selection::is_base_skin(entry_id, champ_id) {
                     info!(
                         champ_id,
                         entry_id, "Base skin chosen; there is no skin to overlay"
@@ -654,7 +546,7 @@ impl InjectionTrigger {
 
         info!(
             champ_id,
-            entry_id = armed.key.entry_id,
+            entry_id = ?armed.key.entry_for(champ_id),
             status = ?status,
             armed_before_game = armed.armed_before_game,
             registered_lcu_skin = ?armed.lcu_skin,
@@ -685,25 +577,25 @@ impl InjectionTrigger {
         let mods = self.collect_mods(key).await?;
 
         let mut game_pid = None;
-        let mut game_tid = None;
         let discovery_started = tokio::time::Instant::now();
         let max_wait = Duration::from_secs(60);
 
         while discovery_started.elapsed() < max_wait && !token.is_cancelled() {
-            if let Ok(Some(pid)) = ProcessFinder::find_process_by_name(GAME_PROCESS_NAME) {
-                if let Ok(Some(tid)) = ProcessFinder::find_first_thread_id(pid) {
-                    game_pid = Some(pid);
-                    game_tid = Some(tid);
-                    break;
-                }
+            let found = tokio::task::spawn_blocking(|| {
+                ProcessFinder::find_any_process(&dekan_platform::game_version::GAME_EXES)
+            })
+            .await;
+            if let Ok(Ok(Some(pid))) = found {
+                game_pid = Some(pid);
+                break;
             }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+            tokio::time::sleep(GAME_PROCESS_POLL).await;
         }
 
-        let (pid, tid) = match (game_pid, game_tid) {
-            (Some(p), Some(t)) => (p, t),
-            _ => {
-                warn!("Timed out waiting for 'League of Legends.exe' game process to spawn");
+        let pid = match game_pid {
+            Some(pid) => pid,
+            None => {
+                warn!("Timed out waiting for the game process to spawn");
                 set_injection_status(
                     &self.state_tx,
                     InjectionStatus::Failed {
@@ -716,7 +608,6 @@ impl InjectionTrigger {
 
         info!(
             pid,
-            tid,
             discovery_ms = discovery_started.elapsed().as_millis(),
             "Target League game process discovered; executing injection pipeline"
         );
@@ -731,7 +622,7 @@ impl InjectionTrigger {
             entry_id = ?entry_id,
             "Late path: the loading-screen card can no longer be changed"
         );
-        let outcome = pipeline.execute(&mods, pid, tid).await;
+        let outcome = pipeline.execute(&mods, pid).await;
 
         match outcome {
             Ok(outcome) => {
@@ -744,463 +635,6 @@ impl InjectionTrigger {
             }
             Err(e) => {
                 error!(error = %e, "Injection sequence failed");
-                None
-            }
-        }
-    }
-
-    async fn collect_mods(&self, key: ArmKey) -> Option<Vec<String>> {
-        if is_classic(key.champ_id) {
-            return self.classic_mods(key).await;
-        }
-
-        let mut mods = match key.entry_id {
-            Some(entry_id) => self.prepare_mods(key.champ_id, entry_id).await?,
-            None => Vec::new(),
-        };
-
-        if key.mods != 0 {
-            let selection = self.state_rx.borrow().mods.clone();
-            if selection.fingerprint(Some(key.champ_id)) != key.mods {
-                debug!(
-                    champ_id = key.champ_id,
-                    "Mod selection changed since the build was scheduled"
-                );
-            }
-            let roots = self.paths.mod_roots.clone();
-            let mods_dir = self.paths.mods_dir.clone();
-            let game_dir = self.effective_game_dir(None);
-            let champion = Some(key.champ_id);
-            let staged = tokio::task::spawn_blocking(move || {
-                let catalog = dekan_core::mods::scan_catalog(&roots, champion, &|_| true);
-                let staged = dekan_app::mods_store::stage_selected(
-                    &catalog, &selection, champion, &mods_dir,
-                );
-
-                drop_incompatible_mods(staged, &mods_dir, &game_dir)
-            })
-            .await;
-            match staged {
-                Ok(staged) => mods.extend(staged),
-                Err(e) => {
-                    warn!(error = %e, "Custom mod staging task failed; continuing without them")
-                }
-            }
-        }
-
-        if key.party != 0 {
-            mods.extend(self.party_mods(key).await);
-        }
-
-        if mods.is_empty() {
-            warn!(
-                champ_id = key.champ_id,
-                "Nothing could be prepared for this build; no overlay will be made"
-            );
-            return None;
-        }
-        info!(
-            champ_id = key.champ_id,
-            mods = ?mods,
-            "Mods prepared for the overlay build, in merge order"
-        );
-        Some(mods)
-    }
-
-    async fn party_mods(&self, key: ArmKey) -> Vec<String> {
-        let (accepted, rejected) = party_skins(&self.state_rx.borrow());
-        for (member_id, reason) in &rejected {
-            warn!(member_id, reason = ?reason, "Party skin not injected");
-        }
-        if dekan_core::party::party_fingerprint(&accepted) != key.party {
-            debug!("Party skins changed since the build was scheduled; using the current ones");
-        }
-
-        let mut staged = Vec::new();
-        for (champion_id, entry_id) in accepted {
-            if is_classic(champion_id) {
-                match self.prepare_classic_party_skin(champion_id, entry_id).await {
-                    Some(names) => {
-                        info!(champion_id, entry_id, "Classic party skin prepared");
-                        staged.extend(names);
-                    }
-                    None => warn!(
-                        champion_id,
-                        entry_id, "Could not prepare classic party skin for teammate"
-                    ),
-                }
-            } else {
-                match self.prepare_package(champion_id, entry_id, false).await {
-                    Some(names) => {
-                        info!(champion_id, entry_id, "Party skin prepared");
-                        staged.extend(names);
-                    }
-                    None => warn!(
-                        champion_id,
-                        entry_id,
-                        "A teammate's skin is not in the local library; they will look stock to you"
-                    ),
-                }
-            }
-        }
-        staged
-    }
-
-    async fn prepare_classic_party_skin(
-        &self,
-        champion_id: u32,
-        entry_id: u32,
-    ) -> Option<Vec<String>> {
-        use dekan_classic::builder::ClassicIdMapper;
-        use dekan_classic::generator::{
-            ClassicChampion, jade_characters, resolve_alias_with_id, skin_number, slots_for,
-        };
-
-        let regular = ClassicIdMapper::normalize_champion_id(champion_id);
-        let skin = skin_number(entry_id);
-        if skin == 0 {
-            return None;
-        }
-        let slots = slots_for(None);
-
-        let client_alias = match self.lcu_client().await {
-            Some(client) => match client.get_champion_assets(regular).await {
-                Ok(assets) if !assets.alias.is_empty() => Some(assets.alias),
-                Ok(_) => None,
-                Err(e) => {
-                    debug!(error = %e, regular, "Teammate assets unavailable for Classic alias");
-                    None
-                }
-            },
-            None => None,
-        };
-
-        let game_dir = self.effective_game_dir(None);
-        let library_dir = self.paths.library_dir.join(regular.to_string());
-        let hashes = self.hash_table_path();
-        let cache = self.paths.state_dir.join("classic_characters.json");
-        let cache_dir = self.paths.state_dir.clone();
-        let mods_dir = self.paths.mods_dir.clone();
-        let classic_alias = self.classic_client_alias(champion_id).await;
-        let classic_id = champion_id;
-        let built = tokio::task::spawn_blocking(move || {
-            let alias = resolve_alias_with_id(
-                &game_dir,
-                client_alias.as_deref(),
-                Some(regular),
-                &library_dir,
-            )
-            .ok_or_else(|| dekan_classic::error::ClassicError::ChampionNotFound {
-                alias: format!("no WAD alias found for teammate champion {regular}"),
-            })?;
-            let classic_alias = classic_alias
-                .or_else(|| dekan_classic::client_data::champion_alias(&game_dir, classic_id));
-            let champion = ClassicChampion::open(&game_dir, &alias)?
-                .with_client_character(classic_alias.as_deref());
-            let mut known = jade_characters(&hashes, &cache);
-            if known.is_empty() {
-                known = champion.jade_names_from_bins_cached(&cache_dir);
-            }
-            champion.build_mod(skin, &slots, &known, &mods_dir)
-        })
-        .await;
-
-        match built {
-            Ok(Ok(folder)) => {
-                info!(champion_id, regular, skin, %folder, "Teammate classic mod ready");
-                Some(vec![folder])
-            }
-            Ok(Err(e)) => {
-                warn!(champion_id, regular, skin, error = %e, "Could not build teammate classic mod");
-                None
-            }
-            Err(e) => {
-                error!(champion_id, error = %e, "Teammate classic build task failed");
-                None
-            }
-        }
-    }
-
-    async fn classic_client_alias(&self, classic_id: u32) -> Option<String> {
-        let client = self.lcu_client().await?;
-        match client.get_champion_assets(classic_id).await {
-            Ok(assets) if assets.alias.to_ascii_lowercase().starts_with("jade_") => {
-                Some(assets.alias)
-            }
-            Ok(_) => None,
-            Err(e) => {
-                debug!(error = %e, classic_id, "Classic champion assets unavailable from the client");
-                None
-            }
-        }
-    }
-
-    async fn classic_mods(&self, key: ArmKey) -> Option<Vec<String>> {
-        use dekan_classic::builder::ClassicIdMapper;
-        use dekan_classic::generator::{
-            ClassicChampion, jade_characters, resolve_alias_with_id, skin_number, slots_for,
-        };
-
-        let Some(entry_id) = key.entry_id else {
-            debug!(
-                champ_id = key.champ_id,
-                "Rift Classic takes no custom mod; nothing to build"
-            );
-            return None;
-        };
-        let regular = ClassicIdMapper::normalize_champion_id(key.champ_id);
-        let skin = skin_number(entry_id);
-        let slots = slots_for(key.classic_slot);
-
-        let client_alias = match self.lcu_client().await {
-            Some(client) => match client.get_champion_assets(regular).await {
-                Ok(assets) if !assets.alias.is_empty() => Some(assets.alias),
-                Ok(_) => None,
-                Err(e) => {
-                    debug!(error = %e, regular, "Champion assets unavailable for the Classic alias");
-                    None
-                }
-            },
-            None => None,
-        };
-
-        let game_dir = self.effective_game_dir(None);
-        let library_dir = self.paths.library_dir.join(regular.to_string());
-        let hashes = self.hash_table_path();
-        let cache = self.paths.state_dir.join("classic_characters.json");
-        let cache_dir = self.paths.state_dir.clone();
-        let mods_dir = self.paths.mods_dir.clone();
-        let started = std::time::Instant::now();
-        let classic_alias = self.classic_client_alias(key.champ_id).await;
-        let classic_id = key.champ_id;
-        let built = tokio::task::spawn_blocking(move || {
-            let alias = resolve_alias_with_id(
-                &game_dir,
-                client_alias.as_deref(),
-                Some(regular),
-                &library_dir,
-            )
-            .ok_or_else(|| dekan_classic::error::ClassicError::ChampionNotFound {
-                alias: format!("no WAD alias found for champion {regular}"),
-            })?;
-            let classic_alias = classic_alias
-                .or_else(|| dekan_classic::client_data::champion_alias(&game_dir, classic_id));
-            let champion = ClassicChampion::open(&game_dir, &alias)?
-                .with_client_character(classic_alias.as_deref());
-
-            let mut known = jade_characters(&hashes, &cache);
-            if known.is_empty() {
-                known = champion.jade_names_from_bins_cached(&cache_dir);
-            }
-            champion.build_mod(skin, &slots, &known, &mods_dir)
-        })
-        .await;
-
-        match built {
-            Ok(Ok(folder)) => {
-                info!(
-                    champ_id = key.champ_id,
-                    regular,
-                    skin,
-                    slots = ?slots_for(key.classic_slot),
-                    elapsed_ms = started.elapsed().as_millis(),
-                    folder = %folder,
-                    "Rift Classic mod ready"
-                );
-                Some(vec![folder])
-            }
-            Ok(Err(e)) => {
-                warn!(
-                    champ_id = key.champ_id,
-                    regular,
-                    skin,
-                    error = %e,
-                    "Rift Classic skin cannot be shown; nothing will be injected"
-                );
-                set_injection_status(
-                    &self.state_tx,
-                    InjectionStatus::Failed {
-                        error: format!("Rift Classic: {e}"),
-                    },
-                );
-                None
-            }
-            Err(e) => {
-                error!(error = %e, "Rift Classic generation task failed");
-                None
-            }
-        }
-    }
-
-    fn hash_table_path(&self) -> PathBuf {
-        self.paths.tools_dir.join("hashes.game.txt")
-    }
-
-    async fn prepare_mods(&self, champ_id: u32, entry_id: u32) -> Option<Vec<String>> {
-        self.prepare_package(champ_id, entry_id, true).await
-    }
-
-    async fn prepare_package(
-        &self,
-        champ_id: u32,
-        entry_id: u32,
-        report_failure: bool,
-    ) -> Option<Vec<String>> {
-        let library_root = self.paths.library_dir.clone();
-        let scan = tokio::task::spawn_blocking(move || {
-            dekan_core::library::scan_champion(&library_root, champ_id)
-        })
-        .await;
-
-        let archive_path = match &scan {
-            Ok(library) => library.package_for(entry_id).map(Path::to_path_buf),
-            Err(e) => {
-                warn!(error = %e, "Library scan task failed; falling back to path probing");
-                None
-            }
-        }
-        .or_else(|| {
-            find_skin_archive(
-                std::slice::from_ref(&self.paths.library_dir),
-                champ_id,
-                entry_id,
-            )
-        });
-
-        let Some(archive_path) = archive_path else {
-            return self
-                .prepare_dynamic_skin(champ_id, entry_id, report_failure)
-                .await;
-        };
-
-        let mod_name = format!("{champ_id}_{entry_id}");
-        let target_dir = self.paths.mods_dir.join(&mod_name);
-
-        info!(
-            archive = %archive_path.display(),
-            mod_name = %mod_name,
-            "Found the mod package for the chosen entry; preparing the mod directory"
-        );
-
-        if let Err(e) = prepare_mod_directory(&archive_path, &target_dir) {
-            error!(error = %e, mod_name = %mod_name, "Could not prepare the mod directory");
-            if report_failure {
-                set_injection_status(
-                    &self.state_tx,
-                    InjectionStatus::Failed {
-                        error: format!("mod package could not be extracted: {e}"),
-                    },
-                );
-            }
-            return None;
-        }
-
-        Some(vec![mod_name])
-    }
-
-    async fn prepare_dynamic_skin(
-        &self,
-        champ_id: u32,
-        entry_id: u32,
-        report_failure: bool,
-    ) -> Option<Vec<String>> {
-        use dekan_classic::generator::{StandardChampion, resolve_alias_with_id, skin_number};
-
-        let skin = skin_number(entry_id);
-        if skin == 0 {
-            debug!(champ_id, entry_id, "Base skin selected; nothing to inject");
-            return None;
-        }
-
-        let game_dir = self.effective_game_dir(None);
-        if !game_dir.is_dir() {
-            warn!(
-                champ_id,
-                entry_id, "Game directory not found; cannot dynamically generate skin"
-            );
-            if report_failure {
-                set_injection_status(
-                    &self.state_tx,
-                    InjectionStatus::Failed {
-                        error: "Game directory not found".into(),
-                    },
-                );
-            }
-            return None;
-        }
-
-        let assets = match self.lcu_client().await {
-            Some(client) => match client.get_champion_assets(champ_id).await {
-                Ok(assets) => Some(assets),
-                Err(e) => {
-                    debug!(
-                        error = %e,
-                        champ_id,
-                        "Champion assets unavailable for dynamic skin generation"
-                    );
-                    None
-                }
-            },
-            None => None,
-        };
-        let client_alias = assets
-            .as_ref()
-            .map(|a| a.alias.clone())
-            .filter(|alias| !alias.is_empty());
-        let base_skin = assets
-            .as_ref()
-            .and_then(|a| a.base_skin_of(entry_id))
-            .map(skin_number);
-
-        let library_dir = self.paths.library_dir.join(champ_id.to_string());
-        let mods_dir = self.paths.mods_dir.clone();
-        let cache_dir = self.paths.state_dir.clone();
-        let built = tokio::task::spawn_blocking(move || {
-            let alias = resolve_alias_with_id(
-                &game_dir,
-                client_alias.as_deref(),
-                Some(champ_id),
-                &library_dir,
-            )
-            .ok_or_else(|| dekan_classic::error::ClassicError::ChampionNotFound {
-                alias: format!("no WAD alias found for champion {champ_id}"),
-            })?;
-            let champion = StandardChampion::open(&game_dir, &alias)?
-                .with_cache_dir(&cache_dir)
-                .with_options(generation_options());
-            champion.build_mod(skin, base_skin, &mods_dir)
-        })
-        .await;
-
-        match built {
-            Ok(Ok(folder)) => {
-                info!(
-                    champ_id,
-                    entry_id,
-                    folder = %folder,
-                    "Dynamic skin mod generated directly from installed game WAD"
-                );
-                Some(vec![folder])
-            }
-            Ok(Err(e)) => {
-                warn!(
-                    champ_id,
-                    entry_id,
-                    error = %e,
-                    "Could not generate dynamic skin from installed game WAD"
-                );
-                if report_failure {
-                    set_injection_status(
-                        &self.state_tx,
-                        InjectionStatus::Failed {
-                            error: format!("Dynamic skin generation failed: {e}"),
-                        },
-                    );
-                }
-                None
-            }
-            Err(e) => {
-                error!(champ_id, error = %e, "Dynamic skin generation task failed");
                 None
             }
         }
@@ -1237,27 +671,36 @@ impl InjectionTrigger {
         }
     }
 
-    async fn lcu_client(&self) -> Option<dekan_lcu::client::LcuClient> {
-        let discovery =
-            tokio::task::spawn_blocking(|| dekan_lcu::lockfile::Lockfile::discover(None)).await;
-        let lockfile = match discovery {
-            Ok(Ok(lockfile)) => lockfile,
-            Ok(Err(e)) => {
-                warn!(error = %e, "No LCU lockfile; the skin cannot be registered in champ select");
-                return None;
-            }
+    async fn register_in_lobby(&self, picks: &[(u32, u32)]) {
+        let Some(client) = self.lcu_client().await else {
+            return;
+        };
+        let owned = match client.get_owned_skin_ids().await {
+            Ok(owned) => owned,
             Err(e) => {
-                warn!(error = %e, "Lockfile discovery task failed");
-                return None;
+                warn!(error = %e, "Owned skins unavailable; registering the base skins in the lobby");
+                std::collections::HashSet::new()
             }
         };
-        match dekan_lcu::client::LcuClient::new(&lockfile, dekan_lcu::client::DEFAULT_LCU_TIMEOUT) {
-            Ok(client) => Some(client),
-            Err(e) => {
-                warn!(error = %e, "Could not build the LCU client");
-                None
-            }
+        let skins: Vec<(u32, u32)> = picks
+            .iter()
+            .map(|&(champ_id, entry_id)| {
+                (
+                    champ_id,
+                    dekan_lcu::skin_registration::skin_to_register(champ_id, entry_id, &owned),
+                )
+            })
+            .collect();
+        if let Err(e) = client.set_lobby_slot_skins(&skins).await {
+            warn!(error = %e, skins = ?skins, "Could not register the skins in the lobby slots");
         }
+    }
+
+    async fn lcu_client(&self) -> Option<dekan_lcu::client::LcuClient> {
+        dekan_lcu::client::LcuClient::discover()
+            .await
+            .inspect_err(|e| warn!(error = %e, "No LCU client; the skin cannot be registered in champ select"))
+            .ok()
     }
 
     fn effective_game_dir(&self, pid: Option<u32>) -> PathBuf {
@@ -1281,9 +724,7 @@ impl InjectionTrigger {
     fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
         PipelineConfig {
             ltk_host_exe: self.paths.ltk_host_exe.clone(),
-            ltk_host_hash: AUDITED_LTK_HOST_HASH.into(),
             ltk_dll_path: self.paths.ltk_dll_path.clone(),
-            ltk_dll_hash: AUDITED_LTK_DLL_HASH.into(),
             ltk_flags: dekan_inject::ltk_host::default_flags(),
             overlay_config: OverlayConfig {
                 mods_dir: self.paths.mods_dir.clone(),
@@ -1307,7 +748,21 @@ const ARM_DEBOUNCE: Duration = Duration::from_millis(900);
 
 const INITIAL_ARM_DEBOUNCE: Duration = Duration::from_millis(100);
 
-const GAME_PROCESS_NAME: &str = "League of Legends.exe";
+fn prefer_lazy_wad_checks(game_dir: &Path) {
+    match dekan_platform::client_settings::disable_crash_reporting(game_dir) {
+        Ok(true) => info!(
+            "Turned the League client's crash reporting off so the injector checks archives as the game loads them"
+        ),
+        Ok(false) => debug!(
+            "The League client's crash reporting is already off or the client has no settings yet"
+        ),
+        Err(e) => warn!(
+            error = %e,
+            "Could not turn the League client's crash reporting off; the injector checks every archive as the match starts"
+        ),
+    }
+}
+const GAME_PROCESS_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ArmKey {
@@ -1320,6 +775,40 @@ struct ArmKey {
     classic_slot: Option<u32>,
 
     party: u64,
+
+    second: Option<(u32, u32)>,
+
+    lobby: bool,
+}
+
+impl ArmKey {
+    fn covers(&self, champ_id: u32) -> bool {
+        self.champ_id == champ_id || self.second.is_some_and(|(second, _)| second == champ_id)
+    }
+
+    fn entry_for(&self, champ_id: u32) -> Option<u32> {
+        if champ_id == self.champ_id {
+            self.entry_id
+        } else {
+            self.second
+                .filter(|(second, _)| *second == champ_id)
+                .map(|(_, entry_id)| entry_id)
+        }
+    }
+
+    fn picks(&self) -> Vec<(u32, u32)> {
+        self.entry_id
+            .map(|entry_id| (self.champ_id, entry_id))
+            .into_iter()
+            .chain(self.second)
+            .collect()
+    }
+}
+
+fn lobby_mods_fingerprint(mods: &dekan_core::mods::ModSelection, champions: &[u32]) -> u64 {
+    champions.iter().fold(0, |hash, champion| {
+        hash.rotate_left(7) ^ mods.fingerprint(Some(*champion))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1334,22 +823,8 @@ impl ArmRequest {
     }
 }
 
-fn generation_options() -> dekan_classic::generator::GenerationOptions {
-    let set_to = |name: &str, value: &str| {
-        std::env::var(name).is_ok_and(|v| v.trim().eq_ignore_ascii_case(value))
-    };
-    let options = dekan_classic::generator::GenerationOptions {
-        graph_in_slot0: set_to(dekan_core::env::SKIN_GRAPH, "slot0"),
-        chroma_keeps_classification: set_to(dekan_core::env::CHROMA_CLASSIFICATION, "source"),
-    };
-    if options != dekan_classic::generator::GenerationOptions::default() {
-        info!(?options, "Skin generation test variant active");
-    }
-    options
-}
-
 fn is_classic(champ_id: u32) -> bool {
-    dekan_classic::builder::ClassicIdMapper::is_classic_champion(champ_id)
+    dekan_classic::builder::is_classic_champion(champ_id)
 }
 
 fn build_key(
@@ -1387,43 +862,43 @@ fn build_key(
         mods,
         classic_slot,
         party,
+        second: None,
+        lobby: false,
     })
 }
 
-fn drop_incompatible_mods(staged: Vec<String>, mods_dir: &Path, game_dir: &Path) -> Vec<String> {
-    let Ok(game) = dekan_inject::overlay_builder::get_or_index_game(game_dir) else {
-        return staged;
-    };
-    let game_hashes = dekan_inject::mod_compat::game_hash_set(&game);
-    staged
+fn arms_in_lobby(state: &dekan_core::state::AppState) -> bool {
+    state.lobby.is_some() && state.phase.is_before_champ_select()
+}
+
+fn lobby_arm_key(state: &dekan_core::state::AppState) -> Option<ArmKey> {
+    let lobby = state.lobby.as_ref()?;
+    let mut chosen = lobby
+        .chosen_in_slot_order()
         .into_iter()
-        .filter(|name| {
-            let wad_dir = mods_dir.join(name).join("WAD");
-            let Ok(entries) = std::fs::read_dir(&wad_dir) else {
-                return true;
-            };
-            let mut dangling = Vec::new();
-            for wad in entries.flatten().map(|e| e.path()) {
-                if wad.extension().is_none_or(|ext| ext != "client") || !wad.is_file() {
-                    continue;
-                }
-                if let Ok(compat) = dekan_inject::mod_compat::check_wad(&wad, &game_hashes) {
-                    dangling.extend(compat.dangling);
-                }
-            }
-            if dangling.is_empty() {
-                true
-            } else {
-                warn!(
-                    mod_name = %name,
-                    dangling = ?dangling,
-                    "Custom mod is incompatible with the installed patch (its PROP links a .bin the \
-                     game no longer has); dropped so it does not crash the game on the loading screen"
-                );
-                false
-            }
-        })
-        .collect()
+        .map(|target| (target.champion_id, target.package_entry_id()))
+        .filter(|&(champ_id, entry_id)| {
+            !is_classic(champ_id) && !dekan_core::selection::is_base_skin(entry_id, champ_id)
+        });
+    let first = chosen.next();
+    let second = chosen.next();
+    let champions = lobby.champions();
+    let champ_id = first
+        .map(|(champ_id, _)| champ_id)
+        .or_else(|| champions.first().copied())?;
+    let mods = lobby_mods_fingerprint(&state.mods, &champions);
+    if first.is_none() && mods == 0 {
+        return None;
+    }
+    Some(ArmKey {
+        champ_id,
+        entry_id: first.map(|(_, entry)| entry),
+        mods,
+        classic_slot: None,
+        party: 0,
+        second,
+        lobby: true,
+    })
 }
 
 fn party_skins(state: &dekan_core::state::AppState) -> dekan_core::party::VerifiedParty {
@@ -1476,6 +951,12 @@ enum WantedSkin {
 }
 
 fn wanted_skin(state: &dekan_core::state::AppState) -> WantedSkin {
+    if arms_in_lobby(state) {
+        return match lobby_arm_key(state) {
+            Some(key) => WantedSkin::Skin(key),
+            None => WantedSkin::Nothing,
+        };
+    }
     let Some(champ_id) = state.champion_id else {
         let nothing_at_all = state.overlay_target.is_none() && state.mods.fingerprint(None) == 0;
         return if nothing_at_all {
@@ -1490,9 +971,7 @@ fn wanted_skin(state: &dekan_core::state::AppState) -> WantedSkin {
         .as_ref()
         .filter(|target| target.matches_champion(champ_id))
         .map(dekan_core::overlay::OverlayTarget::package_entry_id)
-        .filter(|entry_id| {
-            !dekan_core::selection::SelectionMode::is_base_skin(*entry_id, champ_id)
-        });
+        .filter(|entry_id| !dekan_core::selection::is_base_skin(*entry_id, champ_id));
 
     let (party, _) = party_skins(state);
     match build_key(
@@ -1537,122 +1016,6 @@ fn arm_decision(wanted: WantedSkin, current: Option<ArmKey>) -> ArmDecision {
         key,
         due: tokio::time::Instant::now() + debounce,
     })
-}
-
-fn find_skin_archive(candidate_roots: &[PathBuf], champ_id: u32, skin_id: u32) -> Option<PathBuf> {
-    for root in candidate_roots {
-        if !root.is_dir() {
-            continue;
-        }
-
-        let p1 = root
-            .join(champ_id.to_string())
-            .join(skin_id.to_string())
-            .join(format!("{skin_id}.fantome"));
-        if p1.is_file() {
-            return Some(p1);
-        }
-
-        let p2 = root
-            .join(champ_id.to_string())
-            .join(format!("{skin_id}.fantome"));
-        if p2.is_file() {
-            return Some(p2);
-        }
-
-        let p3 = root.join(format!("{champ_id}_{skin_id}.fantome"));
-        if p3.is_file() {
-            return Some(p3);
-        }
-
-        let p4 = root.join(format!("{skin_id}.fantome"));
-        if p4.is_file() {
-            return Some(p4);
-        }
-
-        let p5 = root.join(champ_id.to_string()).join(skin_id.to_string());
-        if p5.is_dir() {
-            return Some(p5);
-        }
-    }
-    None
-}
-
-fn extracted_mod_is_complete(mod_dir: &Path) -> bool {
-    let wad_dir = ["WAD", "wad"]
-        .iter()
-        .map(|name| mod_dir.join(name))
-        .find(|path| path.is_dir());
-
-    let Some(wad_dir) = wad_dir else {
-        return false;
-    };
-
-    std::fs::read_dir(wad_dir)
-        .map(|entries| entries.flatten().any(|entry| entry.path().is_file()))
-        .unwrap_or(false)
-}
-
-fn prepare_mod_directory(archive_path: &Path, target_dir: &Path) -> std::io::Result<()> {
-    if target_dir.exists() {
-        if extracted_mod_is_complete(target_dir) {
-            return Ok(());
-        }
-
-        warn!(
-            mod_dir = %target_dir.display(),
-            "Extracted mod directory has no WAD; discarding it and extracting again"
-        );
-        std::fs::remove_dir_all(target_dir)?;
-    }
-
-    if archive_path.is_dir() {
-        copy_dir_all(archive_path, target_dir)?;
-        return Ok(());
-    }
-
-    std::fs::create_dir_all(target_dir)?;
-    let file = std::fs::File::open(archive_path)?;
-    let mut zip_archive =
-        zip::ZipArchive::new(file).map_err(|e| std::io::Error::other(format!("zip error: {e}")))?;
-
-    for i in 0..zip_archive.len() {
-        let mut zip_file = zip_archive
-            .by_index(i)
-            .map_err(|e| std::io::Error::other(format!("zip error: {e}")))?;
-        let outpath = match zip_file.enclosed_name() {
-            Some(path) => target_dir.join(path),
-            None => continue,
-        };
-
-        if zip_file.is_dir() {
-            std::fs::create_dir_all(&outpath)?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                if !parent.exists() {
-                    std::fs::create_dir_all(parent)?;
-                }
-            }
-            let mut out = std::fs::File::create(&outpath)?;
-            std::io::copy(&mut zip_file, &mut out)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -9,15 +9,22 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::RwLock;
-use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{Sender, channel};
+use tokio::sync::{RwLock, Semaphore};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 pub const MAX_MEMBERS: usize = 5;
 
 pub const MAX_MESSAGE_BYTES: usize = 8192;
+
+pub const MAX_CONNECTIONS: usize = 1024;
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+const MEMBER_QUEUE: usize = 8;
 
 pub fn is_valid_room_key(key: &str) -> bool {
     key.len() == 32
@@ -57,7 +64,7 @@ pub enum ClientInbound {
 
 struct MemberSession {
     info: Option<MemberInfo>,
-    sender: UnboundedSender<String>,
+    sender: Sender<String>,
 }
 
 pub struct Room {
@@ -107,11 +114,11 @@ impl Room {
     pub fn broadcast(&self) {
         let snap = self.snapshot();
         for session in self.members.values() {
-            let _ = session.sender.send(snap.clone()); // ignore-ok: closed client drops next
+            let _ = session.sender.try_send(snap.clone()); // ignore-ok: a full queue skips this snapshot; the next one carries the whole room
         }
     }
 
-    pub fn add_member(&mut self, sender: UnboundedSender<String>) -> usize {
+    pub fn add_member(&mut self, sender: Sender<String>) -> usize {
         let id = self.next_session_id;
         self.next_session_id += 1;
         self.members.insert(
@@ -121,7 +128,7 @@ impl Room {
                 sender: sender.clone(),
             },
         );
-        let _ = sender.send(self.snapshot()); // ignore-ok: initial snapshot
+        let _ = sender.try_send(self.snapshot()); // ignore-ok: initial snapshot into an empty queue
         id
     }
 
@@ -183,6 +190,7 @@ impl RelayServer {
     }
 
     pub async fn run(self: Arc<Self>, listener: TcpListener, cancel: CancellationToken) {
+        let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,
@@ -195,9 +203,19 @@ impl RelayServer {
                             continue;
                         }
                     };
+                    let Ok(slot) = slots.clone().try_acquire_owned() else {
+                        debug!(peer = %peer_addr, "Connection refused: the relay is at its connection limit");
+                        continue;
+                    };
                     let server = self.clone();
                     tokio::spawn(async move {
-                        server.handle_connection(stream, peer_addr).await;
+                        let _slot = slot;
+                        if tokio::time::timeout(HANDSHAKE_TIMEOUT * 6, server.handle_connection(stream, peer_addr))
+                            .await
+                            .is_err()
+                        {
+                            debug!(peer = %peer_addr, "Connection closed: no complete session in time");
+                        }
                     });
                 }
             }
@@ -206,8 +224,8 @@ impl RelayServer {
 
     async fn handle_connection(&self, mut stream: TcpStream, peer: std::net::SocketAddr) {
         let mut peek_buf = [0u8; 1024];
-        let n = match stream.peek(&mut peek_buf).await {
-            Ok(n) if n > 0 => n,
+        let n = match tokio::time::timeout(HANDSHAKE_TIMEOUT, stream.peek(&mut peek_buf)).await {
+            Ok(Ok(n)) if n > 0 => n,
             _ => return,
         };
 
@@ -244,17 +262,9 @@ impl RelayServer {
             return;
         };
 
-        let room_arc = {
-            let mut rooms = self.rooms.write().await;
-            rooms
-                .entry(key.clone())
-                .or_insert_with(|| Arc::new(RwLock::new(Room::new())))
-                .clone()
-        };
-
-        {
-            let room = room_arc.read().await;
-            if room.is_full() {
+        let existing = self.rooms.read().await.get(&key).cloned();
+        if let Some(room) = existing {
+            if room.read().await.is_full() {
                 let mut discard = [0u8; 1024];
                 let _ = stream.read(&mut discard).await; // ignore-ok: consume request before response
                 let _ = stream.write_all(ROOM_FULL_RESPONSE).await; // ignore-ok: client disconnect
@@ -264,12 +274,28 @@ impl RelayServer {
             }
         }
 
-        let ws_stream = match tokio_tungstenite::accept_async(stream).await {
-            Ok(ws) => ws,
-            Err(e) => {
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(MAX_MESSAGE_BYTES))
+            .max_frame_size(Some(MAX_MESSAGE_BYTES));
+        let handshake = tokio_tungstenite::accept_async_with_config(stream, Some(config));
+        let ws_stream = match tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake).await {
+            Ok(Ok(ws)) => ws,
+            Ok(Err(e)) => {
                 debug!(peer = %peer, error = %e, "WebSocket handshake failed");
                 return;
             }
+            Err(_) => {
+                debug!(peer = %peer, "WebSocket handshake timed out");
+                return;
+            }
+        };
+
+        let room_arc = {
+            let mut rooms = self.rooms.write().await;
+            rooms
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(RwLock::new(Room::new())))
+                .clone()
         };
 
         debug!(peer = %peer, room = %key, "Client joined room");
@@ -298,10 +324,15 @@ impl RelayServer {
         room_key: String,
     ) {
         let (mut write, mut read) = ws.split();
-        let (tx, mut rx) = unbounded_channel::<String>();
+        let (tx, mut rx) = channel::<String>(MEMBER_QUEUE);
 
         let session_id = {
             let mut room = room_arc.write().await;
+            if room.is_full() {
+                drop(room);
+                let _ = write.close().await; // ignore-ok: the room filled up during the handshake
+                return;
+            }
             room.add_member(tx)
         };
 
@@ -381,6 +412,59 @@ impl RelayServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_failed_handshakes_leave_no_room_and_oversized_frames_close_the_session() {
+        use tokio::io::AsyncWriteExt;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = Arc::new(RelayServer::new());
+        let cancel = CancellationToken::new();
+        let running = tokio::spawn(server.clone().run(listener, cancel.clone()));
+        let key = "0123456789abcdef0123456789abcdef";
+
+        for _ in 0..50 {
+            let mut raw = TcpStream::connect(addr).await.expect("connect");
+            raw.write_all(
+                format!("GET /room?key={key} HTTP/1.1\r\nUpgrade: websocket\r\n\r\n").as_bytes(),
+            )
+            .await
+            .expect("write");
+            drop(raw);
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            server.rooms.read().await.is_empty(),
+            "a failed handshake created a room"
+        );
+
+        let url = format!("ws://{addr}/room?key={key}");
+        let (mut ws, _) = tokio_tungstenite::connect_async(url).await.expect("join");
+        let first = ws.next().await.expect("snapshot").expect("frame");
+        assert!(first.to_text().expect("text").contains("members"));
+        assert_eq!(server.rooms.read().await.len(), 1);
+        let oversized = "x".repeat(MAX_MESSAGE_BYTES * 4);
+        let _ = ws.send(Message::Text(oversized.into())).await; // ignore-ok: the server may already be closing
+        let closed = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match ws.next().await {
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
+                    Some(Ok(_)) => {}
+                }
+            }
+        })
+        .await;
+        assert!(closed.is_ok(), "an oversized frame must end the session");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            server.rooms.read().await.is_empty(),
+            "the emptied room is removed"
+        );
+
+        cancel.cancel();
+        let _ = running.await; // ignore-ok: the server loop ends with the token
+    }
 
     #[test]
     fn test_valid_room_key() {

@@ -1,5 +1,4 @@
 use super::*;
-use crate::dll_validator::compute_sha256;
 use dekan_core::state::new_state_channel;
 
 #[test]
@@ -26,12 +25,10 @@ fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
     let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
 }
 
-fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> PipelineConfig {
+fn temp_config(dir: &std::path::Path, host_exe: PathBuf) -> PipelineConfig {
     PipelineConfig {
         ltk_host_exe: host_exe,
-        ltk_host_hash: host_hash,
         ltk_dll_path: dir.join("ltk_patcher_dll.dll"),
-        ltk_dll_hash: String::new(),
         ltk_flags: 0,
         overlay_config: OverlayConfig {
             mods_dir: dir.join("mods"),
@@ -48,8 +45,10 @@ fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> P
 async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
     use dekan_wad::writer::{WadWriter, optimal_raw};
 
-    let dir =
-        std::env::temp_dir().join(format!("dekan_test_pipeline_native_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "dekan_test_pipeline_native_{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
     let wad = |path: &std::path::Path, entries: &[(u64, &[u8])]| {
         let mut writer = WadWriter::default();
@@ -70,7 +69,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
     std::fs::write(mod_dir.join("META/info.json"), "{}").expect("info");
     wad(&mod_dir.join("WAD/Zed.wad.client"), &[(1, b"new skin0")]);
 
-    let config = temp_config(&dir, dir.join("host"), String::new());
+    let config = temp_config(&dir, dir.join("host"));
     let pipeline = InjectionPipeline::new(config, None);
 
     let build = pipeline
@@ -94,7 +93,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
+async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
     let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_hash");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -102,16 +101,15 @@ async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
     std::fs::write(&host_file, b"test host contents").unwrap();
 
     let (tx, rx) = new_state_channel();
-    let config = temp_config(
-        &temp_dir,
-        host_file,
-        "0000000000000000000000000000000000000000000000000000000000000000".into(),
-    );
+    let config = temp_config(&temp_dir, host_file);
 
     let pipeline = InjectionPipeline::new(config, Some(tx));
-    let result = pipeline.execute(&["my_skin_mod".into()], 1234, 5678).await;
+    let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
 
-    assert!(result.is_err(), "should abort on wrong hash");
+    assert!(
+        matches!(result, Err(InjectError::UntrustedInjector { .. })),
+        "an injector without the publisher's signature must stop the pipeline"
+    );
     assert!(matches!(
         rx.borrow().injection,
         InjectionStatus::Failed { .. }
@@ -120,99 +118,88 @@ async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
     std::fs::remove_dir_all(&temp_dir).ok();
 }
 
-#[tokio::test]
-async fn test_pipeline_fails_loudly_when_the_overlay_cannot_be_built() {
-    let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_resume");
-    std::fs::create_dir_all(&temp_dir).unwrap();
-
-    let host_file = temp_dir.join("ltk_patcher_host.exe");
-    let host_bytes = b"valid audited host binary sample";
-    std::fs::write(&host_file, host_bytes).unwrap();
-
-    let (tx, rx) = new_state_channel();
-    let config = temp_config(&temp_dir, host_file, compute_sha256(host_bytes));
-
-    let pipeline = InjectionPipeline::new(config, Some(tx));
-    let result = pipeline
-        .execute(&["my_skin_mod".into()], std::process::id(), 0)
-        .await;
-
-    assert!(result.is_err(), "an unbuildable overlay must fail loudly");
-    assert!(
-        matches!(rx.borrow().injection, InjectionStatus::Failed { .. }),
-        "failure must be published, not swallowed"
-    );
-
-    std::fs::remove_dir_all(&temp_dir).ok();
-}
-
-fn fake_runoverlay(dir: &std::path::Path, script: &str) -> (PipelineConfig, Vec<String>) {
-    let config = temp_config(dir, dir.join("dll"), String::new());
-    let args = vec!["/C".to_string(), script.to_string()];
-    (config, args)
-}
-
-fn cmd_exe() -> PathBuf {
-    PathBuf::from(
-        std::env::var("COMSPEC").unwrap_or_else(|_| r"C:\Windows\System32\cmd.exe".into()),
-    )
-}
-
-#[tokio::test]
-async fn test_hook_confirmed_only_on_the_patcher_ready_line() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) = fake_runoverlay(
-        &dir,
-        "echo Status: Waiting for league match to start&echo Status: Patching&echo Status: Waiting for exit&ping -n 4 127.0.0.1 >nul",
-    );
-    config.hook_timeout = Duration::from_secs(10);
-
-    let config_timeout = config.hook_timeout;
+async fn fake_host(
+    name: &str,
+    script: &[&str],
+    hook_timeout: Duration,
+) -> (InjectionPipeline, OverlayProcess) {
+    let dir = std::env::temp_dir().join(format!("dekan_fake_host_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let host = dir.join("fake_host.cmd");
+    let body: String = std::iter::once("@echo off")
+        .chain(script.iter().copied())
+        .map(|line| format!("{line}\r\n"))
+        .collect();
+    std::fs::write(&host, body).expect("fake host script");
+    let mut config = temp_config(&dir, host);
+    config.hook_timeout = hook_timeout;
     let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+    let overlay = pipeline.spawn_patcher().await.expect("spawn fake host");
+    (pipeline, overlay)
+}
+
+const STALL: &str = "ping -n 4 127.0.0.1 >nul";
+
+#[tokio::test]
+async fn test_hook_confirmed_only_when_the_host_reports_injected() {
+    let budget = Duration::from_secs(10);
+    let (pipeline, mut overlay) = fake_host(
+        "confirmed",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "echo dll 1.00 1 2 INFO ltk_patcher_dll: redirected wad: Zed.wad.client",
+            "echo status 1.10 injected dll attached",
+            STALL,
+        ],
+        budget,
+    )
+    .await;
 
     assert_eq!(
-        pipeline.confirm_hook(&mut overlay, config_timeout).await,
+        pipeline.confirm_hook(&mut overlay, budget).await,
         InjectionStatus::Confirmed
     );
     overlay.shutdown().await;
 }
 
 #[tokio::test]
-async fn test_progress_lines_alone_are_not_a_confirmation() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) = fake_runoverlay(
-        &dir,
-        "echo Status: Waiting for league match to start&echo Status: Patching&ping -n 6 127.0.0.1 >nul",
-    );
-    config.hook_timeout = Duration::from_millis(700);
-
-    let config_timeout = config.hook_timeout;
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+async fn test_arming_and_legacy_text_alone_are_not_a_confirmation() {
+    let budget = Duration::from_millis(700);
+    let (pipeline, mut overlay) = fake_host(
+        "progress",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "echo Status: Waiting for exit",
+            "ping -n 6 127.0.0.1 >nul",
+        ],
+        budget,
+    )
+    .await;
 
     assert_eq!(
-        pipeline.confirm_hook(&mut overlay, config_timeout).await,
+        pipeline.confirm_hook(&mut overlay, budget).await,
         InjectionStatus::Unconfirmed,
-        "reaching 'Patching' is progress, not a hook"
+        "arming is progress, not a hook"
     );
     overlay.shutdown().await;
 }
 
 #[tokio::test]
 async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) =
-        fake_runoverlay(&dir, "echo Status: Waiting for league match to start");
-    config.hook_timeout = Duration::from_secs(3);
-
-    let config_timeout = config.hook_timeout;
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+    let budget = Duration::from_secs(5);
+    let (pipeline, mut overlay) = fake_host(
+        "dying",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "ping -n 2 127.0.0.1 >nul",
+        ],
+        budget,
+    )
+    .await;
 
     assert!(
         matches!(
-            pipeline.confirm_hook(&mut overlay, config_timeout).await,
+            pipeline.confirm_hook(&mut overlay, budget).await,
             InjectionStatus::Failed { .. }
         ),
         "an overlay process that died cannot be reported as merely unconfirmed"
@@ -221,11 +208,7 @@ async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
 
 #[tokio::test]
 async fn test_a_spent_late_budget_ends_unconfirmed() {
-    let dir = std::env::temp_dir();
-    let (config, args) = fake_runoverlay(&dir, "ping -n 4 127.0.0.1 >nul");
-
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+    let (pipeline, mut overlay) = fake_host("spent", &[STALL], Duration::from_secs(10)).await;
 
     let started = std::time::Instant::now();
     let status = pipeline.confirm_hook(&mut overlay, Duration::ZERO).await;

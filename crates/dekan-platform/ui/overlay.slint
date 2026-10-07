@@ -1,0 +1,1007 @@
+import { Theme, ExposeLayer, GoldButton, Field, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
+import { ScrollView, ComboBox } from "std-widgets.slint";
+
+export struct ChromaGem {
+    id: int,
+    name: string,
+    color: color,
+    form: bool,
+    has-preview: bool,
+}
+
+export struct SkinCard {
+    id: int,
+    name: string,
+    name-unknown: bool,
+    tile: image,
+    has-tile: bool,
+    initial: string,
+    chromas: [ChromaGem],
+}
+
+export struct LobbyChoice {
+    id: int,
+    name: string,
+    active: bool,
+}
+
+export struct SkinRow {
+    cards: [SkinCard],
+}
+
+export enum ModLineKind { section, group, entry, empty, message }
+
+export struct ModLine {
+    kind: ModLineKind,
+    text: string,
+    detail: string,
+    slot: string,
+    id: string,
+    selected: bool,
+    radio: bool,
+    none: bool,
+}
+
+export struct OverlayLabels {
+    version: string,
+    search-skin: string,
+    search-mod: string,
+    dice: string,
+    minimize: string,
+    restore: string,
+    hide: string,
+    tab-skins: string,
+    tab-mods: string,
+    historic-tag: string,
+    random-tag: string,
+    preset-tag: string,
+    pin: string,
+    unpin: string,
+    profile-new: string,
+    profile-delete: string,
+    connected: string,
+    import-mod: string,
+    open-folder: string,
+}
+
+export enum SelectionOrigin { none, historic, random, preset }
+
+component Chamfer inherits Path {
+    in property <length> cut: 9px;
+    viewbox-width: self.width / 1px;
+    viewbox-height: self.height / 1px;
+    commands: "M 0.5 0.5 L " + (self.width / 1px - self.cut / 1px) + " 0.5 L " + (self.width / 1px - 0.5) + " " + (self.cut / 1px) + " L " + (self.width / 1px - 0.5) + " " + (self.height / 1px - 0.5) + " L 0.5 " + (self.height / 1px - 0.5) + " Z";
+    stroke-width: 1px;
+}
+
+component GemShape inherits Path {
+    in property <bool> form;
+    viewbox-width: 18;
+    viewbox-height: 19;
+    commands: root.form ? "M 9 1 L 17 9.5 L 9 18 L 1 9.5 Z" : "M 9 0 L 18 7.2 L 14.8 19 L 3.2 19 L 0 7.2 Z";
+}
+
+component Gem inherits Rectangle {
+    in property <ChromaGem> gem;
+    in property <bool> selected;
+    callback chosen();
+    callback hovered(bool);
+    property <length> grow: root.selected ? 4px : touch.has-hover ? 2px : 0px;
+    width: 18px;
+    height: 19px;
+    animate grow { duration: 150ms; easing: ease-out; }
+    GemShape {
+        x: -root.grow / 2;
+        y: -root.grow / 2 - (touch.has-hover && !root.selected ? 2px : 0px);
+        width: root.width + root.grow;
+        height: root.height + root.grow;
+        fill: root.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    }
+    GemShape {
+        form: root.gem.form;
+        x: 2px - root.grow / 2;
+        y: 2px - root.grow / 2 - (touch.has-hover && !root.selected ? 2px : 0px);
+        width: root.width - 4px + root.grow;
+        height: root.height - 4px + root.grow;
+        fill: root.gem.form ? Theme.gold-dim : root.gem.color;
+    }
+    if root.selected: Text {
+        text: "✓";
+        color: white;
+        font-size: 10px;
+        font-weight: 900;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(); }
+        changed has-hover => { root.hovered(self.has-hover); }
+    }
+    accessible-role: button;
+    accessible-label: root.gem.name;
+    accessible-action-default => { root.chosen(); }
+}
+
+component Card inherits Rectangle {
+    in property <SkinCard> card;
+    in property <int> selected-id;
+    in property <int> selected-skin;
+    in property <SelectionOrigin> origin;
+    in property <OverlayLabels> labels;
+    callback chosen(int);
+    callback gem-hovered(ChromaGem, length, length, bool);
+    property <bool> selected: root.card.id == root.selected-skin;
+    property <length> gems-width: root.width - 12px - 56px - 12px - 26px;
+    property <int> per-line: max(1, floor((self.gems-width + 7px) / 25px));
+    property <int> gem-rows: ceil(root.card.chromas.length / root.per-line);
+    property <bool> tagged: root.selected && root.origin != SelectionOrigin.none;
+    property <length> details: 18px + (root.tagged ? 24px : 0px) + (root.card.chromas.length > 0 ? root.gem-rows * 26px : 0px);
+    height: max(56px, root.details) + 24px;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(root.card.id); }
+    }
+    Rectangle {
+        border-radius: 3px;
+        drop-shadow-blur: root.selected ? 12px : 0px;
+        drop-shadow-color: Theme.gold.with-alpha(0.14);
+        background: root.selected ? Theme.card : transparent;
+        animate drop-shadow-blur { duration: 180ms; }
+    }
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        fill: root.selected ? Theme.card-fill-selected : touch.has-hover ? Theme.card-fill-hover : Theme.card-fill;
+        stroke: root.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    }
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 2px;
+        height: parent.height;
+        background: root.selected || touch.has-hover ? Theme.gold : Theme.line;
+    }
+    HorizontalLayout {
+        padding-top: 11px;
+        padding-bottom: 13px;
+        padding-left: 12px;
+        padding-right: 26px;
+        spacing: 12px;
+        Rectangle {
+            width: 56px;
+            height: 56px;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: root.selected ? Theme.gold : Theme.line;
+            background: @linear-gradient(160deg, Theme.card-hover 0%, Theme.bg-0 100%);
+            clip: true;
+            if root.card.has-tile: Image {
+                width: 100%;
+                height: 100%;
+                source: root.card.tile;
+                image-fit: cover;
+            }
+            if !root.card.has-tile: Text {
+                text: root.card.initial;
+                color: Theme.gold-dim;
+                font-family: Theme.serif;
+                font-size: 22px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            spacing: 7px;
+            alignment: center;
+            Text {
+                text: root.card.name.to-uppercase();
+                color: root.card.name-unknown ? Theme.muted : Theme.text;
+                font-italic: root.card.name-unknown;
+                font-size: Theme.text-base;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+                overflow: elide;
+            }
+            if root.tagged: HorizontalLayout {
+                alignment: start;
+                Rectangle {
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: Theme.gold-dim;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        padding-top: 1px;
+                        padding-bottom: 1px;
+                        Text {
+                            text: (root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.origin == SelectionOrigin.preset ? root.labels.preset-tag : root.labels.random-tag).to-uppercase();
+                            color: Theme.gold;
+                            font-size: Theme.text-xs;
+                            letter-spacing: 0.4px;
+                        }
+                    }
+                }
+            }
+            if root.card.chromas.length > 0: Rectangle {
+                height: root.gem-rows * 26px - 7px;
+                for gem[index] in root.card.chromas: Gem {
+                    x: mod(index, root.per-line) * 25px;
+                    y: floor(index / root.per-line) * 26px;
+                    gem: gem;
+                    selected: gem.id == root.selected-id;
+                    chosen => { root.chosen(gem.id); }
+                    hovered(on) => {
+                        root.gem-hovered(gem, self.absolute-position.x + self.width / 2, self.absolute-position.y, on);
+                    }
+                }
+            }
+        }
+    }
+    accessible-role: button;
+    accessible-label: root.card.name;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.chosen(root.card.id); }
+    if root.selected: Text {
+        x: parent.width - 22px;
+        y: 8px;
+        text: "✓";
+        color: Theme.gold;
+        font-size: Theme.text-sm;
+        font-weight: 700;
+    }
+}
+
+component Tab inherits Rectangle {
+    in property <string> text;
+    in property <string> count;
+    in property <bool> active;
+    callback clicked();
+    height: 30px;
+    horizontal-stretch: 1;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: root.active ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    background: root.active ? #1a1912 : Theme.panel;
+    animate border-color { duration: 120ms; }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 6px;
+        Text {
+            text: root.text.to-uppercase();
+            color: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
+            font-size: Theme.text-sm;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            vertical-alignment: center;
+        }
+        if root.count != "": Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 16px;
+            min-width: 16px;
+            border-radius: 8px;
+            background: Theme.gold-dim;
+            HorizontalLayout {
+                padding-left: 5px;
+                padding-right: 5px;
+                Text {
+                    text: root.count;
+                    color: Theme.gold-bright;
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-checkable: true;
+    accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
+}
+
+component ModEntry inherits Rectangle {
+    in property <ModLine> line;
+    callback clicked();
+    min-height: 34px;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: root.line.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    background: root.line.selected ? Theme.card-fill-selected : Theme.card-fill;
+    Rectangle {
+        x: 0;
+        width: 2px;
+        background: root.line.selected || touch.has-hover ? Theme.gold : Theme.line;
+    }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-width: 1px;
+                border-color: root.line.selected ? Theme.gold : Theme.gold-dim;
+                border-radius: root.line.radio ? 7px : 2px;
+                background: Theme.bg-0;
+                if root.line.selected: Rectangle {
+                    x: 3px;
+                    y: 3px;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: root.line.radio ? 4px : 1px;
+                    background: Theme.gold;
+                }
+            }
+        }
+        Text {
+            text: root.line.text;
+            color: root.line.none ? Theme.muted : Theme.text;
+            font-italic: root.line.none;
+            font-size: Theme.text-base;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: checkbox;
+    accessible-label: root.line.text;
+    accessible-checkable: true;
+    accessible-checked: root.line.selected;
+    accessible-description: root.line.detail;
+    accessible-action-default => { root.clicked(); }
+}
+
+component HeaderButton inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    callback clicked();
+    width: 28px;
+    border-radius: 4px;
+    background: touch.has-hover ? Theme.gold.with-alpha(0.18) : transparent;
+    animate background { duration: 120ms; }
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 11px;
+        height: 11px;
+        viewbox-width: 11;
+        viewbox-height: 11;
+        stroke: touch.has-hover ? Theme.gold-bright : Theme.muted;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: root.icon;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+}
+
+component PinButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 30px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.active ? Theme.gold : touch.has-hover && root.enabled ? Theme.gold-dim : Theme.control-line;
+    background: root.active ? Theme.gold.with-alpha(0.18) : Theme.panel;
+    opacity: root.enabled ? 1 : 0.45;
+    animate border-color { duration: 120ms; }
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 13px;
+        height: 13px;
+        viewbox-width: 13;
+        viewbox-height: 13;
+        stroke: root.active ? Theme.gold-bright : Theme.muted;
+        stroke-width: 1.3px;
+        fill: root.active ? Theme.gold : transparent;
+        commands: "M 4 1 L 9 1 L 8 5 L 10.5 7.5 L 2.5 7.5 L 5 5 Z M 6.5 7.5 L 6.5 12.5";
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.active;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+}
+
+component Dice inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+    width: 34px;
+    height: 34px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    background: touch.pressed ? Theme.card : Theme.panel;
+    animate border-color { duration: 150ms; }
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 18px;
+        height: 18px;
+        viewbox-width: 18;
+        viewbox-height: 18;
+        stroke: Theme.gold;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: "M 4 1 L 14 1 Q 17 1 17 4 L 17 14 Q 17 17 14 17 L 4 17 Q 1 17 1 14 L 1 4 Q 1 1 4 1 Z";
+    }
+    for pip in [{x: 5.5px, y: 5.5px}, {x: 12.5px, y: 5.5px}, {x: 9px, y: 9px}, {x: 5.5px, y: 12.5px}, {x: 12.5px, y: 12.5px}]: Rectangle {
+        x: (parent.width - 18px) / 2 + pip.x - 1.5px;
+        y: (parent.height - 18px) / 2 + pip.y - 1.5px;
+        width: 3px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.gold;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+}
+
+export component OverlayWindow inherits Window {
+    in property <bool> expose-flip;
+    in property <OverlayLabels> labels;
+    in property <string> champion;
+    in property <image> portrait;
+    in property <bool> has-portrait;
+    in property <string> portrait-initial;
+    in property <string> notice;
+    in property <[LobbyChoice]> lobby-champions;
+    in property <[string]> profiles;
+    in-out property <int> profile-index;
+    in property <bool> pinned;
+    in property <bool> can-pin;
+    in property <bool> can-delete-profile;
+    in property <bool> mods-tab;
+    in property <string> mods-count;
+    in property <[SkinRow]> rows;
+    in property <[ModLine]> mod-lines;
+    in property <[string]> import-categories;
+    in-out property <int> import-index;
+    in property <string> empty-big;
+    in property <string> empty-sub;
+    in property <string> footer-right;
+    in property <bool> footer-quote;
+    in property <int> selected-id: -1;
+    in property <int> selected-skin: -1;
+    in property <SelectionOrigin> origin;
+    in-out property <string> search;
+    in property <bool> preview-visible;
+    in property <string> preview-name;
+    in property <image> preview-image;
+    in property <bool> preview-loading;
+    in property <length> preview-anchor-x;
+    in property <length> preview-anchor-y;
+    out property <int> columns: root.width >= 560px ? max(1, floor((root.width - 24px + 6px) / 256px)) : 1;
+    callback search-edited(string);
+    callback search-focused();
+    callback search-done();
+    callback choose(int);
+    callback random();
+    callback show-tab(bool);
+    callback mod-clicked(string, string);
+    callback import-mod(int);
+    callback open-mods-folder();
+    callback gem-hovered(ChromaGem, length, length, bool);
+    callback focus-champion(int);
+    callback pin-clicked();
+    callback profile-chosen(int);
+    callback profile-added();
+    callback profile-removed();
+    callback columns-changed(int);
+    callback scrolled();
+    callback drag();
+    callback resize();
+    callback hide-requested();
+    callback minimize();
+    in property <bool> collapsed;
+    out property <length> header-height: header.height;
+    title: "Dekan";
+    icon: @image-url("assets/logo.png");
+    no-frame: true;
+    always-on-top: true;
+    min-width: 320px;
+    min-height: root.collapsed ? 0px : 380px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+    changed columns => { root.columns-changed(self.columns); }
+
+    VerticalLayout {
+        header := Rectangle {
+            vertical-stretch: 0;
+            background: Theme.header;
+            TouchArea {
+                mouse-cursor: move;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.drag();
+                    }
+                }
+            }
+            VerticalLayout {
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 8px;
+                    padding-top: 9px;
+                    padding-bottom: 9px;
+                    spacing: 10px;
+                    Image {
+                        source: @image-url("assets/logo.png");
+                        width: 26px;
+                        height: 26px;
+                    }
+                    Wordmark {
+                        version: root.labels.version;
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+                    Rectangle {
+                        max-width: 170px;
+                        border-radius: 13px;
+                        border-width: 1px;
+                        border-color: Theme.line-gold;
+                        background: Theme.gold.with-alpha(0.08);
+                        HorizontalLayout {
+                            padding: 3px;
+                            padding-right: 10px;
+                            spacing: 7px;
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                border-radius: 11px;
+                                border-width: 1px;
+                                border-color: Theme.gold-dim;
+                                background: Theme.bg-0;
+                                clip: true;
+                                if root.has-portrait: Image {
+                                    width: 100%;
+                                    height: 100%;
+                                    source: root.portrait;
+                                    image-fit: cover;
+                                }
+                                if !root.has-portrait: Text {
+                                    text: root.portrait-initial;
+                                    color: Theme.gold-dim;
+                                    font-family: Theme.serif;
+                                    font-size: Theme.text-sm;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: root.champion;
+                                color: Theme.gold;
+                                font-size: Theme.text-sm;
+                                font-weight: 700;
+                                letter-spacing: 0.3px;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                    HeaderButton {
+                        label: root.collapsed ? root.labels.restore : root.labels.minimize;
+                        icon: root.collapsed ? "M 1.5 1.5 L 9.5 1.5 L 9.5 9.5 L 1.5 9.5 Z" : "M 1 8.5 L 10 8.5";
+                        clicked => { root.minimize(); }
+                    }
+                    HeaderButton {
+                        label: root.labels.hide;
+                        icon: "M 1 1 L 10 10 M 10 1 L 1 10";
+                        clicked => { root.hide-requested(); }
+                    }
+                }
+                Hairline {
+                    gold: true;
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 10px;
+            padding-bottom: 6px;
+            spacing: 6px;
+            search-field := Field {
+                search-icon: true;
+                text <=> root.search;
+                placeholder: root.mods-tab ? root.labels.search-mod : root.labels.search-skin;
+                edited => { root.search-edited(self.text); }
+                focus-requested => { root.search-focused(); }
+                accepted => {
+                    self.release-focus();
+                    root.search-done();
+                }
+                cancelled => {
+                    self.release-focus();
+                    root.search-done();
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Dice {
+                    label: root.labels.dice;
+                    clicked => { root.random(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            Tab {
+                text: root.labels.tab-skins;
+                active: !root.mods-tab;
+                clicked => { root.show-tab(false); }
+            }
+            Tab {
+                text: root.labels.tab-mods;
+                count: root.mods-count;
+                active: root.mods-tab;
+                clicked => { root.show-tab(true); }
+            }
+        }
+        if !root.mods-tab: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            ComboBox {
+                model: root.profiles;
+                current-index <=> root.profile-index;
+                horizontal-stretch: 1;
+                selected => { root.profile-chosen(self.current-index); }
+            }
+            PinButton {
+                label: root.pinned ? root.labels.unpin : root.labels.pin;
+                active: root.pinned;
+                enabled: root.can-pin;
+                clicked => { root.pin-clicked(); }
+            }
+            HeaderButton {
+                label: root.labels.profile-new;
+                icon: "M 5.5 1 L 5.5 10 M 1 5.5 L 10 5.5";
+                clicked => { root.profile-added(); }
+            }
+            if root.can-delete-profile: HeaderButton {
+                label: root.labels.profile-delete;
+                icon: "M 1 2.5 L 10 2.5 M 4 2.5 L 4 1 L 7 1 L 7 2.5 M 2 2.5 L 2.8 10 L 8.2 10 L 9 2.5";
+                clicked => { root.profile-removed(); }
+            }
+        }
+        if root.lobby-champions.length > 1: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            for choice in root.lobby-champions: Tab {
+                text: choice.name;
+                active: choice.active;
+                clicked => { root.focus-champion(choice.id); }
+            }
+        }
+        if root.notice != "": HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-bottom: 6px;
+            Rectangle {
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.gold-dim;
+                background: Theme.panel;
+                Rectangle {
+                    x: 0;
+                    width: 3px;
+                    background: Theme.gold;
+                }
+                HorizontalLayout {
+                    padding: 10px;
+                    padding-left: 13px;
+                    Text {
+                        text: root.notice;
+                        color: Theme.text;
+                        font-size: Theme.text-md;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        list := ScrollView {
+            vertical-stretch: 1;
+            changed viewport-y => { root.scrolled(); }
+            VerticalLayout {
+                width: list.visible-width;
+                alignment: start;
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 4px;
+                padding-bottom: 14px;
+                spacing: 6px;
+                if !root.mods-tab && root.rows.length == 0: VerticalLayout {
+                    min-height: list.visible-height - 24px;
+                    alignment: center;
+                    spacing: 8px;
+                    padding-left: 24px;
+                    padding-right: 24px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Image {
+                            source: @image-url("assets/logo.png");
+                            width: 40px;
+                            height: 40px;
+                            opacity: 0.28;
+                        }
+                    }
+                    Text {
+                        text: root.empty-big;
+                        color: Theme.gold-bright;
+                        font-size: Theme.text-base;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.empty-sub;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+                if !root.mods-tab: VerticalLayout {
+                    spacing: 6px;
+                    for row in root.rows: HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        for card in row.cards: Card {
+                            width: (list.visible-width - 24px - (root.columns - 1) * 6px) / root.columns;
+                            card: card;
+                            selected-id: root.selected-id;
+                            selected-skin: root.selected-skin;
+                            origin: root.origin;
+                            labels: root.labels;
+                            chosen(id) => { root.choose(id); }
+                            gem-hovered(gem, x, y, on) => { root.gem-hovered(gem, x, y, on); }
+                        }
+                    }
+                }
+                if root.mods-tab: VerticalLayout {
+                    spacing: 5px;
+                    for line in root.mod-lines: VerticalLayout {
+                        if line.kind == ModLineKind.section: VerticalLayout {
+                            padding-top: 6px;
+                            padding-bottom: 2px;
+                            Caps {
+                                text: line.text.to-uppercase();
+                            }
+                        }
+                        if line.kind == ModLineKind.group: VerticalLayout {
+                            padding-top: 6px;
+                            Text {
+                                text: line.text;
+                                color: Theme.muted;
+                                font-size: Theme.text-xs;
+                                font-weight: 600;
+                                letter-spacing: 0.8px;
+                            }
+                        }
+                        if line.kind == ModLineKind.entry: ModEntry {
+                            line: line;
+                            clicked => { root.mod-clicked(line.slot, line.id); }
+                        }
+                        if line.kind == ModLineKind.empty: VerticalLayout {
+                            padding: 28px;
+                            spacing: 8px;
+                            Text {
+                                text: line.text;
+                                color: Theme.gold-bright;
+                                font-size: Theme.text-base;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: line.detail;
+                                color: Theme.muted;
+                                font-size: Theme.text-md;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+                        if line.kind == ModLineKind.message: VerticalLayout {
+                            padding: 20px;
+                            Text {
+                                text: line.text;
+                                color: Theme.muted;
+                                font-size: Theme.text-md;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-top: 6px;
+                        spacing: 6px;
+                        ComboBox {
+                            model: root.import-categories;
+                            current-index <=> root.import-index;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        GoldButton {
+                            border-radius: 3px;
+                            min-height: 30px;
+                            font-size: Theme.text-sm;
+                            text: root.labels.import-mod;
+                            clicked => { root.import-mod(root.import-index); }
+                        }
+                        GoldButton {
+                            border-radius: 3px;
+                            min-height: 30px;
+                            font-size: Theme.text-sm;
+                            text: root.labels.open-folder;
+                            clicked => { root.open-mods-folder(); }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            vertical-stretch: 0;
+            background: Theme.panel;
+            VerticalLayout {
+                Hairline { }
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 28px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    spacing: 10px;
+                    HorizontalLayout {
+                        spacing: 7px;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusDot { }
+                        }
+                        Text {
+                            text: root.labels.connected;
+                            color: Theme.muted;
+                            font-size: Theme.text-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: root.footer-right;
+                        color: root.footer-quote ? Theme.gold-bright : Theme.gold;
+                        font-italic: root.footer-quote;
+                        font-size: Theme.text-sm;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: !root.collapsed;
+        x: root.width - 18px;
+        y: root.height - 18px;
+        width: 13px;
+        height: 13px;
+        opacity: grip.has-hover ? 1 : 0.7;
+        Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 13;
+            viewbox-height: 13;
+            stroke: Theme.gold-dim;
+            stroke-width: 1.3px;
+            commands: "M 12 4 L 4 12 M 12 8 L 8 12";
+        }
+        grip := TouchArea {
+            mouse-cursor: nwse-resize;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    root.resize();
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        property <length> gap: 8px;
+        property <length> rest: root.preview-anchor-y - self.height - self.gap < 6px ? root.preview-anchor-y + 19px + self.gap : root.preview-anchor-y - self.height - self.gap;
+        visible: self.opacity > 0;
+        opacity: root.preview-visible ? 1 : 0;
+        animate opacity { duration: 120ms; easing: ease-out; }
+        width: 148px;
+        height: 178px;
+        x: max(6px, min(root.preview-anchor-x - self.width / 2, root.width - self.width - 6px));
+        y: root.preview-visible ? self.rest : self.rest + 3px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.gold-dim;
+        background: Theme.card-fill;
+        drop-shadow-blur: 22px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: #00000099;
+        VerticalLayout {
+            padding: 6px;
+            spacing: 5px;
+            Rectangle {
+                height: self.width;
+                border-radius: 4px;
+                background: @radial-gradient(circle, Theme.card-hover 0%, Theme.bg-0 75%);
+                clip: true;
+                Image {
+                    width: 100%;
+                    height: 100%;
+                    source: root.preview-image;
+                    image-fit: contain;
+                    opacity: root.preview-loading ? 0.35 : 1;
+                }
+            }
+            Text {
+                text: root.preview-name;
+                color: Theme.gold-bright;
+                font-size: Theme.text-sm;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    public function focus-search() {
+        search-field.take-focus();
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}

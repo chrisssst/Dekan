@@ -43,5 +43,5 @@ attestation:
 
 ```powershell
 Get-FileHash .\Dekan-Setup-<version>-x64.exe -Algorithm SHA256
-gh attestation verify .\Dekan-Setup-<version>-x64.exe --repo Isllanrx/Dekan
+gh attestation verify .\Dekan-Setup-<version>-x64.exe --repo chrisssst/Dekan
 ```

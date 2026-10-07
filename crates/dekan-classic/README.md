@@ -36,11 +36,15 @@ find the characters.
 
 | File | Purpose |
 | --- | --- |
-| `generator.rs` | `StandardChampion` and `ClassicChampion`: open a champion from the installed game and build the mod for a skin |
-| `builder.rs` | `ClassicIdMapper`: converts between classic and regular champion and skin ids |
-| `forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
-| `gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
-| `clip_alias.rs` | Gives a skin's graph the spell clip the default skin's animations ask for, when the skin only has its own variants |
+| `generation/generator/mod.rs` | Shared names and paths (aliases, skin and animation bins, slot identity) and the re-exports of the four files below |
+| `generation/generator/retarget.rs` | Relocates a skin's bin and animation graph to slot 0 (`retarget_skin_bin`, `retarget_animation_bin`, form cycles) |
+| `generation/generator/characters.rs` | Finds companion and jade characters in a champion's bins, in on-disk order, with the per-WAD cache |
+| `generation/generator/classic.rs` | `ClassicChampion`: builds a Classic Rift mod |
+| `generation/generator/standard.rs` | `StandardChampion`: builds a store skin's mod; companion prewarm and alias resolution |
+| `generation/builder.rs` | Classic id offsets: tells a classic champion id apart and converts classic champion and skin ids back to the regular ones |
+| `animation/forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
+| `animation/gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
+| `animation/clip_alias.rs` | Gives a skin's graph the spell clip the default skin's animations ask for, when the skin only has its own variants |
 | `error.rs` | Error type |
 
 ## Design notes
@@ -79,7 +83,8 @@ find the characters.
   the champion's own record (`GarenE`). Recall or respawn clips on the same track never qualify.
 - **Companion characters are indexed once per champion and patch.** Every builder of the same champion and game
   archive shares one scan (a second caller waits for the first instead of scanning again), and at startup every
-  champion is indexed in the background, one at a time, paused while a match runs, with the result cached on disk.
+  champion is indexed one at a time on a thread in Windows background mode (low CPU, disk and memory priority),
+  paused from the ready check until the match ends, with the result cached on disk. The caller owns that thread.
   The first champion select after a patch no longer waits for the scan.
 - **Skin scripts the game runs by skin id do not run.** Some skins have a script of their own that the game
   starts only for the owner's skin id (special idle behaviours, music switching, effects reacting to the match).

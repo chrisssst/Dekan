@@ -27,15 +27,15 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 
 | File | Purpose |
 | --- | --- |
-| `mod_compat.rs` | Finds broken references inside a mod before it is used |
-| `overlay_builder.rs` | Builds the overlay from the installed game and the selected mods |
-| `overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
-| `overlay.rs` | Overlay configuration and locations |
-| `ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
-| `overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Dekan drops it |
+| `build/mod_compat.rs` | Finds broken references inside a mod before it is used |
+| `build/overlay_builder.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
+| `build/overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
+| `build/overlay.rs` | Overlay configuration and locations |
+| `injector/ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
+| `injector/overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Dekan drops it |
 | `pipeline.rs` | Orchestrates build → arm → confirm |
-| `runner.rs` | Runs external processes without a console window |
-| `dll_validator.rs` | Checks a binary's SHA-256 against its audited hash before it is ever run or loaded |
+| `injector/trust.rs` | Accepts an injector file only when its Authenticode signature is valid and from League Toolkit's publisher; reads the game-build limit compiled into the DLL |
+| `injector/dll_validator.rs` | SHA-256 helpers used to tell installed and published DLLs apart |
 
 ## Rules the builder follows
 
@@ -54,7 +54,7 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 - **A cached overlay is reused only for the same inputs and the same builder.** Its fingerprint records every
   mod file, base game archive and output archive, plus the builder and its revision; an unknown builder or
   another revision rebuilds it.
-- **Every third-party binary is verified first.** If the injector's hash does not match, it is refused. If a
+- **Every third-party binary is verified first.** If the injector is not signed by League Toolkit's publisher, it is refused. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 
 ## No suspension

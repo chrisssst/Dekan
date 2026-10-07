@@ -23,6 +23,10 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_Security",
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
     "Win32_System_LibraryLoader",
@@ -37,8 +41,14 @@ windows = { workspace = true, features = [
     "Win32_System_Registry",
 ] }
 zip.workspace = true
-wry.workspace = true
+slint.workspace = true
 raw-window-handle.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+i-slint-backend-testing.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

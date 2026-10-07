@@ -12,8 +12,8 @@
 <p align="center">
   <a href="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml"><img src="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/chrisssst/Dekan"><img src="https://api.scorecard.dev/projects/github.com/chrisssst/Dekan/badge" alt="OpenSSF Scorecard"></a>
-  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Dekan?include_prereleases&sort=semver" alt="Release"></a>
-  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Dekan/total?label=downloads" alt="Downloads"></a>
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/v/release/chrisssst/Dekan?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/downloads/chrisssst/Dekan/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
@@ -91,8 +91,9 @@ Dekan was inspired by [Rose](https://github.com/Alban1911/Rose), a Python projec
   champion.
 - **Skins you own keep their name.** An owned skin is registered with the client, so your loading card shows
   its real name.
-- **Custom mods.** `.fantome` mods in ten categories (skins, maps, fonts, announcers, UI, voiceover, loading
-  screens, VFX, SFX, others), checked against the current patch before use.
+- **Custom mods.** `.fantome`, `.zip` and `.modpkg` mods (the files RuneForge and DivineSkins offer) in ten
+  categories (skins, maps, fonts, announcers, UI, voiceover, loading screens, VFX, SFX, others), checked against
+  the current patch before use. A mod made for an older patch gets its outdated property types converted.
 - **Classic Rift.** Legacy champion models, generated from your installed game.
 - **Party mode.** Friends on your team see each other's skins, through an end-to-end encrypted relay.
 - **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
@@ -117,7 +118,7 @@ What that means in practice:
 
 | | How Dekan gets there |
 | --- | --- |
-| **Security** | Runs without administrator rights. Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
+| **Security** | Runs without administrator rights (elevation is requested only to copy the injector into `tools`). Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
 | **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. Dekan never suspends or touches the game process; it only prepares files the game reads. Every error is logged with its cause. |
 | **Performance** | Written in Rust with no garbage collector or interpreter. The index of the game's archives is built in the background at startup. Built overlays are reused while the game build is unchanged, and entries identical to the game's are left out. |
 | **Dynamic** | Finds the game on any drive or region, follows the client's language, re-reads your champion right before building (ARAM swaps, trades, last-second locks), and rebuilds itself after every patch with no manual update of skin packages. |
@@ -133,7 +134,6 @@ Setup takes three steps: install Dekan, add the injector, start Dekan.
 | Requirement | Notes |
 | --- | --- |
 | Windows 10 or 11, 64-bit | |
-| [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) | Already present on Windows 11. On Windows 10, install it if it is missing |
 | League of Legends | Any install location. Dekan finds the game on its own |
 
 ### Step 1 — Install Dekan
@@ -157,27 +157,34 @@ included in Dekan's installer. There are two ways to get them; both end with the
 
 | Option | How | Best for |
 | --- | --- | --- |
-| **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
+| **Automatic** (easiest) | Start Dekan. When the files are missing or outdated, it offers to download them from the newest LTK Manager release on League Toolkit's official GitHub, checks League Toolkit's digital signature on both and copies them into `tools`. Windows asks for administrator permission only for that copy | Most users |
+| **Official, by hand** | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Offline machines, or if you prefer to copy them yourself |
 
-Whichever you use, Dekan checks both files' SHA-256 at startup and refuses anything that is not the audited
-build.
+Whichever you use, Dekan checks both files' Authenticode signature at startup and refuses anything not signed
+by League Toolkit's publisher (Natoken LLC). A file with one byte changed loses its signature and is refused.
 
 > [!IMPORTANT]
-> Dekan only accepts the **exact build** it has audited. Today that is the build shipped with
-> **LTK Manager 1.21.0 through 1.24.0** (the same two files in every one of them). Older versions contain a different build, which Dekan refuses. When a
-> future LTK Manager changes these files, use the version named in the latest Dekan release notes.
+> Use the **newest LTK Manager release**. Each release ships a DLL built for one game patch, and an older DLL
+> refuses game builds made after its date.
+>
+> Dekan follows this by itself. Every six hours it lists LTK Manager's releases, checks the signature of each new
+> release's injector and reads the game-build limit inside the DLL. The **LTK injector** line in the control
+> panel names the newest signed release; when its DLL differs from yours, a notification tells you and the
+> panel shows **Install injector**, which downloads, verifies and copies both files (Windows asks for
+> administrator permission only for the copy). A release whose files are not signed by League Toolkit is shown
+> as a warning and never installed.
 
 #### A. Get LTK Manager
 
-1. Open the [LTK Manager releases](https://github.com/LeagueToolkit/ltk-manager/releases) and download
-   `LTK.Manager_1.24.0_x64-setup.exe` (or any version from 1.21.0 to 1.24.0).
-2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
+1. Open the [latest LTK Manager release](https://github.com/LeagueToolkit/ltk-manager/releases/latest)
+   and download its `LTK.Manager_<version>_x64-setup.exe`.
+2. Run it. It installs for every user of the PC, in `C:\Program Files\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Dekan is running: two injectors at once will conflict.
 
 #### B. Copy the two files with File Explorer
 
-1. Press `Win + R`, type `%LOCALAPPDATA%\LTK Manager` and press Enter. If it does not open, right-click the
+1. Press `Win + R`, type `%ProgramFiles%\LTK Manager` and press Enter. If it does not open, right-click the
    LTK Manager shortcut in the Start menu and choose **Open file location** (twice, if it opens the shortcut
    folder first).
 2. Select `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` and copy them (`Ctrl + C`).
@@ -190,10 +197,10 @@ build.
 Open PowerShell **as administrator** (Start menu → type `PowerShell` → **Run as administrator**) and run:
 
 ```powershell
-$from = Join-Path $env:LOCALAPPDATA 'LTK Manager'
+$from = Join-Path $env:ProgramFiles 'LTK Manager'
 $to   = Join-Path $env:ProgramFiles 'Dekan\tools'
 Copy-Item (Join-Path $from 'ltk_patcher_host.exe'), (Join-Path $from 'ltk_patcher_dll.dll') $to -Force
-Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+Get-AuthenticodeSignature (Join-Path $to 'ltk_patcher_*') | Format-Table Status, SignerCertificate, Path -AutoSize
 ```
 
 #### Direct download (alternative)
@@ -202,15 +209,15 @@ Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Ha
 2. Press `Win + R`, type `C:\Program Files\Dekan\tools` and press Enter.
 3. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
    **Continue**.
-4. Check the hashes in step C below before starting Dekan. If they differ, delete the files and use the
-   official option instead.
+4. Check the signatures in step C below before starting Dekan. If either is not valid, delete the files and
+   use the official option instead.
 
 Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
 
 ```powershell
 $to = Join-Path $env:ProgramFiles 'Dekan\tools'
 Expand-Archive .\tools.zip -DestinationPath $to -Force
-Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+Get-AuthenticodeSignature (Join-Path $to 'ltk_patcher_*') | Format-Table Status, SignerCertificate, Path -AutoSize
 ```
 
 These files belong to League Toolkit and are covered by the
@@ -220,15 +227,12 @@ download is a convenience mirror; it is not an official League Toolkit release.
 #### C. Check the files
 
 Optional for the official option, recommended for the direct download. The folder
-`C:\Program Files\Dekan\tools` should now contain both files, with these SHA-256 hashes:
+`C:\Program Files\Dekan\tools` should now contain both files. In File Explorer, right-click each one →
+**Properties** → **Digital Signatures**: the signer must be **Natoken LLC** and the signature valid. The
+PowerShell commands above show the same (`Status` = `Valid`).
 
-| File | SHA-256 |
-| --- | --- |
-| `ltk_patcher_host.exe` | `a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c` |
-| `ltk_patcher_dll.dll` | `07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b` |
-
-You do not have to check them by hand: Dekan checks both at startup. If one is missing or is a different
-build, Dekan tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
+You do not have to check them by hand: Dekan checks both at startup. If one is missing or not signed by
+League Toolkit, Dekan tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
 afterwards; the copies in Dekan's folder keep working.
 
 ### Step 3 — Start Dekan
@@ -251,7 +255,8 @@ Windows.
 
 ### Custom mods
 
-Drop `.fantome` mods into the category folders under `%LOCALAPPDATA%\Dekan\custom_mods`. The categories are
+Drop `.fantome`, `.zip` or `.modpkg` mods into the category folders under `%LOCALAPPDATA%\Dekan\custom_mods`,
+or import them from the **Mods** tab. The categories are
 `skins`, `maps`, `fonts`, `announcers`, `ui`, `voiceover`, `loading_screen`, `vfx`, `sfx` and `others`. Then
 select them in the **Mods** tab of Dekan's window. You can pick at most one skin, one map, one font and one
 announcer at a time. The other categories can be combined.
@@ -276,7 +281,7 @@ champion they are not playing.
 | `DEKAN_RELAY_URL` | Party relay to use instead of the default one |
 | `DEKAN_SKIN_SYNC` | A GitHub repository as `owner/repo` to download a skin library from in the background; off when unset |
 | `DEKAN_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
-| `DEKAN_UPDATE_CHECK` | `0` turns off the check for a new Dekan release; on when unset |
+| `DEKAN_UPDATE_CHECK` | `0` turns off the check for a new Dekan release and for new LTK Manager injector files; on when unset |
 
 All of them are optional. [`.env.example`](.env.example) documents each one and how to set it on Windows.
 Dekan reads them from the environment; it does not load a `.env` file.
@@ -314,7 +319,7 @@ late swap (ARAM bench, trades, a pick in the last second) is not lost.
 | Party mode (friends see each other's skins) | Works against the public relay; not yet proven with several players in one match |
 
 > **Heads up:** the injector DLL only accepts game builds up to a fixed date: it refuses any game executable
-> built after 2026-10-04 07:00 UTC. The build you have installed keeps working after that date. The first patch
+> built after 2026-10-18 07:00 UTC. The build you have installed keeps working after that date. The first patch
 > built later needs a refreshed DLL. Dekan checks this at startup and tells you.
 
 ## Where Dekan keeps its files
@@ -327,22 +332,22 @@ C:\Program Files\Dekan\              installed program (read-only for users)
 
 %LOCALAPPDATA%\Dekan\                 everything Dekan writes, per Windows user
 ├── logs\                            daily logs, dekan.log.YYYY-MM-DD, last 7 days kept
-├── custom_mods\                     your .fantome mods, one folder per category:
+├── custom_mods\                     your .fantome, .zip and .modpkg mods, one folder per category:
 │   ├── skins\   maps\   fonts\   announcers\   ui\
 │   └── voiceover\   loading_screen\   vfx\   sfx\   others\
 ├── library\                         skin library (generated or synced)
 ├── mods\                            mods generated from the game for the current match
 ├── overlay\                         built overlays, reused while the game build is unchanged
-├── state\                           settings, party.json, selections
-└── webview2\                        data of the selection window
+└── state\                           settings, party.json, selections
 ```
 
 - **Open them from the tray icon:** it has entries for the mods folder and the logs folder.
 - **Logs** are the first thing to check, and to attach, when something fails. `DEKAN_LOG=debug` adds
   detail.
 - **Tools** are looked for in `Program Files\Dekan\tools`, then in a `tools` folder next to `dekan.exe`, then
-  in `%LOCALAPPDATA%\Dekan\tools`. Wherever they are found, they are only used if their SHA-256 matches the
-  audited build. A file from another product's folder is never loaded.
+  in `%LOCALAPPDATA%\Dekan\tools`. Wherever they are found, they are only used if both carry a valid
+  Authenticode signature from League Toolkit's publisher. A file from another product's folder, LTK Manager's
+  included, is never loaded.
 - **The game folder is never written to.** Deleting `%LOCALAPPDATA%\Dekan` resets Dekan completely; the
   uninstaller does it for you.
 
@@ -351,14 +356,21 @@ C:\Program Files\Dekan\              installed program (read-only for users)
 ### What Dekan does to keep you safe
 
 - It runs as a normal user. Only the installer, and copying the injector into `Program Files`, need
-  administrator permission.
+  administrator permission. For the automatic copy, Dekan downloads and checks the files without
+  elevation, then starts a short elevated copy of itself that checks the SHA-256 again and writes only the two
+  audited files into its own `tools` folder.
 - It only loads its injector from its own folders, never from another product's. Before loading it, Dekan
   checks the file's SHA-256 hash against the one built into Dekan. A file that has been swapped is refused
   and logged.
-- It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Dekan`.
+- It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Dekan`. The one
+  exception is **Light match loading** (control panel, on by default): it sets
+  `install.crash_reporting.enabled: false` in the League client's own `Config\LeagueClientSettings.yaml`, the
+  same change LTK Manager makes, so the injector checks each archive when the game loads it instead of all of
+  them as the match starts. Nothing else in that file changes, and turning the option off stops it.
 - It collects no telemetry. It only talks to the League client on your own machine, to GitHub to read the
-  latest release number (off with `DEKAN_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only
-  receives encrypted data.
+  latest Dekan release number and compare the injector files of LTK Manager releases with the audited ones
+  (both off with `DEKAN_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only receives encrypted
+  data.
 - It never downloads or runs an update. A new release is only announced; you install it yourself.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Dekan\logs`.
 
@@ -459,14 +471,17 @@ with safety nets in case the approval was a mistake.
 | [`dependabot.yml`](.github/dependabot.yml) | Weekly and monthly | Proposes updates for actions, crates and relay dependencies |
 
 Every action is pinned to an exact commit, and every job starts read-only. Auto-merge never merges a commit
-pushed after the approval or a change to the workflows, the installer, the trusted hashes or the injector
+pushed after the approval or a change to the workflows, the installer, the injector trust check or the injector
 code paths. Those are merged by hand. A new build always starts as a pre-release and only becomes the release
 users are pointed at after it has been tested in a real match.
 
 ### Publishing a release
 
-1. Bump `version` under `[workspace.package]` in the root `Cargo.toml` in a pull request.
-2. Once it merges, the pre-release `v<version>` is built and published automatically.
+1. Merge an approved pull request into `main`. The next version is picked automatically: the last release plus
+   one minor (`1.2` → `1.3`), or the next major (`2.0`) when the pull request carries the `breaking` label.
+   Merges that only touch documentation do not release.
+2. The pre-release `v<version>` is built and published automatically. To force a higher version, raise
+   `version` under `[workspace.package]` in the root `Cargo.toml`; it is used as a floor.
 3. Test it in a real match, then run **Promote release** from the Actions tab with that tag.
 
 The one-time repository setup (GitHub App, ruleset, `production` environment) is described in
@@ -509,6 +524,10 @@ an advantage in the game.
   harm other players, services or accounts.
 - Dekan is not affiliated with, endorsed by or sponsored by Riot Games. League of Legends and all related
   names and assets are trademarks of Riot Games, Inc.
+
+<p align="center">
+  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
+</p>
 
 ## License
 

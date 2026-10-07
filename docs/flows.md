@@ -6,7 +6,8 @@
 Client enters champion select
   └─ dekan-lcu publishes the phase and the team roster
      └─ the selection window opens next to the client; the player picks a skin
-        · the last skin used on that champion is restored when nothing else is chosen
+        · when nothing else is chosen, the champion's preset in the active profile is restored, or else
+          the last skin used on it
         · when the champion locks in (finalization) with no skin chosen, no skin picked in the client and
           no explicit "Clear", a random skin is rolled (control panel option, on by default)
         └─ the trigger settles the choice (100 ms for the first pick, 900 ms after a change)
@@ -47,15 +48,66 @@ from the skin id the server received. The client refuses to register a skin you 
 shows the champion's default name while the skin's art still loads from the overlay. Showing the skin's name
 would require writing to game memory, which Dekan deliberately does not do.
 
+### Modes where champions are picked in the lobby
+
+Swiftplay (queue 480), Quickplay (490) and Brawl have no champion select: the player picks a champion for each
+position in the lobby and the match starts straight after the queue pops. Dekan recognises them by the queue id
+(480, 490) or the game mode (`SWIFTPLAY`, `BRAWL`) the lobby reports; player slots left over in another queue
+never turn a draft or ARAM lobby into one. A lobby's picks are kept through the match even when the client deletes
+the lobby as the game starts, and dropped between matches.
+
+```text
+Client opens a lobby that picks champions
+  └─ dekan-lcu publishes the queue and the champions in the player slots (lobby events, and a read on connect)
+     └─ the selection window opens with the lobby, before any queue
+        · no champion yet: it says to pick them in the lobby
+        · two champions: one tab each; a skin is kept per champion, and saved skins are restored for both
+        └─ the trigger arms one patcher with the skins of both champions, already in the lobby
+           └─ each skin is registered in its player slot (owned as itself, unowned as the default)
+Queue pops, match starts
+  └─ the live champion is read from the gameflow session
+     └─ the armed patcher covers it, whichever position the match gave; its skin loads
+```
+
+### Saved skins: presets, profiles and history
+
+| Source | Set by | Restored when |
+| --- | --- | --- |
+| Preset | The pin button next to the search box, for the chosen skin | Champion select or lobby, nothing chosen and the default skin in the client |
+| History | Every confirmed injection | Same, when the champion has no preset in the active profile |
+| Random | The dice, or the control panel option at lock-in | Lock-in (or queueing in a lobby mode) with nothing chosen |
+
+A profile is a named set of presets (for example one for ranked and one for fun). The profile row lists them with
+the default first; the plus button creates an empty one and switches to it, and the bin deletes the active one.
+Switching profiles replaces a skin that was restored automatically; a skin picked by hand stays. Presets live in
+`state\presets.json`, history in `state\historic.json`.
+
+### Game modes
+
+Every mode with a champion select (draft, blind, ranked, ARAM and its variants, Arena, URF, ARURF, One for All,
+Ultimate Spellbook, Nexus Blitz, co-op, custom, Practice Tool) uses the flow above. Swarm also has a champion
+select, but whether its champions load the regular champion archives could not be checked while the mode is out
+of rotation (the game ships a mode's map only while it is live). The local player is
+found by their cell, so Arena's duos and One for All's shared pick are handled, and a champion changed after
+lock-in (ARAM bench, One for All) drops the old skin and restores the new champion's. Paths that a map archive
+holds are changed in whichever map the installed game ships (Summoner's Rift, Howling Abyss, Arena and rotating
+maps alike). The `Lobby queue` log line records each queue's id, game mode and map, which is what proves a mode
+in a real match.
+
 ## 2. Custom mods
 
 ```text
-The player drops a .fantome into %LOCALAPPDATA%\Dekan\custom_mods\<category>
+The player drops or imports a .fantome, .zip or .modpkg into %LOCALAPPDATA%\Dekan\custom_mods\<category>
+  └─ a .modpkg is unpacked at staging into the same layout (META/info.json + WAD/<name>.wad.client, base layer)
   └─ the mod appears in the Mods tab and is selected there
      └─ the selection joins the other mods for the next build
         └─ compatibility check: every data file the mod links to must exist in the game or in the mod
            · a dangling link means the mod was made for an older patch → it is dropped with a warning
              (it would otherwise crash the loading screen)
+        └─ property types: a mod made before the game turned text paths into file references (STRING → FILE,
+           the XXH64 of the lowercase path) gets those values converted, using the types the installed game
+           declares for the same object class and field in the bins the mod replaces, their links and the
+           champion's animation graph (an older mod otherwise crashes the game while loading)
         └─ the overlay builder merges what is left, with the same rules as for skins
 ```
 

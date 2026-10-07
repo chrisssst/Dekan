@@ -1,0 +1,204 @@
+import { Theme, ExposeLayer, GoldButton, Field, Hairline } from "theme.slint";
+
+component PeopleGlyph inherits Path {
+    width: 18px;
+    height: 18px;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    stroke: Theme.gold;
+    stroke-width: 1.6px;
+    fill: transparent;
+    commands: "M 17 21 L 17 19 A 4 4 0 0 0 13 15 L 5 15 A 4 4 0 0 0 1 19 L 1 21 M 13 7 A 4 4 0 1 1 12.99 7 M 23 21 L 23 19 A 4 4 0 0 0 20 15.13 M 16 3.13 A 4 4 0 0 1 16 10.88";
+}
+
+component InlineButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: max(64px, label.preferred-width + 24px);
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.gold-bright : Theme.button-line;
+    background: touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.12);
+    animate background, border-color { duration: 150ms; }
+    label := Text {
+        text: root.text;
+        color: touch.has-hover ? Theme.bg-0 : Theme.gold;
+        font-size: Theme.text-sm;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        animate color { duration: 150ms; }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+}
+
+export component PartyDialog inherits Window {
+    in property <bool> expose-flip;
+    in property <string> heading;
+    in property <string> description;
+    in property <string> label;
+    in property <string> placeholder;
+    in property <bool> read-only;
+    in property <string> inline-label;
+    in property <string> confirm-label;
+    in property <string> cancel-label;
+    in property <string> copied-label;
+    in property <string> empty-error;
+    in-out property <string> code;
+    in-out property <bool> copied;
+    in-out property <bool> show-error;
+    callback inline-action();
+    callback submit(string);
+    callback cancel();
+    title: root.heading;
+    icon: @image-url("assets/logo.png");
+    width: 520px;
+    height: 280px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+
+    function confirm() {
+        if root.code.is-empty {
+            root.show-error = true;
+        } else {
+            root.submit(root.code);
+        }
+    }
+
+    FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel();
+                return accept;
+            }
+            reject
+        }
+        VerticalLayout {
+            padding-left: 24px;
+            padding-right: 24px;
+            padding-top: 20px;
+            padding-bottom: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 12px;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.gold-dim;
+                    background: @linear-gradient(135deg, #1c2738 0%, #0d1622 100%);
+                    drop-shadow-blur: 10px;
+                    drop-shadow-color: Theme.gold.with-alpha(0.2);
+                    PeopleGlyph {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+                VerticalLayout {
+                    spacing: 3px;
+                    alignment: center;
+                    Text {
+                        text: root.heading.to-uppercase();
+                        color: Theme.gold-bright;
+                        font-size: Theme.text-lg;
+                        font-weight: 700;
+                        letter-spacing: 0.6px;
+                    }
+                    Text {
+                        text: root.description;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            Hairline { }
+            VerticalLayout {
+                spacing: 7px;
+                HorizontalLayout {
+                    Text {
+                        text: root.label;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: root.copied-label;
+                        color: Theme.cyan;
+                        font-size: Theme.text-md;
+                        font-weight: 600;
+                        opacity: root.copied ? 1 : 0;
+                        animate opacity { duration: 200ms; }
+                    }
+                }
+                field := Field {
+                    min-height: 42px;
+                    monospace: true;
+                    text <=> root.code;
+                    placeholder: root.placeholder;
+                    read-only: root.read-only;
+                    trailing: inline.width + 10px;
+                    accepted => { root.confirm(); }
+                    cancelled => { root.cancel(); }
+                    edited => { root.show-error = false; }
+                    inline := InlineButton {
+                        x: parent.width - self.width - 5px;
+                        y: 5px;
+                        height: parent.height - 10px;
+                        text: root.inline-label;
+                        clicked => { root.inline-action(); }
+                    }
+                }
+                Text {
+                    text: root.show-error ? root.empty-error : "";
+                    color: Theme.danger-text;
+                    font-size: Theme.text-md;
+                    min-height: 14px;
+                }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+            }
+            Hairline { }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+                if root.cancel-label != "": GoldButton {
+                    min-width: 130px;
+                    min-height: 36px;
+                    horizontal-stretch: 0;
+                    caps: true;
+                    tracking: 0.6px;
+                    text: root.cancel-label;
+                    clicked => { root.cancel(); }
+                }
+                GoldButton {
+                    min-width: 168px;
+                    min-height: 36px;
+                    horizontal-stretch: 0;
+                    primary: true;
+                    caps: true;
+                    tracking: 0.6px;
+                    text: root.confirm-label;
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+
+    public function focus-field() {
+        field.take-focus();
+        field.select-all();
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}
