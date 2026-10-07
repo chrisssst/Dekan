@@ -31,12 +31,13 @@ patch.
 
 | File | Purpose |
 | --- | --- |
-| `wad.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
-| `writer.rs` | WAD writer used to build overlays |
-| `prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records |
-| `hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
-| `fantome.rs` | Reading `.fantome` packages |
-| `hash_index.rs` | Hash-to-path lookup table |
+| `archive/wad.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
+| `archive/writer.rs` | WAD writer used to build overlays |
+| `properties/prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records; records the installed game's field types (`record_field_shapes`) and converts a mod's text paths into the file references the game declares (`strings_to_files`) |
+| `hashing/hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
+| `archive/fantome.rs` | Reading `.fantome` packages |
+| `archive/modpkg.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and the stored bytes pass through as WAD chunks |
+| `hashing/hash_index.rs` | Hash-to-path lookup table |
 
 ## Design notes
 

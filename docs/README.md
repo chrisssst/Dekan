@@ -9,8 +9,8 @@ from champion select to the game, and how changes are built, tested and shipped.
 Dekan is a Windows tray application written in Rust. It watches the League client through its local API,
 generates the chosen skin from the game installed on the machine, and builds an overlay of modified game
 archives. An injector DLL then makes the game read that overlay instead of its own files. Dekan runs
-without administrator rights, never writes to the game folder, and releases every external resource it
-acquires through an owning guard.
+without administrator rights (except a verified copy of the injector into its own folder), never writes to
+the game folder, and releases every external resource it acquires through an owning guard.
 
 ## Contents
 
@@ -36,7 +36,9 @@ Each crate also has its own README with its files and responsibilities: [dekan-c
    Dekan's own window, because the client has no way to express a skin you do not own.
 2. **No panics at runtime.** `unwrap()` and `expect()` only appear in tests. Every discarded `Result` carries
    a comment that explains why it is safe to ignore, and a check enforces this.
-3. **Least privilege.** Dekan never asks for administrator rights and never writes to the game folder.
+3. **Least privilege.** Dekan runs without administrator rights and never writes to the game folder. It asks
+   for elevation only to copy the audited injector into its own `tools` folder, and the only file it touches in
+   the League install is one key of the client's own settings, when Light match loading is on.
    External resources (a child process, a temporary file) are released by `Drop`, even
    during a panic.
 4. **Nothing is hardcoded to one machine.** The game path is discovered, the language follows the client,

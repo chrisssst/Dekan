@@ -24,12 +24,9 @@ cargo deny check     # advisories, licenses, banned crates, sources
 
 ## Running the tests without Windows
 
-On Linux, the tests can run for the Windows target under Wine by building for `x86_64-pc-windows-gnu`. Two
-things are needed:
-
-1. `WebView2Loader.dll` on `WINEPATH`, because the `wry` crate links against it. Without it, the test binaries
-   that depend on `dekan-platform` fail to load (`status c0000135`), which is not a real failure.
-2. A virtual display (`xvfb`) for the Win32 window calls.
+On Linux, the tests can run for the Windows target under Wine by building for `x86_64-pc-windows-gnu`. A
+virtual display (`xvfb`) is needed for the Win32 window calls. The interface tests need no display: they run the
+real Slint windows on Slint's testing backend.
 
 ```sh
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=<script that runs wine with WINEPATH set>
@@ -54,7 +51,7 @@ claim what only a higher one can show.
 | --- | --- | --- | --- |
 | Assets and runtime | Dekan's own generator, mod import and staging, compatibility check and overlay builder, on a synthetic game install built by the test | The chosen skin, its companions and a custom mod end up in the archives the game would open: slot 0 holds the skin's own definition, every link resolves, the animation graph the skin names is reachable, archives that share a path agree, headers and untouched bytes are the game's, output is deterministic | `crates/dekan-app/tests/skin_pipeline.rs` (runs everywhere, including CI) |
 | Same, on the installed game | The same production code against a real install | The above for every champion, skin and chroma of the current patch | `cargo xtask harness`, `cargo xtask skin-audit`, `native_overlay_faithful` (ignored; needs the game) |
-| Interface | Dekan's windows and pages in Edge, and the real WebView2 window | Pages render, react and pass accessibility checks; a release changes only what it meant to | `cargo xtask ipc-probe` and the page dumps (`DEKAN_UI_DUMP`) used by the visual tests |
+| Interface | Dekan's Slint windows (overlay, control panel, About, party dialog) | Every button, tab, toggle, gem, card and key sends the command or event it names, through the accessibility tree; search folds accents; the mods panel, previews and empty states render from the same data the app passes | `ui/pages/*_tests.rs` (headless, every run) and `cargo xtask ipc-probe` on the real window |
 | Real match | The game engine | How the skin looks and animates in game: models, animations, shaders, particles | Manual, with the log; the only layer that can show it |
 
 The first two layers show that Dekan loads and applies the skin files correctly. They do not render
@@ -89,7 +86,9 @@ maintainer approves a pull request
   └─ pr-approved.yml records the PR number and the approved commit (read-only token)
      └─ automerge.yml re-checks everything through the API and enables auto-merge (squash)
         └─ GitHub merges only when "CI OK" and "Security OK" pass on that exact commit
-           └─ release.yml: if the workspace version has no release yet, full gate without cache,
+           └─ release.yml: next version = last release tag + 1 minor (a "breaking" label on the PR
+              makes it the next major; the workspace version in Cargo.toml is a floor), stamped into
+              Cargo.toml and Cargo.lock by `cargo xtask set-version`, full gate without cache,
               dekan.exe signed, installer built around it and signed (when signing is configured),
               checksums,
               build provenance attestation → published as a PRE-RELEASE
@@ -104,9 +103,10 @@ maintainer approves a pull request
 - an approval from someone without write access,
 - the `no-automerge` label,
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
-  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger, the
-  injector host and DLL validation, the party cipher and token, and the relay's deploy
-  config. These are merged by hand.
+  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger (`trigger.rs` and `trigger/`), the
+  whole injector folder (`crates/dekan-inject/src/injector/`: host, overlay process, DLL validation), the
+  party cipher and token (`crates/dekan-party/src/security/`), and the relay's deploy config. These are
+  merged by hand.
 
 The `main` branch ruleset (`.github/rulesets/main.json`) enforces the rest: pull requests only, squash merges,
 a code owner's approval, stale approvals dismissed on push, required checks up to date with `main`, no force
@@ -150,8 +150,8 @@ pushes or deletions.
 Anyone can check where an installer was built:
 
 ```powershell
-gh attestation verify Dekan-Setup-<version>-x64.exe --repo Isllanrx/Dekan
-gh attestation verify Dekan-Setup-<version>-x64.exe --bundle Dekan-Setup-<version>-x64.exe.sigstore.json --repo Isllanrx/Dekan
+gh attestation verify Dekan-Setup-<version>-x64.exe --repo chrisssst/Dekan
+gh attestation verify Dekan-Setup-<version>-x64.exe --bundle Dekan-Setup-<version>-x64.exe.sigstore.json --repo chrisssst/Dekan
 ```
 
 The second form works offline with the Sigstore bundle published next to the installer.
@@ -181,15 +181,17 @@ The second form works offline with the Sigstore bundle published next to the ins
 ## Packaging
 
 - `cargo xtask package` builds the release, copies it to `dist\` and writes `SHA256SUMS`. It owns the release
-  compiler flags: the C runtime is linked statically and the build machine's paths (Cargo home, toolchain,
+  compiler flags: the C runtime is linked statically, code targets `x86-64-v2` (SSE4.2 and POPCNT, which every CPU
+  that meets League's minimum requirements has), and the build machine's paths (Cargo home, toolchain,
   workspace) are rewritten, whatever `RUSTFLAGS` holds. A set `RUSTFLAGS` (CI uses `-D warnings`) otherwise
   replaces the flags in `.cargo/config.toml`, which silently dropped the static runtime: the executable then
   needed the Visual C++ runtime and carried the builder's user folder in its panic messages. `build.rs`
   also asks the linker for the PE checksum.
 - The LTK injector is **not** packaged. Its license does not allow other projects to redistribute League
   Toolkit's signed binaries, so users copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` from an official
-  LTK Manager release into `Program Files\Dekan\tools`. Dekan only accepts them if their SHA-256 matches the
-  audited hashes in `dekan_app::trigger`. `xtask` reads the same constants for the install audit.
+  LTK Manager release into `Program Files\Dekan\tools`. Dekan only accepts them when both carry a valid
+  signature from League Toolkit's publisher (`dekan_inject::trust`); `cargo xtask install-audit` runs the same
+  check.
 - `cargo xtask installer` passes the workspace version to Inno Setup (`installer/dekan.iss`) and produces
   `Dekan-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `dist\dekan.exe` already there instead
   of rebuilding it, so the release can sign the binary before it goes into the installer.
@@ -220,7 +222,7 @@ The second form works offline with the Sigstore bundle published next to the ins
   file's Properties dialog writes HKCU). Start with Windows is an optional task, off by default, writing the
   same HKCU value and quoted path as the tray item, so either side can undo the other; the value is always
   registered for removal because the tray may have turned it on later.
-- **Uninstall**: logs, state, the WebView2 profile, built overlays, generated mods and the user-copied injector
+- **Uninstall**: logs, state, the WebView2 profile left by versions before 1.2, built overlays, generated mods and the user-copied injector
   are removed. Skins and custom mods are the user's: an interactive uninstall asks, a silent one keeps them,
   and the data folder is removed only when nothing is left in it. Under an admin uninstall `{localappdata}`
   may resolve to the elevating admin's profile, so on a multi-user machine the desktop user's folder can be

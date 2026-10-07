@@ -1,0 +1,156 @@
+import { Theme, ExposeLayer, GoldButton, Diamond, Hairline, Wordmark } from "theme.slint";
+
+export component WelcomeWindow inherits Window {
+    in property <bool> expose-flip;
+    in property <string> version;
+    in property <string> pill;
+    in property <[string]> items;
+    in property <string> dismiss-label;
+    callback dismiss();
+    property <bool> shown;
+    title: "Dekan — League of Legends Skin Changer";
+    icon: @image-url("assets/logo.png");
+    preferred-width: 530px;
+    preferred-height: 440px;
+    min-width: 420px;
+    min-height: 340px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+    forward-focus: keys;
+    init => { root.shown = true; }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape || event.text == Key.Return {
+                root.dismiss();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    content := VerticalLayout {
+        y: root.shown ? 0px : 8px;
+        opacity: root.shown ? 1 : 0;
+        animate opacity, y { duration: 250ms; easing: ease-out; }
+        padding-left: 28px;
+        padding-right: 28px;
+        padding-top: 22px;
+        padding-bottom: 24px;
+        spacing: 14px;
+        HorizontalLayout {
+            spacing: 14px;
+            Image {
+                source: @image-url("assets/logo.png");
+                width: 38px;
+                height: 38px;
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Wordmark {
+                    version: root.version;
+                    size: 20px;
+                }
+                Text {
+                    text: "League of Legends Skin Changer";
+                    color: Theme.muted;
+                    font-size: Theme.text-sm;
+                    letter-spacing: 0.8px;
+                }
+            }
+        }
+        Hairline { }
+        Rectangle {
+            vertical-stretch: 1;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.surface-line;
+            background: @linear-gradient(180deg, #1a2434b3 0%, #10161fe6 100%);
+            drop-shadow-blur: 20px;
+            drop-shadow-offset-y: 4px;
+            drop-shadow-color: #00000059;
+            clip: true;
+            Rectangle {
+                x: 0;
+                width: 2px;
+                background: Theme.gold;
+            }
+            VerticalLayout {
+                padding-top: 16px;
+                padding-bottom: 16px;
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 9px;
+                alignment: start;
+                HorizontalLayout {
+                    alignment: start;
+                    padding-bottom: 3px;
+                    Rectangle {
+                        border-radius: 11px;
+                        border-width: 1px;
+                        border-color: Theme.cyan.with-alpha(0.25);
+                        background: Theme.cyan.with-alpha(0.08);
+                        HorizontalLayout {
+                            padding-left: 7px;
+                            padding-right: 10px;
+                            padding-top: 3px;
+                            padding-bottom: 3px;
+                            spacing: 7px;
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: Theme.cyan;
+                                    drop-shadow-blur: 4px;
+                                    drop-shadow-color: Theme.cyan;
+                                }
+                            }
+                            Text {
+                                text: root.pill.to-uppercase();
+                                color: Theme.cyan;
+                                font-size: Theme.text-sm;
+                                font-weight: 700;
+                                letter-spacing: 0.7px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+                for item in root.items: HorizontalLayout {
+                    spacing: 10px;
+                    VerticalLayout {
+                        padding-top: 4px;
+                        Diamond { }
+                    }
+                    Text {
+                        text: item;
+                        color: #d8e2ec;
+                        font-size: 12.5px;
+                        wrap: word-wrap;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            GoldButton {
+                width: 230px;
+                min-height: 40px;
+                horizontal-stretch: 0;
+                primary: true;
+                caps: true;
+                tracking: 1.2px;
+                text: root.dismiss-label;
+                clicked => { root.dismiss(); }
+            }
+        }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}

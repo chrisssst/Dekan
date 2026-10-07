@@ -75,7 +75,7 @@ jobs:
           [[ "$approved" == true ]] || { echo "::error::no approval of $SHA from a maintainer"; exit 1; }
 
           files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
-          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger\.rs$|crates/dekan-inject/src/(ltk_host|dll_validator|suspend)\.rs$|crates/dekan-party/src/(crypto|token)\.rs$|relay-worker/wrangler\.toml$|xtask/)'
+          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger(\.rs$|/)|crates/dekan-app/src/updates/injector_install\.rs$|crates/dekan-inject/src/injector/|crates/dekan-party/src/security/|crates/dekan-platform/src/os/system/authenticode\.rs$|relay-worker/wrangler\.toml$|xtask/)'
           blocked=$(grep -E "$protected" <<<"$files" || true)
           if [[ -n "$blocked" ]]; then
             echo "::warning::PR #$PR touches protected paths and must be merged by hand:"

@@ -36,7 +36,18 @@ sha2 = "0.11"
 chacha20poly1305 = "0.11"
 uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
-wry = { version = "0.57", default-features = false }
+slint = { version = "1.18.1", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "accessibility",
+    "backend-winit",
+    "renderer-winit-software",
+    "software-renderer-systemfonts",
+    "software-renderer-path",
+    "unstable-winit-030",
+] }
+slint-build = "1.18.1"
+i-slint-backend-testing = "1.18.1"
 raw-window-handle = "0.6"
 
 [profile.release]

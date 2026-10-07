@@ -3,7 +3,11 @@ name: Release
 on:
   push:
     branches: [main]
-    paths: [Cargo.toml]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".claude/**"
+      - "LICENSE"
   workflow_dispatch:
 
 permissions:
@@ -31,28 +35,45 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - name: Version and existing releases
+      - name: Next version from the last release
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          version=$(cargo metadata --no-deps --format-version 1 --locked \
-            | jq -r '.packages[] | select(.name == "dekan-app") | .version')
-          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version $version"; exit 1; }
-          display_version="${version%.0}"
-          tag="v$display_version"
-          echo "version=$display_version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 \
-             || git ls-remote --exit-code --tags "https://github.com/$REPO" "refs/tags/$tag" >/dev/null; then
-            echo "$tag already exists; nothing to release"
+          if git tag --points-at "$SHA" | grep -Eq '^v[0-9]+\.[0-9]+'; then
+            echo "$SHA is already released"
             echo "release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          latest=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -n 1)
+          latest=${latest:-v0.0}
+          IFS=. read -r major minor _ <<<"${latest#v}"
+          breaking=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[].labels[].name] | index("breaking") != null')
+          if [[ "$breaking" == true ]]; then
+            next="$((major + 1)).0"
+          else
+            next="$major.$((minor + 1))"
+          fi
+          floor=$(cargo metadata --no-deps --format-version 1 --locked \
+            | jq -r '.packages[] | select(.name == "dekan-app") | .version' | cut -d. -f1,2)
+          [[ "$floor" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::bad workspace version $floor"; exit 1; }
+          version=$(printf '%s\n%s\n' "$next" "$floor" | sort -V | tail -n 1)
+          tag="v$version"
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 || git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists; raise the workspace version or remove the stale tag"
+            exit 1
+          fi
+          echo "Releasing $tag (previous $latest, breaking=$breaking, floor $floor)"
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "release=true"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     name: Build installer
@@ -76,6 +97,9 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
+      - name: Stamp the release version (cargo xtask set-version)
+        run: cargo xtask set-version "$env:VERSION"
+
       - name: Quality gate (cargo xtask check)
         run: cargo xtask check
 
@@ -98,7 +122,7 @@ jobs:
 
       - name: Sign dekan.exe (SignPath)
         if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           connector-url: https://githubactions.connectors.signpath.io
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -124,7 +148,7 @@ jobs:
 
       - name: Sign the installer (SignPath)
         if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           connector-url: https://githubactions.connectors.signpath.io
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}

@@ -1,28 +1,16 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod activation;
-pub mod autostart;
-pub mod client_window;
-pub mod clipboard;
-pub mod dialog;
-pub mod elevation;
-pub mod error;
-pub mod fs;
-pub mod game_version;
-pub mod hotkey;
-pub mod i18n;
-pub mod overlay_window;
-pub mod panel;
-pub mod party_dialog;
-pub mod paths;
-pub mod preferences;
-pub mod process;
-pub mod shell;
-pub mod single_instance;
-pub mod tray;
-pub mod user_profile;
-pub mod version;
-pub mod welcome;
+mod league;
+mod os;
+mod ui;
 
-#[cfg(test)]
-mod ui_pages_dump;
+pub use league::{client_settings, client_window, game_version, paths};
+pub use os::{
+    activation, authenticode, autostart, elevation, fs, preferences, process, single_instance,
+    user_profile, version,
+};
+pub use ui::{
+    clipboard, dialog, hotkey, i18n, overlay_window, panel, party_dialog, shell, tray, welcome,
+};
+
+pub mod error;

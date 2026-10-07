@@ -10,7 +10,7 @@ mods you selected, the injection status, who is in your party. Other components 
 structures. The state is published through a Tokio `watch` channel, so a reader always sees the latest
 complete snapshot and never a half-updated one.
 
-The state only changes through named transitions defined in `state.rs` (for example "phase changed" or
+The state only changes through named transitions defined in `runtime/state.rs` (for example "phase changed" or
 "injection finished"). Nothing else can write to it. When something looks wrong in a log, there is a short,
 known list of places that could have caused it.
 
@@ -18,16 +18,18 @@ known list of places that could have caused it.
 
 | File | Purpose |
 | --- | --- |
-| `state.rs` | `AppState`, its sender/receiver types and the named transitions that change it |
-| `phase.rs` | `GamePhase`: turns the client's gameflow phases (lobby, champ select, game start, reconnect, end of game…) into one enum |
-| `supervisor.rs` | `Supervisor`: every background task is started here with a cancellation token, so shutdown is orderly and a crashed task is noticed |
+| `runtime/state.rs` | `AppState`, its sender/receiver types and the named transitions that change it |
+| `runtime/phase.rs` | `GamePhase`: turns the client's gameflow phases (lobby, champ select, game start, reconnect, end of game…) into one enum |
+| `runtime/supervisor.rs` | `Supervisor`: every background task is started here with a cancellation token, so shutdown is orderly and a crashed task is noticed |
 | `champions.rs` | Every champion: numeric id, the name used by its game archive, and its companion characters (Annie's Tibbers, Ivern's Daisy, and so on) |
-| `selection.rs`, `forms.rs` | What the user chose, including champions with alternate forms |
-| `historic.rs` | The last skin used on each champion, so it can be selected again automatically |
-| `mods.rs` | Custom mod categories (skins, maps, fonts, announcers, UI, voiceover, loading screens, VFX, SFX, others) and which of them allow only one active mod |
-| `library.rs` | The skin library on disk and how an entry is found for a champion and skin |
-| `overlay.rs` | Messages exchanged between Dekan and its selection window |
-| `party.rs` | Checks the skins announced by party members against the real team roster |
+| `runtime/selection.rs`, `forms.rs` | What the user chose, including champions with alternate forms |
+| `domain/historic.rs` | The last skin used on each champion, so it can be selected again automatically |
+| `domain/presets.rs` | Skin presets pinned per champion, grouped in named profiles with one active at a time |
+| `domain/lobby.rs` | Champions picked in the lobby (Swiftplay, Quickplay, Brawl) and the skin kept for each |
+| `domain/mods.rs` | Custom mod categories (skins, maps, fonts, announcers, UI, voiceover, loading screens, VFX, SFX, others) and which of them allow only one active mod |
+| `domain/library.rs` | The skin library on disk and how an entry is found for a champion and skin |
+| `domain/overlay.rs` | Messages exchanged between Dekan and its selection window |
+| `domain/party.rs` | Checks the skins announced by party members against the real team roster |
 | `env.rs` | The only list of `DEKAN_*` environment variables Dekan reads |
 | `error.rs` | Error types shared across crates |
 
@@ -47,7 +49,7 @@ known list of places that could have caused it.
 
 ## Party verification
 
-`party.rs` decides whether a teammate's announced skin can be trusted. An announcement is only accepted when
+`domain/party.rs` decides whether a teammate's announced skin can be trusted. An announcement is only accepted when
 the player's champion matches the one the League client reports for that player's slot. A party member cannot
 make you load a skin for a champion they are not playing, and a spoofed message has no effect.
 

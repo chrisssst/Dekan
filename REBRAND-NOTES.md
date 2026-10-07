@@ -1,6 +1,6 @@
-# Dekan 1.2.1 rebrand notes
+# Dekan 1.3 rebrand notes
 
-This package is based on the upstream Bullet 1.2.1 source tree.
+This package is based on the upstream Bullet 1.3 source tree.
 
 Customized for Dekan:
 
@@ -9,15 +9,11 @@ Customized for Dekan:
 - `%LOCALAPPDATA%\Dekan`, registry/autostart names and `DEKAN_*` variables
 - party/protocol branding (`DEKAN1` / `dekan-party`) while retaining the upstream public relay endpoint for compatibility
 - Windows version metadata, installer metadata and GitHub workflow branding
-- supplied Dekan logo converted to PNG/banner and multi-resolution Windows ICO assets
+- supplied Dekan logo for app, installer and the new Slint UI
 - interface languages reduced to Turkish and English
-- Turkish is the default/fallback interface language; English remains available when an English locale is detected
+- Turkish is the default/fallback interface language; English remains available for English locales
+- Discord community links point to `https://discord.gg/kutsal`
 
 The original MIT license and upstream attribution are preserved in `LICENSE` and `UPSTREAM-NOTICE.md`.
 
-## 1.2.1 release-ready adjustments
-
-- User-facing language choices are limited to Turkish and English.
-- Turkish is the default/fallback UI language.
-- Portuguese release-notification text was replaced with Turkish.
-- CI executable metadata validation now matches the Dekan-branded binary.
+- The package intentionally omits `assets/urgot-select.png` and `assets/urgot-ingame.png`; when overlaying it onto the existing Dekan repository, keep the current Dekan README screenshots already in `main`.

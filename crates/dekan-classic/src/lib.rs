@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod builder;
-pub mod client_data;
-pub mod clip_alias;
+mod animation;
+mod generation;
+
+pub use animation::{clip_alias, forms, gear_toggle};
+pub use generation::{builder, client_data, generator};
+
 pub mod error;
-pub mod forms;
-pub mod gear_toggle;
-pub mod generator;

@@ -8,7 +8,7 @@ logic that decides **what** to inject and **when**.
 1. **Single instance.** If Dekan is already running, the new process brings it to the front and exits.
 2. **User and logging.** It resolves the signed-in desktop user and starts a daily rotating log in
    `%LOCALAPPDATA%\Dekan\logs`. Logging never blocks the app, and any lines dropped under pressure are counted.
-3. **Discovery.** It finds the game install and the injector tools and checks the tools' hashes.
+3. **Discovery.** It finds the game install and the injector tools and checks the tools' publisher signature.
 4. **Game build.** It reads the installed game build. After a patch, cached overlays and locale data are thrown
    away. If the injector DLL does not support this build, the user is told right away and not in the middle of
    a match.
@@ -29,24 +29,26 @@ logic that decides **what** to inject and **when**.
 4. drops custom mods that no longer fit the current patch,
 5. asks `dekan-inject` to build the overlay and arm the injector before the game starts.
 
-The SHA-256 hashes of the audited injector binaries are defined here as well. The packaging tool reads them
-from this same source file, so the installer and the running app cannot disagree about which files are
-trusted.
-
 ## What is inside
 
 | File | Purpose |
 | --- | --- |
 | `main.rs` | Startup, tray, lifecycle and shutdown |
 | `trigger.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
-| `overlay_session.rs` | Drives the selection window: sends it the catalog, receives the user's choice |
-| `catalog.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
-| `mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |
-| `historic_store.rs` | Remembers the last skin used on each champion |
-| `party_manager.rs` | Connects party mode to the app state and the tray |
-| `skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
-| `live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors); only reads, never touches the game |
-| `update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `DEKAN_UPDATE_CHECK=0` |
+| `trigger/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
+| `trigger/mods.rs` | Prepares the mods for an arm: library packages, generated store and Classic skins, party skins, custom mods and their compatibility check |
+| `selection/overlay_session.rs` | Drives the selection window: sends it the catalog, receives the user's choice |
+| `selection/catalog.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
+| `selection/mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |
+| `selection/historic_store.rs` | Remembers the last skin used on each champion |
+| `selection/preset_store.rs` | Saves the skin presets and profiles |
+| `selection/book_store.rs` | Reads and writes those saved books, setting an unreadable file aside instead of overwriting it |
+| `party/party_manager.rs` | Connects party mode to the app state and the tray |
+| `selection/skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
+| `game/live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
+| `updates/injector_install.rs` | Installs the injector on request (startup refusal or the panel's **Install injector**): downloads both files from the newest signed LTK Manager tag, verifies the publisher's signature, stages them under the state folder and copies them into `tools` as `.partial` files that are verified again before the rename; when Windows denies the copy, `main.rs` reruns `dekan.exe --install-injector <staging> <tools>` elevated, which does the same and accepts only Dekan's own `tools` folders |
+| `updates/ltk_release.rs` | Lists the published LTK Manager releases every six hours and checks the publisher's signature on the injector files of each release it has not seen yet, newest first, until one is trusted. That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is announced once and the panel offers **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the trusted publisher changes. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `DEKAN_UPDATE_CHECK=0` |
 | `logging.rs` | Log setup and level handling (`DEKAN_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Dekan running without administrator rights |
 

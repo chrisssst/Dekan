@@ -132,7 +132,7 @@ jobs:
               "embeds": [
                   {
                       "title": f"🎉 Yeni sürüm yayınlandı: {tag}!",
-                      "description": body if body else "Dekan'ın yeni kararlı sürümü indirilebilir!",
+                      "description": body if body else "Dekan\'ın yeni kararlı sürümü indirilebilir!",
                       "url": release_url,
                       "color": 5763719,
                       "fields": fields,

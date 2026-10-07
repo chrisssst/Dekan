@@ -15,7 +15,7 @@
 #define MyAppExeName "dekan.exe"
 
 [Setup]
-AppId={{A7231B49-6B20-4DAF-A3D0-8F5296B987C2}
+AppId={{D387A5B1-8C56-4D2A-94B8-975DE11C6B45}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -55,7 +55,7 @@ RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
+Name: "turkish"; MessagesFile: "compiler:Languages\\Turkish.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
@@ -66,7 +66,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 Type: filesandordirs; Name: "{localappdata}\Programs\Dekan"
 Type: files; Name: "{app}\tools\*.orig"
 Type: files; Name: "{app}\tools\*.bak"
-Type: filesandordirs; Name: "{localappdata}\Dekan\overlay"
+Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 
 [Dirs]
 Name: "{app}\tools"

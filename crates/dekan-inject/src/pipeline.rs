@@ -4,14 +4,11 @@ use std::time::Duration;
 use dekan_core::state::{InjectionStatus, StateSender, set_injection_status};
 use tracing::{error, info, warn};
 
-use crate::dll_validator::validate_dll_hash;
 use crate::error::InjectError;
 use crate::overlay::{OverlayConfig, OverlayManager};
-use crate::overlay_process::OverlayProcess;
+use crate::overlay_process::{OverlayProcess, PatcherSignal};
 
 pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
-
-pub const GAME_PROCESS_NAME: &str = "League of Legends.exe";
 
 pub const SAFE_HOOK_WINDOW: Duration = Duration::from_secs(2);
 
@@ -19,9 +16,11 @@ const LOADING_GAME_POLL: Duration = Duration::from_millis(500);
 
 #[must_use]
 pub fn game_already_loading() -> Option<(u32, Duration)> {
-    let pid = dekan_platform::process::ProcessFinder::find_process_by_name(GAME_PROCESS_NAME)
-        .ok()
-        .flatten()?;
+    let pid = dekan_platform::process::ProcessFinder::find_any_process(
+        &dekan_platform::game_version::GAME_EXES,
+    )
+    .ok()
+    .flatten()?;
     let age = dekan_platform::process::ProcessFinder::process_age(pid)?;
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }
@@ -40,12 +39,6 @@ async fn wait_out_loading_game() {
         tokio::time::sleep(LOADING_GAME_POLL).await;
     }
 }
-
-pub const HOOK_CONFIRMED_STATUS: &str = "Waiting for exit";
-
-pub const HOOK_PATCHING_STATUS: &str = "Patching";
-
-pub const PATCHER_ARMED_STATUS: &str = "Waiting for league match to start";
 
 pub const DEFAULT_ARM_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -67,11 +60,7 @@ impl Drop for CancelOnDrop {
 pub struct PipelineConfig {
     pub ltk_host_exe: PathBuf,
 
-    pub ltk_host_hash: String,
-
     pub ltk_dll_path: PathBuf,
-
-    pub ltk_dll_hash: String,
 
     pub ltk_flags: u32,
 
@@ -147,21 +136,19 @@ impl InjectionPipeline {
     }
 
     fn validate_patcher_binaries(&self) -> Result<(), InjectError> {
-        validate_dll_hash(&self.config.ltk_host_exe, &self.config.ltk_host_hash)?;
-        validate_dll_hash(&self.config.ltk_dll_path, &self.config.ltk_dll_hash)
+        crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
+        crate::trust::verify_injector_file(&self.config.ltk_dll_path)
     }
 
     pub async fn execute(
         &self,
         mods: &[String],
         game_pid: u32,
-        game_tid: u32,
     ) -> Result<InjectionOutcome, InjectError> {
         self.publish(InjectionStatus::Pending);
 
         info!(
             pid = game_pid,
-            tid = game_tid,
             mods = ?mods,
             "Starting injection pipeline"
         );
@@ -259,10 +246,7 @@ impl InjectionPipeline {
         };
 
         match overlay
-            .wait_for_line(
-                |line| line.contains(PATCHER_ARMED_STATUS),
-                DEFAULT_ARM_TIMEOUT,
-            )
+            .wait_for(PatcherSignal::Armed, DEFAULT_ARM_TIMEOUT)
             .await
         {
             Ok(_) => {
@@ -425,14 +409,11 @@ impl InjectionPipeline {
             return InjectionStatus::Unconfirmed;
         }
 
-        let result = overlay
-            .wait_for_line(|line| line.contains(HOOK_CONFIRMED_STATUS), budget)
-            .await;
+        let result = overlay.wait_for(PatcherSignal::Hooked, budget).await;
 
         match result {
-            Ok(line) => {
+            Ok(()) => {
                 info!(
-                    status_line = %line.text,
                     elapsed_ms = waited.elapsed().as_millis(),
                     "Hook confirmed by the patcher before resuming the game"
                 );

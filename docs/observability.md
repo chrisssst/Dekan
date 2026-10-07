@@ -26,13 +26,16 @@ The default was set to `info` after measuring that most `debug` output was "wait
 
 | When | What to find in the log |
 | --- | --- |
-| Startup | `Dekan starting` (version, elevation, single instance) and the game build |
+| Startup | `Dekan starting` (version, elevation, single instance), the game build, `Game WAD index ready` (wads, elapsed_ms) and `Companion characters indexed` (elapsed_s) |
 | Injector support | A warning at startup if the game build is newer than the DLL accepts |
+| Mode and lobby | `Lobby queue` with `queue_id`, `game_mode`, `map_id` and whether champions are picked in the lobby; `Champions are picked in the lobby` with the champions; `Skins registered in the lobby slots`; at game start `Injecting the skin picked in the lobby for the champion this match gave` |
+| Saved skins | `Saved skin restored as the injection target` with `origin` (Preset or Historic) and the active `profile`; `Saved skin restored for the lobby's other champion`; `Skin preset changed` (pinned or not); `Skin profile switched`, `created`, `deleted`; `Skin presets restored` at startup |
+| Chroma previews | `Skin catalog sent to the overlay` counts `chromas` and `chromas_with_preview` (those the client gave an image path for). `Chroma previews fetched from the client` closes the prefetch (asked, fetched, bytes, elapsed_ms); a warning with `failed` and `first_error` when some did not arrive, and one when an image could not be decoded. At `debug`: the ids without a preview, each image fetched or refused with its reason, each hover answered from the cache or while the prefetch runs, and each decoded image's size |
 | Skin generated | `Skin bin generated for slot 0`: character, source skin, sizes and checksums of the source and generated bin, links, classification before and after, animation graph, number of changed fields; at `debug`, every changed field |
 | Overlay | `Overlay WAD written` per archive: write mode, entries replaced and added, whether the header matches the game's; at `debug`, every changed entry |
 | Game reads | `The game opened this archive from the overlay`, one line per archive the injector redirected |
 | Match | `Live game data: roster and skins as the game reports them`, `a skin changed during the match`, `Live game event` (kills, multikills, objectives), from the game's local live data API |
-| After the match | `Game log: skins the game loaded for this match` and each distinct error from the game's own log |
+| After the match | `Game log: skins the game loaded for this match` and each distinct error from the game's own log, also after a crash that leaves the client on the reconnect screen |
 | User marks | `User marked a problem` with the game time (mm:ss), champion and skin, from `Ctrl+Shift+B` in game or the panel button |
 | Screenshots | `Screenshot taken during the match` with the game time of each F12 screenshot the game saved during the match |
 | Export | `Match diagnostics exported automatically` when a match ends |

@@ -36,7 +36,7 @@ jobs:
           from datetime import datetime, timezone
 
           webhook_url = os.environ["DISCORD_WEBHOOK"]
-          user = os.environ.get("SENDER_LOGIN", "alguém")
+          user = os.environ.get("SENDER_LOGIN", "bir kullanıcı")
           user_url = os.environ.get("SENDER_URL", "")
           avatar = os.environ.get("SENDER_AVATAR", "")
           repo = os.environ.get("REPO_NAME", "Dekan")
@@ -48,17 +48,17 @@ jobs:
               "avatar_url": "https://raw.githubusercontent.com/chrisssst/Dekan/main/assets/dekan.png",
               "embeds": [
                   {
-                      "title": "⭐ Nova estrela recebida!",
-                      "description": f"O usuário [**{user}**]({user_url}) acabou de marcar o repositório [**{repo}**]({repo_url}) com uma estrela!",
+                      "title": "⭐ Yeni yıldız geldi!",
+                      "description": f"[**{user}**]({user_url}) kullanıcısı [**{repo}**]({repo_url}) reposuna yıldız verdi!",
                       "color": 16766720,
                       "fields": [
                           {
-                              "name": "⭐ Total de Estrelas",
+                              "name": "⭐ Toplam yıldız",
                               "value": f"**{stars}**",
                               "inline": True
                           },
                           {
-                              "name": "👤 Quem avaliou",
+                              "name": "👤 Yıldız veren",
                               "value": f"[{user}]({user_url})",
                               "inline": True
                           }
