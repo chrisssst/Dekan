@@ -1,0 +1,64 @@
+export struct ChromaGem {
+    id: int,
+    name: string,
+    color: color,
+    form: bool,
+    has-preview: bool,
+}
+
+export struct SkinCard {
+    id: int,
+    name: string,
+    name-unknown: bool,
+    tile: image,
+    has-tile: bool,
+    initial: string,
+    chromas: [ChromaGem],
+}
+
+export struct LobbyChoice {
+    id: int,
+    name: string,
+    active: bool,
+}
+
+export struct SkinRow {
+    cards: [SkinCard],
+}
+
+export enum ModLineKind { section, group, entry, empty, message }
+
+export struct ModLine {
+    kind: ModLineKind,
+    text: string,
+    detail: string,
+    slot: string,
+    id: string,
+    selected: bool,
+    radio: bool,
+    none: bool,
+}
+
+export struct OverlayLabels {
+    version: string,
+    search-skin: string,
+    search-mod: string,
+    dice: string,
+    minimize: string,
+    restore: string,
+    hide: string,
+    tab-skins: string,
+    tab-mods: string,
+    historic-tag: string,
+    random-tag: string,
+    preset-tag: string,
+    pin: string,
+    unpin: string,
+    profile-new: string,
+    profile-delete: string,
+    connected: string,
+    import-mod: string,
+    open-folder: string,
+}
+
+export enum SelectionOrigin { none, historic, random, preset }

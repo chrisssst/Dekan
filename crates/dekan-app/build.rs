@@ -37,7 +37,7 @@ fn main() {
             )
             .set("InternalName", "dekan")
             .set("OriginalFilename", "dekan.exe")
-            .set("Comments", "Dekan — customized from Bullet (MIT licensed)")
+            .set("Comments", "https://github.com/chrisssst/Dekan")
             .set("ProductVersion", &display_version)
             .set("FileVersion", &display_version);
 

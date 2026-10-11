@@ -17,7 +17,7 @@ This applies to the GitHub repository (issues, pull requests, discussions) and t
 
 ## Enforcement
 
-Report unacceptable behavior privately to the maintainer, Dekan, through [Dekan Discord](https://discord.gg/kutsal), or
+Report unacceptable behavior privately to the maintainer, Dekan, through [GitHub](https://github.com/chrisssst/Dekan), or
 through a [private security advisory](https://github.com/chrisssst/Dekan/security/advisories/new) if it involves a
 security issue. Reports are handled confidentially. Maintainers may remove content and warn, suspend or ban
 participants, following the enforcement guidelines of the Contributor Covenant.

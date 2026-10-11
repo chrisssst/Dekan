@@ -10,6 +10,10 @@ pub enum ClassicError {
     InvalidAlias(String),
     #[error("skin bin could not be rebuilt: {0}")]
     Bin(String),
+    #[error("mesh or skeleton could not be read or written: {0}")]
+    Mesh(String),
+    #[error("sound bank could not be read or written: {0}")]
+    Audio(String),
     #[error("WAD error: {0}")]
     Wad(#[from] dekan_wad::error::WadError),
     #[error("I/O: {0}")]

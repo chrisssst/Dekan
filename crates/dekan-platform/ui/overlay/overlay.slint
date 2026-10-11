@@ -1,0 +1,305 @@
+import { Theme, ExposeLayer, Field, Hairline, StatusDot } from "../theme.slint";
+import { ComboBox } from "std-widgets.slint";
+import { ChromaGem, LobbyChoice, SkinRow, ModLine, OverlayLabels, SelectionOrigin } from "parts/overlay_types.slint";
+import { Tab, HeaderButton, PinButton, Dice } from "parts/overlay_controls.slint";
+import { OverlayHeader } from "overlay_header.slint";
+import { SkinList } from "overlay_list.slint";
+import { ChromaPreview } from "overlay_preview.slint";
+
+export component OverlayWindow inherits Window {
+    in property <bool> expose-flip;
+    in property <OverlayLabels> labels;
+    in property <string> champion;
+    in property <image> portrait;
+    in property <bool> has-portrait;
+    in property <string> portrait-initial;
+    in property <string> notice;
+    in property <[LobbyChoice]> lobby-champions;
+    in property <[string]> profiles;
+    in-out property <int> profile-index;
+    in property <bool> pinned;
+    in property <bool> can-pin;
+    in property <bool> can-delete-profile;
+    in property <bool> mods-tab;
+    in property <string> mods-count;
+    in property <[SkinRow]> rows;
+    in property <[ModLine]> mod-lines;
+    in property <[string]> import-categories;
+    in-out property <int> import-index;
+    in property <string> empty-big;
+    in property <string> empty-sub;
+    in property <string> footer-right;
+    in property <bool> footer-quote;
+    in property <int> selected-id: -1;
+    in property <int> selected-skin: -1;
+    in property <SelectionOrigin> origin;
+    in-out property <string> search;
+    in property <bool> preview-visible;
+    in property <string> preview-name;
+    in property <image> preview-image;
+    in property <bool> preview-loading;
+    in property <length> preview-anchor-x;
+    in property <length> preview-anchor-y;
+    out property <int> columns: root.width >= 560px ? max(1, floor((root.width - 24px + 6px) / 256px)) : 1;
+    callback search-edited(string);
+    callback search-focused();
+    callback search-done();
+    callback choose(int);
+    callback random();
+    callback show-tab(bool);
+    callback mod-clicked(string, string);
+    callback import-mod(int);
+    callback open-mods-folder();
+    callback gem-hovered(ChromaGem, length, length, bool);
+    callback focus-champion(int);
+    callback pin-clicked();
+    callback profile-chosen(int);
+    callback profile-added();
+    callback profile-removed();
+    callback columns-changed(int);
+    callback scrolled();
+    callback drag();
+    callback resize();
+    callback hide-requested();
+    callback minimize();
+    in property <bool> collapsed;
+    out property <length> header-height: header.height;
+    title: "Dekan";
+    icon: @image-url("../assets/logo.png");
+    no-frame: true;
+    always-on-top: true;
+    min-width: 320px;
+    min-height: root.collapsed ? 0px : 380px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+    changed columns => { root.columns-changed(self.columns); }
+
+    VerticalLayout {
+        header := OverlayHeader {
+            labels: root.labels;
+            champion: root.champion;
+            portrait: root.portrait;
+            has-portrait: root.has-portrait;
+            portrait-initial: root.portrait-initial;
+            collapsed: root.collapsed;
+            drag => { root.drag(); }
+            minimize => { root.minimize(); }
+            hide-requested => { root.hide-requested(); }
+        }
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 10px;
+            padding-bottom: 6px;
+            spacing: 6px;
+            search-field := Field {
+                search-icon: true;
+                text <=> root.search;
+                placeholder: root.mods-tab ? root.labels.search-mod : root.labels.search-skin;
+                edited => { root.search-edited(self.text); }
+                focus-requested => { root.search-focused(); }
+                accepted => {
+                    self.release-focus();
+                    root.search-done();
+                }
+                cancelled => {
+                    self.release-focus();
+                    root.search-done();
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Dice {
+                    label: root.labels.dice;
+                    clicked => { root.random(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            Tab {
+                text: root.labels.tab-skins;
+                active: !root.mods-tab;
+                clicked => { root.show-tab(false); }
+            }
+            Tab {
+                text: root.labels.tab-mods;
+                count: root.mods-count;
+                active: root.mods-tab;
+                clicked => { root.show-tab(true); }
+            }
+        }
+        if !root.mods-tab: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            ComboBox {
+                model: root.profiles;
+                current-index <=> root.profile-index;
+                horizontal-stretch: 1;
+                selected => { root.profile-chosen(self.current-index); }
+            }
+            PinButton {
+                label: root.pinned ? root.labels.unpin : root.labels.pin;
+                active: root.pinned;
+                enabled: root.can-pin;
+                clicked => { root.pin-clicked(); }
+            }
+            HeaderButton {
+                label: root.labels.profile-new;
+                icon: "M 5.5 1 L 5.5 10 M 1 5.5 L 10 5.5";
+                clicked => { root.profile-added(); }
+            }
+            if root.can-delete-profile: HeaderButton {
+                label: root.labels.profile-delete;
+                icon: "M 1 2.5 L 10 2.5 M 4 2.5 L 4 1 L 7 1 L 7 2.5 M 2 2.5 L 2.8 10 L 8.2 10 L 9 2.5";
+                clicked => { root.profile-removed(); }
+            }
+        }
+        if root.lobby-champions.length > 1: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            for choice in root.lobby-champions: Tab {
+                text: choice.name;
+                active: choice.active;
+                clicked => { root.focus-champion(choice.id); }
+            }
+        }
+        if root.notice != "": HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-bottom: 6px;
+            Rectangle {
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.gold-dim;
+                background: Theme.panel;
+                Rectangle {
+                    x: 0;
+                    width: 3px;
+                    background: Theme.gold;
+                }
+                HorizontalLayout {
+                    padding: 10px;
+                    padding-left: 13px;
+                    Text {
+                        text: root.notice;
+                        color: Theme.text;
+                        font-size: Theme.text-md;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        SkinList {
+            mods-tab: root.mods-tab;
+            rows: root.rows;
+            mod-lines: root.mod-lines;
+            import-categories: root.import-categories;
+            empty-big: root.empty-big;
+            empty-sub: root.empty-sub;
+            columns: root.columns;
+            selected-id: root.selected-id;
+            selected-skin: root.selected-skin;
+            origin: root.origin;
+            labels: root.labels;
+            import-index <=> root.import-index;
+            choose(id) => { root.choose(id); }
+            gem-hovered(gem, x, y, on) => { root.gem-hovered(gem, x, y, on); }
+            mod-clicked(slot, id) => { root.mod-clicked(slot, id); }
+            import-mod(index) => { root.import-mod(index); }
+            open-mods-folder => { root.open-mods-folder(); }
+            list-scrolled => { root.scrolled(); }
+        }
+        Rectangle {
+            vertical-stretch: 0;
+            background: Theme.panel;
+            VerticalLayout {
+                Hairline { }
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 28px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    spacing: 10px;
+                    HorizontalLayout {
+                        spacing: 7px;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusDot { }
+                        }
+                        Text {
+                            text: root.labels.connected;
+                            color: Theme.muted;
+                            font-size: Theme.text-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: root.footer-right;
+                        color: root.footer-quote ? Theme.gold-bright : Theme.gold;
+                        font-italic: root.footer-quote;
+                        font-size: Theme.text-sm;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: !root.collapsed;
+        x: root.width - 18px;
+        y: root.height - 18px;
+        width: 13px;
+        height: 13px;
+        opacity: grip.has-hover ? 1 : 0.7;
+        Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 13;
+            viewbox-height: 13;
+            stroke: Theme.gold-dim;
+            stroke-width: 1.3px;
+            commands: "M 12 4 L 4 12 M 12 8 L 8 12";
+        }
+        grip := TouchArea {
+            mouse-cursor: nwse-resize;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    root.resize();
+                }
+            }
+        }
+    }
+
+    ChromaPreview {
+        preview-visible: root.preview-visible;
+        preview-name: root.preview-name;
+        preview-image: root.preview-image;
+        preview-loading: root.preview-loading;
+        preview-anchor-x: root.preview-anchor-x;
+        preview-anchor-y: root.preview-anchor-y;
+        area-width: root.width;
+    }
+
+    public function focus-search() {
+        search-field.take-focus();
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}

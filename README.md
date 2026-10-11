@@ -98,7 +98,7 @@ Dekan was inspired by [Rose](https://github.com/Alban1911/Rose), a Python projec
 - **Party mode.** Friends on your team see each other's skins, through an end-to-end encrypted relay.
 - **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
   outdated skin files.
-- **In your language.** The interface is available in Turkish and English, with Turkish as the default.
+- **In your language.** The interface is available in English, Turkish.
 - **New version notice.** When a new release is published, Dekan tells you once in a Windows notification and
   keeps a download link in the control panel. It never downloads or installs anything by itself.
 - **Free and open source.** Dekan costs nothing. If you paid for it, you were scammed.
@@ -262,8 +262,16 @@ select them in the **Mods** tab of Dekan's window. You can pick at most one skin
 announcer at a time. The other categories can be combined.
 
 Before a mod is used, Dekan checks that every internal reference it contains still exists in the current
-game. After a patch, a mod whose references are gone is left out, with a warning, so it cannot crash the
-loading screen.
+game. When a patch adds a skin, the game renames the files it shares between skins, and a mod made for an
+older patch points at names that are gone. At startup, after a patch or when a mod file changes, Dekan looks
+up the single new name of each one in your installed game and updates your `.fantome`, `.zip` or mod folder in
+place; only those references change, and the file you had is kept once under
+`%LOCALAPPDATA%\Dekan\state\mod_originals`. A mod whose references cannot all be matched this way is left
+untouched and left out, with a warning, so it cannot crash the loading screen. A tray notice tells you how
+many mods were adjusted or left out, and the control panel shows the same count under **Custom mods**. If an
+adjusted mod looks wrong, **Restore original mods** in the panel puts back the original of every mod that is still
+the repaired file (a mod you replaced since is never touched); those files are then left as they are until you
+replace them. In a match, a broken link that would crash the game is still fixed on the prepared copy.
 
 ### Party mode
 
@@ -338,7 +346,8 @@ C:\Program Files\Dekan\              installed program (read-only for users)
 ├── library\                         skin library (generated or synced)
 ├── mods\                            mods generated from the game for the current match
 ├── overlay\                         built overlays, reused while the game build is unchanged
-└── state\                           settings, party.json, selections
+└── state\                           settings, party.json, selections; mod_originals\ keeps each custom
+                                     mod as it was before Dekan updated it for a patch
 ```
 
 - **Open them from the tray icon:** it has entries for the mods folder and the logs folder.
@@ -411,7 +420,7 @@ If Dekan is useful to you, **a star on GitHub** helps other players find it.
 
 ## Contact
 
-The project is maintained under the **Dekan** name.
+The project is maintained by **Dekan**: [GitHub](https://github.com/chrisssst/Dekan).
 
 For help and bug reports, the [Discord community](https://discord.gg/kutsal) and
 [GitHub issues](https://github.com/chrisssst/Dekan/issues) are the fastest routes. Security issues go through a

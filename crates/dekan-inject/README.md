@@ -27,14 +27,21 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 
 | File | Purpose |
 | --- | --- |
-| `build/mod_compat.rs` | Finds broken references inside a mod before it is used |
-| `build/overlay_builder.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
-| `build/overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
+| `build/mod_compat/mod.rs` | Finds broken references inside a mod before it is used, and relinks a shared skin file the patch renamed to its single successor in the installed game |
+| `build/mod_compat/assets.rs` | Reads asset formats from their headers and finds the game's new name for a renamed asset path |
+| `build/mod_compat/repair.rs` | `Repairer`: rewrites a mod's bins and assets against the installed game, for packed WADs and folders |
+| `build/overlay_builder/mod.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
+| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes |
+| `build/overlay_builder/mods.rs` | Index of a mod's WADs and loose files, stale bins retyped against the game, entries identical to the game dropped |
+| `build/overlay_builder/report.rs` | Logs each overlay WAD and writes the overlay manifest |
+| `build/overlay_builder/store.rs` | Shared game WAD copies prepared ahead of a match, and the stored base WADs moved in and out of the overlay |
+| `build/overlay_cache/mod.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
 | `build/overlay.rs` | Overlay configuration and locations |
-| `injector/ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
-| `injector/overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Dekan drops it |
-| `pipeline.rs` | Orchestrates build → arm → confirm |
-| `injector/trust.rs` | Accepts an injector file only when its Authenticode signature is valid and from League Toolkit's publisher; reads the game-build limit compiled into the DLL |
+| `injector/ltk_host/mod.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
+| `injector/overlay_process/mod.rs` | Starts the host, reads its output without blocking, and kills it if Dekan drops it |
+| `pipeline/mod.rs` | Orchestrates build → arm → confirm |
+| `pipeline/overlay.rs` | Builds the overlay for a pipeline run and records it in the overlay cache |
+| `injector/trust/mod.rs` | Accepts an injector file only when its Authenticode signature is valid and from League Toolkit's publisher; reads the game-build limit compiled into the DLL |
 | `injector/dll_validator.rs` | SHA-256 helpers used to tell installed and published DLLs apart |
 
 ## Rules the builder follows

@@ -120,3 +120,5 @@ xtask, toolchain, lockfile, trigger, injector trust and code, party cipher) neve
 
 `.claude/` and `.agents/` are local and ignored by git; public documentation is `README.md`, `docs/` and the crate
 READMEs, in English, without internal references.
+
+Build, test and run happen on the Windows host (Win32 binary); see `.claude/rules/dev-box.md` for why this project is a dev_box exception.

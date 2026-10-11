@@ -41,18 +41,21 @@ so most of the logic can be tested without either.
 ## Source layout
 
 Inside each crate, modules are grouped into one folder per segment, and `lib.rs` re-exports every module
-under a flat path (`dekan_platform::fs`, `dekan_wad::prop`), so callers never depend on the folders.
+under a flat path (`dekan_platform::fs`, `dekan_wad::prop`), so callers never depend on the folders. A folder
+holds at most 5 code files (`.rs` and `.slint`, tests included); a module that outgrows it becomes a folder
+(`x.rs` turns into `x/mod.rs` with its parts and tests beside it). `cargo xtask check` enforces this together with
+the 400-line limit per code file.
 
 | Crate | Folders |
 | --- | --- |
-| `dekan-core` | `domain/` (historic, library, mods, overlay, party), `runtime/` (phase, selection, state, supervisor) |
-| `dekan-platform` | `os/instance`, `os/system`, `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (the Slint windows; their `.slint` sources live in `crates/dekan-platform/ui`), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
+| `dekan-core` | `domain/` (`skins/`: historic, library, presets; `play/`: lobby, overlay, party; `mods/`), `runtime/` (phase, selection, state, supervisor) |
+| `dekan-platform` | `os/instance`, `os/system` (`launch/`, `identity/`, `authenticode/`), `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (the Slint windows, one folder per window; their `.slint` sources live in `crates/dekan-platform/ui`, with `ui/overlay/` and `ui/panel/`), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
 | `dekan-wad` | `archive/` (WAD, writer, `.fantome`, `.modpkg`), `properties/` (BIN/PROP), `hashing/` |
-| `dekan-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (champion select, live selection, skin registration, assets) |
-| `dekan-classic` | `animation/` (forms, gear toggle, clip aliases), `generation/` (builder, client data, and `generator/`: retarget, characters, classic, standard) |
-| `dekan-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, runner) |
+| `dekan-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (`pick/`: champion select, live selection, lobby; `skins/`: skin registration, assets) |
+| `dekan-classic` | `animation/` (`clips/`, `gear/`, `graph/`, `parts/`, `skin_forms/`, `transition/`, `vfx/`), `audio/`, `mesh/` (`formats/`, `merge/`), `generation/` (builder, client data, and `generator/`: `cycle/`, `forms/`, `rift/`, `slots/`, `store/`) |
+| `dekan-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, runner), `pipeline/` |
 | `dekan-party` | `transport/` (client, config, protocol), `security/` (crypto, token) |
-| `dekan-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `trigger.rs` with `trigger/paths.rs` and `trigger/mods.rs`) stay at the root |
+| `dekan-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `boot/` with `startup/` and `tray/`, `trigger/` with `arm/` and `prepare/`) stay at the root |
 | `xtask` | `build/`, `lint/`, `audit/`, `testing/`, `probes/`; `main.rs` only dispatches |
 
 ## Startup sequence

@@ -4,6 +4,44 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [Semantic Versioning](https://semver.org/). Detailed notes for each build are on the
 [Releases](https://github.com/chrisssst/Dekan/releases) page.
 
+## [Unreleased]
+
+### Added
+
+- Custom mods broken by a patch are repaired at startup: when a patch adds a skin and renames the files skins
+  share (`<Champion>_Multi_Skins_*.bin`, or the older `DATA/<Champion>_Skins_*.bin`), each reference is pointed at
+  its single successor in the installed game and the mod file is updated in place; the original is kept under
+  `state\mod_originals`. Texture and mesh paths the patch renamed (a variant suffix such as
+  `.SKINS_Yone_Skin74` dropped, or a `.dds`/`.tex` twin) are pointed at the file the game has now. The scan runs
+  at background priority and waits while a champion select or match is running. A mod that cannot be fully
+  matched is left untouched and left out, as before.
+- Unpacked WAD folders inside a mod are now checked before injection, like packed ones.
+- A tray notice and a **Custom mods** line in the control panel tell how many mods were adjusted or left out;
+  **Restore original mods** in the panel puts the kept originals back (only for files that are still the
+  repaired ones) and leaves those files unrewritten.
+- `.modpkg` mods are checked at startup too, and the startup check reports asset formats (models, skeletons,
+  animations, textures, sound banks) the installed game no longer uses.
+
+### Fixed
+
+- A skin form picked with `Ctrl+5` (such as one of Viego's Revenant swords) no longer goes back to the first
+  form when the champion walks or casts, and its ability, basic attack and idle effects, part materials and
+  gear-picked animations follow the form too (Viego Revenant, Diana, Katarina, Sett, Morgana and the other skins
+  whose forms the game switches by gear).
+- Skins whose forms each have their own model (Elementalist Lux's ten elements) now cycle with `Ctrl+5` too: the
+  forms are merged into one model generated from the installed game, each with its own texture. A player who owns
+  the skin in the same match keeps the original model.
+- Switching form with `Ctrl+5` plays that form's own transformation (animation, effects, sound and voice line) when
+  the skin has one, and ability sounds and voice lines follow the form on skins whose sounds change with the form.
+- A skin generated once is reused while the game and Dekan are unchanged, so champion select no longer regenerates
+  heavy skins (such as Spirit Blossom Morgana) and the patcher is ready before the game starts. Picking the same skin
+  again while it is being generated waits for that generation instead of failing.
+
+- A saved skin (pinned or last used) is no longer restored over a custom skin selected for the champion, and
+  picking a custom skin drops a saved skin restored a moment before.
+- `cargo xtask mod-audit`: runs that repair on copies of mods and checks each one entry by entry against the
+  original and the installed game.
+
 ## [1.2] — 2026-09-30
 
 ### Added
@@ -92,7 +130,7 @@ First public release.
 - Custom `.fantome` mods in ten categories, with a compatibility check that drops mods broken by a patch.
 - Classic Rift models generated from the installed game.
 - Party mode: teammates see each other's skins through an encrypted relay that cannot read the content.
-- Tray application with Turkish and English, Turkish default, start with Windows, single instance.
+- Tray application with English, Turkish, start with Windows, single instance.
 - Installer and uninstaller with an install audit, file details and a manifest that runs Dekan without
   administrator rights.
 

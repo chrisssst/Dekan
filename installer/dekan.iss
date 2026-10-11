@@ -55,7 +55,7 @@ RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "turkish"; MessagesFile: "compiler:Languages\\Turkish.isl"
+Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]

@@ -31,12 +31,21 @@ patch.
 
 | File | Purpose |
 | --- | --- |
-| `archive/wad.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
-| `archive/writer.rs` | WAD writer used to build overlays |
-| `properties/prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records; records the installed game's field types (`record_field_shapes`) and converts a mod's text paths into the file references the game declares (`strings_to_files`) |
+| `archive/wad/mod.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
+| `archive/wad/decode.rs` | Decompression of WAD entries: gzip, zstd and zstd split by a subchunk table |
+| `archive/wad/file.rs` | `WadFile`: reads entries straight from an archive on disk at their offsets |
+| `archive/writer/mod.rs` | WAD writer used to build overlays |
+| `archive/writer/output.rs` | Writes the built WAD to a file (through a `.partial` file) or to memory, copying runs of source bytes |
+| `archive/writer/game_copy.rs` | Keeps a byte-for-byte copy of a game WAD and writes a replacement-only mod over it |
+| `archive/writer/encode.rs` | Picks how each mod entry is stored (raw or zstd), as the mod tools write them |
+| `properties/prop/mod.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records; records the installed game's field types (`record_field_shapes`) and converts a mod's text paths into the file references the game declares (`strings_to_files`) |
+| `properties/prop/fields.rs` | Finds a field by path and sets a top-level integer field in place |
+| `properties/prop/flatten.rs` | Flattens every field to a path and value, and diffs two objects field by field |
+| `properties/prop/refs.rs` | Lists and remaps every hash and link reference inside an object |
+| `properties/prop/tree/shapes.rs` | Field shapes read from the game, used to retype a stale mod's strings as file references |
 | `hashing/hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
 | `archive/fantome.rs` | Reading `.fantome` packages |
-| `archive/modpkg.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and the stored bytes pass through as WAD chunks |
+| `archive/modpkg/mod.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and the stored bytes pass through as WAD chunks |
 | `hashing/hash_index.rs` | Hash-to-path lookup table |
 
 ## Design notes

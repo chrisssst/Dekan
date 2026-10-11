@@ -73,13 +73,10 @@ pub fn slot_identity(slot_bin: &[u8]) -> Result<SlotIdentity, ClassicError> {
     })
 }
 
-mod characters;
-mod classic;
-mod retarget;
-mod standard;
-
+pub use aliases::*;
 pub use characters::*;
 pub use classic::*;
+pub use prewarm::*;
 pub use retarget::*;
 pub use standard::*;
 
@@ -109,6 +106,19 @@ pub(crate) fn remove_if_present(dir: &Path) -> Result<(), ClassicError> {
     }
 }
 
+mod cycle;
+mod forms;
+mod reuse;
+mod rift;
+mod slots;
+mod store;
+
+use forms::form_models;
 #[cfg(test)]
-#[path = "generator_tests.rs"]
+use forms::forms_tests;
+use rift::{characters, classic};
+use slots::retarget;
+use store::{aliases, prewarm, standard};
+
+#[cfg(test)]
 mod tests;

@@ -1,0 +1,190 @@
+import { Theme } from "../../theme.slint";
+import { ChromaGem, SkinCard, OverlayLabels, SelectionOrigin } from "overlay_types.slint";
+
+export component Chamfer inherits Path {
+    in property <length> cut: 9px;
+    viewbox-width: self.width / 1px;
+    viewbox-height: self.height / 1px;
+    commands: "M 0.5 0.5 L " + (self.width / 1px - self.cut / 1px) + " 0.5 L " + (self.width / 1px - 0.5) + " " + (self.cut / 1px) + " L " + (self.width / 1px - 0.5) + " " + (self.height / 1px - 0.5) + " L 0.5 " + (self.height / 1px - 0.5) + " Z";
+    stroke-width: 1px;
+}
+
+export component GemShape inherits Path {
+    in property <bool> form;
+    viewbox-width: 18;
+    viewbox-height: 19;
+    commands: root.form ? "M 9 1 L 17 9.5 L 9 18 L 1 9.5 Z" : "M 9 0 L 18 7.2 L 14.8 19 L 3.2 19 L 0 7.2 Z";
+}
+
+export component Gem inherits Rectangle {
+    in property <ChromaGem> gem;
+    in property <bool> selected;
+    callback chosen();
+    callback hovered(bool);
+    property <length> grow: root.selected ? 4px : touch.has-hover ? 2px : 0px;
+    width: 18px;
+    height: 19px;
+    animate grow { duration: 150ms; easing: ease-out; }
+    GemShape {
+        x: -root.grow / 2;
+        y: -root.grow / 2 - (touch.has-hover && !root.selected ? 2px : 0px);
+        width: root.width + root.grow;
+        height: root.height + root.grow;
+        fill: root.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    }
+    GemShape {
+        form: root.gem.form;
+        x: 2px - root.grow / 2;
+        y: 2px - root.grow / 2 - (touch.has-hover && !root.selected ? 2px : 0px);
+        width: root.width - 4px + root.grow;
+        height: root.height - 4px + root.grow;
+        fill: root.gem.form ? Theme.gold-dim : root.gem.color;
+    }
+    if root.selected: Text {
+        text: "✓";
+        color: white;
+        font-size: 10px;
+        font-weight: 900;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(); }
+        changed has-hover => { root.hovered(self.has-hover); }
+    }
+    accessible-role: button;
+    accessible-label: root.gem.name;
+    accessible-action-default => { root.chosen(); }
+}
+
+export component Card inherits Rectangle {
+    in property <SkinCard> card;
+    in property <int> selected-id;
+    in property <int> selected-skin;
+    in property <SelectionOrigin> origin;
+    in property <OverlayLabels> labels;
+    callback chosen(int);
+    callback gem-hovered(ChromaGem, length, length, bool);
+    property <bool> selected: root.card.id == root.selected-skin;
+    property <length> gems-width: root.width - 12px - 56px - 12px - 26px;
+    property <int> per-line: max(1, floor((self.gems-width + 7px) / 25px));
+    property <int> gem-rows: ceil(root.card.chromas.length / root.per-line);
+    property <bool> tagged: root.selected && root.origin != SelectionOrigin.none;
+    property <length> details: 18px + (root.tagged ? 24px : 0px) + (root.card.chromas.length > 0 ? root.gem-rows * 26px : 0px);
+    height: max(56px, root.details) + 24px;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(root.card.id); }
+    }
+    Rectangle {
+        border-radius: 3px;
+        drop-shadow-blur: root.selected ? 12px : 0px;
+        drop-shadow-color: Theme.gold.with-alpha(0.14);
+        background: root.selected ? Theme.card : transparent;
+        animate drop-shadow-blur { duration: 180ms; }
+    }
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        fill: root.selected ? Theme.card-fill-selected : touch.has-hover ? Theme.card-fill-hover : Theme.card-fill;
+        stroke: root.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    }
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 2px;
+        height: parent.height;
+        background: root.selected || touch.has-hover ? Theme.gold : Theme.line;
+    }
+    HorizontalLayout {
+        padding-top: 11px;
+        padding-bottom: 13px;
+        padding-left: 12px;
+        padding-right: 26px;
+        spacing: 12px;
+        Rectangle {
+            width: 56px;
+            height: 56px;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: root.selected ? Theme.gold : Theme.line;
+            background: @linear-gradient(160deg, Theme.card-hover 0%, Theme.bg-0 100%);
+            clip: true;
+            if root.card.has-tile: Image {
+                width: 100%;
+                height: 100%;
+                source: root.card.tile;
+                image-fit: cover;
+            }
+            if !root.card.has-tile: Text {
+                text: root.card.initial;
+                color: Theme.gold-dim;
+                font-family: Theme.serif;
+                font-size: 22px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            spacing: 7px;
+            alignment: center;
+            Text {
+                text: root.card.name.to-uppercase();
+                color: root.card.name-unknown ? Theme.muted : Theme.text;
+                font-italic: root.card.name-unknown;
+                font-size: Theme.text-base;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+                overflow: elide;
+            }
+            if root.tagged: HorizontalLayout {
+                alignment: start;
+                Rectangle {
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: Theme.gold-dim;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        padding-top: 1px;
+                        padding-bottom: 1px;
+                        Text {
+                            text: (root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.origin == SelectionOrigin.preset ? root.labels.preset-tag : root.labels.random-tag).to-uppercase();
+                            color: Theme.gold;
+                            font-size: Theme.text-xs;
+                            letter-spacing: 0.4px;
+                        }
+                    }
+                }
+            }
+            if root.card.chromas.length > 0: Rectangle {
+                height: root.gem-rows * 26px - 7px;
+                for gem[index] in root.card.chromas: Gem {
+                    x: mod(index, root.per-line) * 25px;
+                    y: floor(index / root.per-line) * 26px;
+                    gem: gem;
+                    selected: gem.id == root.selected-id;
+                    chosen => { root.chosen(gem.id); }
+                    hovered(on) => {
+                        root.gem-hovered(gem, self.absolute-position.x + self.width / 2, self.absolute-position.y, on);
+                    }
+                }
+            }
+        }
+    }
+    accessible-role: button;
+    accessible-label: root.card.name;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.chosen(root.card.id); }
+    if root.selected: Text {
+        x: parent.width - 22px;
+        y: 8px;
+        text: "✓";
+        color: Theme.gold;
+        font-size: Theme.text-sm;
+        font-weight: 700;
+    }
+}

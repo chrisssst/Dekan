@@ -19,7 +19,7 @@ logic that decides **what** to inject and **when**.
 
 ## The injection trigger
 
-`trigger.rs` is the heart of the app. It watches the shared state and, during champion select:
+`trigger/mod.rs` is the heart of the app. It watches the shared state and, during champion select:
 
 1. works out the skin you want, from the selection window and the champion you have locked,
 2. waits briefly for the choice to settle before acting (100 ms for the first choice, 900 ms after a change),
@@ -34,20 +34,32 @@ logic that decides **what** to inject and **when**.
 | File | Purpose |
 | --- | --- |
 | `main.rs` | Startup, tray, lifecycle and shutdown |
-| `trigger.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
-| `trigger/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
-| `trigger/mods.rs` | Prepares the mods for an arm: library packages, generated store and Classic skins, party skins, custom mods and their compatibility check |
-| `selection/overlay_session.rs` | Drives the selection window: sends it the catalog, receives the user's choice |
-| `selection/catalog.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
-| `selection/mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |
+| `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and patcher DLL reports |
+| `boot/startup/injector.rs` | The startup injector check and the automatic or panel-requested injector install |
+| `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions, and the supervised tasks the tray starts (notices, update and LTK checks, activation) |
+| `trigger/mod.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
+| `trigger/arm/arm_key.rs`, `trigger/arm/arming.rs`, `trigger/arm/game_start.rs` | What to arm (keys, wanted skin, decision), arming and registering the patcher, and the game-start confirmation and late injection |
+| `trigger/prepare/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
+| `trigger/prepare/mods.rs` | Prepares the mods for an arm: library packages, generated store and Classic skins, party skins, custom mods and their compatibility check |
+| `trigger/prepare/skins.rs` | Prepares the skin itself: Classic party skins and aliases, library packages and generated skins |
+| `selection/overlay_session/mod.rs` | Drives the selection window: sends it the catalog, receives the user's choice |
+| `selection/overlay_session/choice.rs`, `selection/overlay_session/mods.rs`, `selection/overlay_session/preview.rs`, `selection/overlay_session/import.rs` | The session's commands, historic, presets and random choice; mods panel; chroma previews; mod import |
+| `selection/catalog/mod.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
+| `selection/catalog/classic.rs`, `selection/catalog/preview.rs` | The Classic Rift catalog and the chroma preview downloads |
+| `selection/mods_store/mod.rs` | Custom mod folders, the saved selection and preparing the selected mods |
+| `selection/mods_store/import.rs`, `selection/mods_store/stage.rs` | Importing a mod archive, and staging the selected mods (including `.modpkg` unpacking) |
+| `selection/mod_repair/mod.rs` | At startup, checks every custom mod against the installed game, rewrites the ones the relink makes compatible (original kept in `state\mod_originals`) and remembers each verdict per game executable |
+| `selection/mod_repair/files.rs`, `selection/mod_repair/restore.rs` | Mod package discovery, stamps, backups and verdict files; restoring the originals |
 | `selection/historic_store.rs` | Remembers the last skin used on each champion |
 | `selection/preset_store.rs` | Saves the skin presets and profiles |
 | `selection/book_store.rs` | Reads and writes those saved books, setting an unreadable file aside instead of overwriting it |
-| `party/party_manager.rs` | Connects party mode to the app state and the tray |
-| `selection/skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
-| `game/live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
+| `party/party_manager/mod.rs` | Connects party mode to the app state and the tray |
+| `selection/skin_sync/mod.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
+| `game/live_game/mod.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
+| `game/live_game/data.rs`, `game/live_game/logs.rs` | Parsing the live data API, and the game log, screenshots and diagnostics exports after a match |
 | `updates/injector_install.rs` | Installs the injector on request (startup refusal or the panel's **Install injector**): downloads both files from the newest signed LTK Manager tag, verifies the publisher's signature, stages them under the state folder and copies them into `tools` as `.partial` files that are verified again before the rename; when Windows denies the copy, `main.rs` reruns `dekan.exe --install-injector <staging> <tools>` elevated, which does the same and accepts only Dekan's own `tools` folders |
-| `updates/ltk_release.rs` | Lists the published LTK Manager releases every six hours and checks the publisher's signature on the injector files of each release it has not seen yet, newest first, until one is trusted. That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is announced once and the panel offers **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the trusted publisher changes. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/ltk_release/mod.rs` | Lists the published LTK Manager releases every six hours and checks the publisher's signature on the injector files of each release it has not seen yet, newest first, until one is trusted. That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is announced once and the panel offers **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the trusted publisher changes. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/ltk_release/fetch.rs` | The GitHub requests: release list, injector download and signature inspection |
 | `updates/update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `DEKAN_UPDATE_CHECK=0` |
 | `logging.rs` | Log setup and level handling (`DEKAN_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Dekan running without administrator rights |
@@ -94,7 +106,7 @@ $env:DEKAN_LOG = "debug"; cargo run -p dekan-app --release   # with detailed log
 cargo test -p dekan-app --test skin_pipeline
 ```
 
-`tests/skin_pipeline.rs` builds a small, deterministic game install (Zed with a legendary skin, its chroma, the
+`tests/skin_pipeline.rs` (fixtures in `tests/support/`) builds a small, deterministic game install (Zed with a legendary skin, its chroma, the
 shadow companion, animation graphs, a texture, a Summoner's Rift map that shares the shadow and a TFT map) and a
 `.fantome` skin mod, then runs them through the production code: the skin generator, mod import, catalog,
 staging, the compatibility check and the overlay builder. It then opens the archives the game would mount (the

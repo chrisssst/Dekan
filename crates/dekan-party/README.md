@@ -26,7 +26,7 @@ each other directly. They exchange encrypted messages through a relay, and the r
 | `security/token.rs` | Invite token: generation, encoding, decoding and expiry; the key is never printed in logs |
 | `security/crypto.rs` | Room id derivation and the room cipher |
 | `transport/protocol.rs` | Messages exchanged with the relay and the size limits of the encrypted payload |
-| `transport/client.rs` | Connection to the relay: join, announce, receive members, reconnect |
+| `transport/client/mod.rs` | Connection to the relay: join, announce, receive members, reconnect |
 | `transport/config.rs` | Which relay to use: `DEKAN_RELAY_URL`, then `party.json` in Dekan's state folder, then the built-in default |
 | `error.rs` | Error type |
 

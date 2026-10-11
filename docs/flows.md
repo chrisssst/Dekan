@@ -17,6 +17,8 @@ Client enters champion select
                  champion's property files; a chroma without its own companion file uses its base skin's)
                  · a skin with several forms gets the Ctrl+5 form cycle in its own animation graph
                  · a spell clip the skin only has as its own variants gets the default name back
+                 · a skin already generated for the same archive, Dekan build and options is reused as is,
+                   and a second request for the same skin waits for the one in progress
               └─ dekan-inject builds the overlay
                  · entries identical to the game's are dropped
                  · paths shared with map archives change in the map archive too
@@ -32,7 +34,11 @@ Game starts
 **Why Ctrl+5 works through the animation graph.** `Ctrl+5` makes the game play the champion's `Toggle` clip.
 A skin with forms normally switches them through the gear the server tracks for its owner; under the default
 skin's id there is no gear to switch, so the generated graph cycles the forms itself by which form part is
-visible. Only what you see on your own screen changes.
+visible. The chosen form is kept in an invisible marker part that only `Ctrl+5` changes, held on a track of its
+own by a looping clip that moves no bone, and every animation the game plays by name (walking, spells, recall)
+enters a complete copy of the graph for the marked form, so the form stays until the next `Ctrl+5`. Ability and
+idle effects, materials and gear-picked animations follow the form too; a form that needs another mesh, and
+states a skin's server script turns on, are listed by `cargo xtask skin-audit` instead. Only what you see on your own screen changes.
 
 **Why some skins lose a special behaviour.** The game runs a script of its own for some skins, keyed by the
 skin id the server received (for example a skin that changes its music or reacts to the match). The generated
@@ -102,6 +108,14 @@ The player drops or imports a .fantome, .zip or .modpkg into %LOCALAPPDATA%\Deka
   └─ the mod appears in the Mods tab and is selected there
      └─ the selection joins the other mods for the next build
         └─ compatibility check: every data file the mod links to must exist in the game or in the mod
+           · a shared skin file (<Champion>_Multi_Skins_<slots>.bin) is renamed by the game whenever a patch adds
+             a skin to the group; a link to the old name is replaced by the one file the installed game's skin
+             bins link with the same slots plus only slots the mod never mentioned. Nothing else in the bin
+             changes. No such file, or more than one → the link stays dangling
+           · a texture or mesh path the game no longer has is replaced by the first of: the same path without
+             its variant suffix (Name.SKINS_Yone_Skin74.tex → Name.tex), its .dds/.tex or .sco/.scb twin, or
+             both, only if the game has it; the mod's own files always win
+           · unpacked WAD folders (WAD/<name>.wad.client/...) are checked and repaired like archives
            · a dangling link means the mod was made for an older patch → it is dropped with a warning
              (it would otherwise crash the loading screen)
         └─ property types: a mod made before the game turned text paths into file references (STRING → FILE,
@@ -152,6 +166,12 @@ mode has not been proven with several players in one real match.
 Dekan starts → finds the game → reads the game build
   · new build? cached overlays and locale data are discarded; the archive index revalidates
     itself by file size and modification time
+  · once the archive index is ready, at background priority and only while no champion select or match is
+    running, every custom mod in custom_mods is checked against the installed game
+    (the same relink and compatibility check as at build time). A mod that becomes fully compatible is
+    rewritten in place and its original kept under state\mod_originals; one that cannot is left as it is
+    and refused at build time. Verdicts are kept per game executable, so a mod is checked again only after
+    a patch or when its file changes
   · build newer than the injector DLL supports? the user is warned at startup
   └─ the client observer connects whenever the client opens; with no local skin library,
      the catalog is filled from the client's own skin list
