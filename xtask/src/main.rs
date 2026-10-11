@@ -7,10 +7,10 @@ mod testing;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 
-use audit::{client_audit, install_audit, skin_audit};
+use audit::{client_audit, install_audit, mod_audit, skin_audit};
 use build::{check, package, version};
 use lint::{adr008, comment_lexers, comments};
-use probes::{app, classic, wad};
+use probes::{app, classic, mesh, wad};
 use testing::{fuzz, harness, smoke};
 
 fn main() {
@@ -37,7 +37,9 @@ fn main() {
         "wad-types" => wad::run_wad_types(&args[2..]),
         "install-audit" => install_audit::run_install_audit(&args[2..]),
         "skin-audit" => skin_audit::run_skin_audit(&args[2..]),
+        "mod-audit" => mod_audit::run_mod_audit(&args[2..]),
         "prop-roundtrip" => wad::run_prop_roundtrip(&args[2..]),
+        "mesh-roundtrip" => mesh::run_mesh_roundtrip(&args[2..]),
         "client-dump" => client_audit::run_client_dump(&args[2..]),
         "client-audit" => client_audit::run_client_audit(&args[2..]),
         "harness" => harness::run_harness(&args[2..]),
@@ -78,6 +80,9 @@ fn print_help() {
         "  skin-audit       - Generate every skin of every champion from the installed game and report defects ([--root <game>] [--out <file>] [Alias...])"
     );
     eprintln!(
+        "  mod-audit        - Run the startup repair on copies of custom mods and check each one bit by bit against the original and the installed game ([--root <game>] <file|folder>...)"
+    );
+    eprintln!(
         "  client-audit     - Compare the installed client's skin data with the game and with Dekan's catalog ([--client <dir>] [--root <game>] [--out <file>])"
     );
     eprintln!(
@@ -95,12 +100,15 @@ fn print_help() {
     eprintln!(
         "  prop-roundtrip   - Read every object of every champion and map bin into the PROP tree and write it back; fails on any byte that differs ([--root <game>])"
     );
+    eprintln!(
+        "  mesh-roundtrip   - Read every skinned mesh (v4) and skeleton of the game and write it back; fails on any byte that differs ([--root <game>])"
+    );
     eprintln!("  adr008           - Fail if any discarded Result lacks a `// ignore-ok: <reason>`");
     eprintln!(
         "  comments         - Fail on comments in code files; [--strip] removes them, proves the code is unchanged and lists the removed text ([--report <file>])"
     );
     eprintln!(
-        "  check            - Validate workspace: error-handling sweep, no comments, fmt, clippy (-D warnings), test"
+        "  check            - Validate workspace: error-handling sweep, no comments, files up to 400 lines, fmt, clippy (-D warnings), test"
     );
     eprintln!("  package          - Build release profile and package binary into dist/");
     eprintln!(

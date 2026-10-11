@@ -46,7 +46,7 @@ to the workflow and the commit that produced it.
   1.27.0 build). The limit applies to the game build, not to the clock. Its bytes are never modified and its signature is never stripped.
 - They are not included in the installer or in `dekan.exe`. Dekan can download them at the user's request
   from the official LTK Manager repository at the newest release tag whose files carry the publisher's
-  signature (`injector_install.rs`); users can also take them from an LTK Manager release or the convenience
+  signature (`updates/injector_install.rs`); users can also take them from an LTK Manager release or the convenience
   mirror linked in the README. Either way, only files signed by the publisher are accepted, so a tampered
   download is refused.
 - None of them may be loaded from another product's folder. If one is missing, the user is told the exact
@@ -67,6 +67,11 @@ to the workflow and the commit that produced it.
   (`install.crash_reporting.enabled: false`), and only while **Light match loading** is on.
 - State files are written atomically, and a file handle is closed before its file is replaced (Windows keeps
   open files locked).
+- Dekan rewrites a custom mod in `custom_mods` only when the references it can match to the installed game
+  make the whole mod resolve; the rewrite is extracted with the same checked routine, written to a temporary
+  file, flushed and renamed over the original, and the original is copied once to `state\mod_originals`
+  first. Only the link list of the affected property files changes. Nothing outside Dekan's own
+  `custom_mods` is ever written.
 - Updates are announced, never applied: Dekan reads the tag of the latest published release from the GitHub
   API, compares it with its own version and shows a notice. It downloads no file and runs nothing; the notice
   opens the release page in the browser, and only `https://` pages can be opened.

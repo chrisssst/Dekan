@@ -12,12 +12,12 @@ Files and responsibilities: `README.md`. Trust model: `docs/security.md` and ADR
 - A WAD whose mod only replaces entries is the game file copied byte for byte plus the new entries. The copy is
   reused until the game file changes and prepared when the champion locks: rewriting a 2.5 GB map takes 24 s on an
   SSD and 53 s on a 5,400 rpm drive, and the game starts before an unarmed patcher. Nothing outside the cache
-  (`overlay_cache.rs`, the `.base` stamps) may delete that copy; the uninstaller is the one exception.
+  (`overlay_cache/mod.rs`, the `.base` stamps) may delete that copy; the uninstaller is the one exception.
 
 ## Injector
 
 - Third-party binaries come only from Dekan's own `tools` folder and only with a valid Authenticode signature from
-  `LTK_PUBLISHER` (`trust.rs`). The signature survives LTK's per-patch DLLs; any changed byte breaks it and is
+  `LTK_PUBLISHER` (`trust/mod.rs`). The signature survives LTK's per-patch DLLs; any changed byte breaks it and is
   refused. No version or hash is hardcoded. Changing the publisher needs a new ADR and the README's "Step 2".
 - Never patch the DLL bytes or strip its signature, and never bundle the binaries: the LTK Patcher License forbids
   redistributing them outside an official LTK Manager release. Their absence is told to the user.

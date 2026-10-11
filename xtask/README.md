@@ -6,7 +6,7 @@ Project automation, run through Cargo: `cargo xtask <command>`. Nothing here shi
 
 | Command | What it does |
 | --- | --- |
-| `check` | The error-handling sweep, the comment check, formatting, clippy with warnings as errors and the full test suite |
+| `check` | The error-handling sweep, the comment check, the file size check (no code file over 400 lines, no folder over 5 code files, tests included), formatting, clippy with warnings as errors and the full test suite |
 | `adr008` | Only the error-handling sweep: fails if any discarded `Result` lacks a `// ignore-ok: <reason>` marker |
 | `comments` | Fails on any comment in a tracked code file other than a one-line tool directive. `--strip` removes them: each file is read by a lexer for its language (Rust, JS/TS, CSS, HTML, TOML, YAML with the bash or PowerShell inside `run:`, Inno Setup), so text inside strings, raw strings, regular expressions, template literals and heredocs is never touched. A file is written only after it lexes again with the same directives and exactly the same code lines. The removed text goes to `target/comments-removed.md` (`--report <file>`) so it can be moved into the docs |
 | `package` | Release build into `dist\`, plus `SHA256SUMS` |
@@ -31,9 +31,11 @@ rather than an assumption.
 | `client-audit [--client <dir>] [--root <game>] [--out <file>]` | Reads the skin data from the installed client, builds Dekan's catalog with Dekan's own code and reports entries not offered, wrong parent skins, entries without a skin file, champions Dekan cannot name without the client running, and for Rift Classic the entries offered versus listed, with every offered Classic mod generated |
 | `harness [--root <game>] [--out <file>]` | For every champion (latest skin and one chroma), the reported cases and Rift Classic: generates the skin, builds the real overlay, and checks that every overlay entry decodes, unchanged entries keep the game's exact bytes and no changed path disagrees with another mounted archive |
 | `smoke <dekan.exe> <tools dir>` | Runs a release binary without tools, with wrong tools and with the audited injector; checks the real log (refusal, every supervised task up, no error) and that a second launch opens the first one's control panel and exits. The first two scenarios are skipped when `%ProgramFiles%/Dekan/tools` holds an injector, because discovery prefers it |
+| `mesh-roundtrip [--root <game>]` | Every skinned mesh (`.skn` v4) of the game is read and written back byte for byte, and every skeleton (`.skl`) to the same size and structure (its padding bytes hold exporter leftovers and are written as zero); also prints the largest joint and influence counts the game ships |
 | `fuzz [iterations] [seed]` | Mutates real game WADs and property files into the parsers; fails on any panic or on a broken round trip of a real skin bin |
 | `client-dump <client dir> <path…>` | Prints files of the installed client's game data, such as `v1/champions/99.json` |
 | `skin-audit [--root <game>] [--out <file>] [Name…]` | Generates every skin and chroma of every champion from the installed game and reports, per skin: build errors, companion characters and whether each got its `skin0.bin`, skins whose `skin0.bin` dropped a link of the original, generated bins that still reference their source skin's keys, links that point at files the game does not have, and generated paths that a map archive also holds (the overlay builder writes those into the map too). `--keep <dir>` keeps every generated mod for inspection |
+| `mod-audit [--root <game>] <file|folder>…` | Copies custom mods to a scratch folder, runs the startup repair on the copies and checks each one: dangling links before and after, that only the link list of a relinked bin changed and every other entry is bit-identical to the original, which entries equal the game's, object references the game's own bin does not also leave unresolved, and referenced files the game and the mod lack. Exits non-zero when a link stays dangling |
 
 `cargo xtask help` prints the full list.
 

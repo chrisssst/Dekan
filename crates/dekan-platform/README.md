@@ -24,29 +24,31 @@ injector needs.
 | File | Purpose |
 | --- | --- |
 | `league/paths.rs` | Finds the game, the data folders and the tools folder |
-| `os/system/process.rs` | Finds processes and threads and reads a process's image path |
+| `os/system/launch/process.rs` | Finds processes and threads and reads a process's image path |
 | `league/game_version.rs` | Reads the game build timestamp and notices when it changes |
-| `os/storage/fs.rs` | Atomic writes (write to a temporary file, then rename) and safe archive extraction that rejects path traversal, symlinks and oversized content |
-| `ui/pages/overlay_window.rs`, `ui/pages/overlay_model.rs`, `ui/overlay.slint` | The skin selection window that follows the League client window; `overlay_model.rs` holds the search, rows, mods panel and selection logic as plain functions |
+| `os/storage/fs/mod.rs`, `os/storage/fs/archive.rs` | Atomic writes (write to a temporary file, then rename) and tree mirroring; `fs/archive.rs` is the safe archive extraction that rejects path traversal, symlinks and oversized content |
+| `ui/pages/overlay_window/mod.rs`, `ui/pages/overlay_model/mod.rs`, `ui/overlay/overlay.slint` | The skin selection window that follows the League client window; `overlay_model/mod.rs` holds the search, rows, mods panel and selection logic as plain functions |
+| `ui/pages/overlay_window/view.rs`, `ui/pages/overlay_window/render.rs`, `ui/pages/overlay_window/placement.rs` | Creating and wiring the Slint view, rendering the model into it, and placing the window beside the client |
+| `ui/overlay/parts/overlay_types.slint`, `ui/overlay/parts/overlay_cards.slint`, `ui/overlay/parts/overlay_controls.slint`, `ui/overlay/overlay_header.slint`, `ui/overlay/overlay_list.slint`, `ui/overlay/overlay_preview.slint` | The overlay's data types, skin cards and gems, buttons and tabs, header, scrolling list and chroma preview |
 | `league/client_settings.rs` | Sets `install.crash_reporting.enabled: false` in the League client's `Config/LeagueClientSettings.yaml`, changing only that line (or adding the missing section) and keeping the file's indentation and line endings; a missing file is left alone |
 | `league/client_window.rs` | Locates the League client window so the overlay can follow it |
-| `ui/desktop/tray.rs` | The system tray icon; a click opens the control panel, the right-click menu only shows the status, "Open Dekan" and "Quit". Shows the new-version notification; clicking it opens the release page |
-| `ui/pages/panel.rs`, `ui/panel.slint` | The control panel: status, options, party, folders and diagnostics in one window |
+| `ui/desktop/tray/mod.rs`, `ui/desktop/tray/window.rs` | The system tray icon (`tray/window.rs` is its Win32 window and message loop); a click opens the control panel, the right-click menu only shows the status, "Open Dekan" and "Quit". Shows the new-version notification; clicking it opens the release page |
+| `ui/pages/panel/mod.rs`, `ui/panel/panel.slint`, `ui/panel/panel_types.slint`, `ui/panel/panel_parts.slint` | The control panel: status, options, party, folders and diagnostics in one window |
 | `os/storage/preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
-| `ui/pages/welcome.rs`, `ui/pages/party_dialog.rs`, `ui/welcome.slint`, `ui/party.slint`, `ui/desktop/dialog.rs` | The first-run and About window, the party dialog and message boxes |
+| `ui/pages/welcome/mod.rs`, `ui/pages/party_dialog/mod.rs`, `ui/welcome.slint`, `ui/party.slint`, `ui/desktop/dialog.rs` | The first-run and About window, the party dialog and message boxes |
 | `ui/pages/runtime.rs`, `ui/pages/views.rs`, `ui/theme.slint`, `ui/app.slint`, `build.rs` | The `dekan-ui` thread that owns the Slint event loop, the generated window types, the shared design tokens and controls, and the build step that compiles the `.slint` files |
-| `ui/locale/i18n.rs` | Translations (Turkish, English) for everything shown outside the League client; falls back to English |
+| `ui/locale/i18n/mod.rs`, `ui/locale/i18n/tr.rs`, `ui/locale/i18n/en.rs` | Translations (Turkish and English, one table per file) for everything shown outside the League client; falls back to Turkish |
 | `os/instance/single_instance.rs`, `os/instance/activation.rs` | Only one Dekan runs at a time; starting it again brings the first one to the front |
-| `os/system/autostart.rs` | The "start with Windows" setting |
-| `os/system/authenticode.rs` | Verifies a file's Authenticode signature with `WinVerifyTrust` (offline, no revocation fetch) and returns the signer's name |
-| `os/system/elevation.rs`, `os/system/user_profile.rs` | Checks the process privileges, runs a program elevated and waits for its exit code (`run_elevated`, a declined prompt is its own outcome), and resolves the real desktop user |
+| `os/system/launch/autostart.rs` | The "start with Windows" setting |
+| `os/system/authenticode/mod.rs` | Verifies a file's Authenticode signature with `WinVerifyTrust` (offline, no revocation fetch) and returns the signer's name |
+| `os/system/launch/elevation.rs`, `os/system/identity/user_profile.rs` | Checks the process privileges, runs a program elevated and waits for its exit code (`run_elevated`, a declined prompt is its own outcome), and resolves the real desktop user |
 | `ui/desktop/clipboard.rs`, `ui/desktop/shell.rs` | Copying invite codes, opening folders in Explorer, opening `https://` pages (anything else is refused) and message boxes, including a yes/no question |
 
 ## Design notes
 
 - **No hardcoded locations.** Every path is discovered at runtime, because Dekan is meant to run on many
   machines with different setups.
-- **Text is never hardcoded in one language.** Anything the user reads goes through `ui/locale/i18n.rs`. The selection
+- **Text is never hardcoded in one language.** Anything the user reads goes through `ui/locale/i18n/mod.rs`. The selection
   window uses the client's language; dialogs that can open before the client is running use the Windows
   language.
 - **The selection window lives outside the client.** Dekan never loads code into the League client. Its window
@@ -58,7 +60,7 @@ injector needs.
   previews arrive as PNG/JPEG bytes Rust fetched and are decoded on the interface thread. The window sends back
   only ids it was given; Rust decides what a choice means and echoes the effective selection.
 - **The logic is Rust, the drawing is Slint.** Search (accent folding), rows per column count, the mods panel,
-  selection toggling and the empty-state texts are plain functions in `overlay_model.rs` with their own tests.
+  selection toggling and the empty-state texts are plain functions in `overlay_model/mod.rs` with their own tests.
   A second click on the current pick clears it, which is how "inject nothing" is said and how a restored pick
   is dismissed; a chroma pick lights its whole card.
 - **Accessibility is the test surface.** Every control has an accessible role and label. The interface tests
@@ -66,7 +68,8 @@ injector needs.
   embedding mode for the software renderer drops the accessible properties) and with debug info in debug
   builds.
 - **Language fallback**: the client's exact locale when a dictionary exists, else the same language
-  (`tr_TR` → Turkish, `en-*` → English), else Turkish. Champion quotes from unsupported languages are not shown.
+  (`es_MX` → `es_ES`, `pt_PT` → `pt_BR`), else English. Champion quotes exist in Turkish/English only, so other
+  languages show none rather than one untranslated line.
 - **The overlay window draws no frame and never takes focus on its own.** It is created without activation,
   kept out of the taskbar, and shown or hidden through its window handle with `SW_SHOWNOACTIVATE`/`SW_HIDE`, so
   champion select keeps the keyboard. Clicking the search box takes the foreground (thread-input attach);

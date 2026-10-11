@@ -38,9 +38,10 @@ party mode are only proven in game.
 
 ## Test layout
 
-Large test modules live in sibling files named `<module>_tests.rs`, included with
-`#[cfg(test)] #[path = "..."] mod tests;`. They are still the module's own `tests` module with
-`use super::*`, so they see private items. The split only makes files easier to navigate.
+A module with tests is a folder: `<module>/mod.rs` declares `#[cfg(test)] mod tests;` and the tests live in
+`<module>/tests.rs` (or `<module>/tests/mod.rs`, with further `<name>_tests.rs` children when one file is not
+enough). They are child modules with `use super::*`, so they see private items. The split only makes files
+easier to navigate and keeps every folder within the 5-code-file limit.
 
 ## Test layers
 
@@ -51,7 +52,7 @@ claim what only a higher one can show.
 | --- | --- | --- | --- |
 | Assets and runtime | Dekan's own generator, mod import and staging, compatibility check and overlay builder, on a synthetic game install built by the test | The chosen skin, its companions and a custom mod end up in the archives the game would open: slot 0 holds the skin's own definition, every link resolves, the animation graph the skin names is reachable, archives that share a path agree, headers and untouched bytes are the game's, output is deterministic | `crates/dekan-app/tests/skin_pipeline.rs` (runs everywhere, including CI) |
 | Same, on the installed game | The same production code against a real install | The above for every champion, skin and chroma of the current patch | `cargo xtask harness`, `cargo xtask skin-audit`, `native_overlay_faithful` (ignored; needs the game) |
-| Interface | Dekan's Slint windows (overlay, control panel, About, party dialog) | Every button, tab, toggle, gem, card and key sends the command or event it names, through the accessibility tree; search folds accents; the mods panel, previews and empty states render from the same data the app passes | `ui/pages/*_tests.rs` (headless, every run) and `cargo xtask ipc-probe` on the real window |
+| Interface | Dekan's Slint windows (overlay, control panel, About, party dialog) | Every button, tab, toggle, gem, card and key sends the command or event it names, through the accessibility tree; search folds accents; the mods panel, previews and empty states render from the same data the app passes | `ui/pages/<window>/tests.rs` (headless, every run) and `cargo xtask ipc-probe` on the real window |
 | Real match | The game engine | How the skin looks and animates in game: models, animations, shaders, particles | Manual, with the log; the only layer that can show it |
 
 The first two layers show that Dekan loads and applies the skin files correctly. They do not render
@@ -103,7 +104,7 @@ maintainer approves a pull request
 - an approval from someone without write access,
 - the `no-automerge` label,
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
-  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger (`trigger.rs` and `trigger/`), the
+  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger (`trigger/`), the
   whole injector folder (`crates/dekan-inject/src/injector/`: host, overlay process, DLL validation), the
   party cipher and token (`crates/dekan-party/src/security/`), and the relay's deploy config. These are
   merged by hand.

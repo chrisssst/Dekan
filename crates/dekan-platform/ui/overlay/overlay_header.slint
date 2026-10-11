@@ -1,0 +1,103 @@
+import { Theme, Hairline, Wordmark } from "../theme.slint";
+import { OverlayLabels } from "parts/overlay_types.slint";
+import { HeaderButton } from "parts/overlay_controls.slint";
+
+export component OverlayHeader inherits Rectangle {
+    in property <OverlayLabels> labels;
+    in property <string> champion;
+    in property <image> portrait;
+    in property <bool> has-portrait;
+    in property <string> portrait-initial;
+    in property <bool> collapsed;
+    callback drag();
+    callback minimize();
+    callback hide-requested();
+    vertical-stretch: 0;
+    background: Theme.header;
+    TouchArea {
+        mouse-cursor: move;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.drag();
+            }
+        }
+    }
+    VerticalLayout {
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 8px;
+            padding-top: 9px;
+            padding-bottom: 9px;
+            spacing: 10px;
+            Image {
+                source: @image-url("../assets/logo.png");
+                width: 26px;
+                height: 26px;
+            }
+            Wordmark {
+                version: root.labels.version;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+            Rectangle {
+                max-width: 170px;
+                border-radius: 13px;
+                border-width: 1px;
+                border-color: Theme.line-gold;
+                background: Theme.gold.with-alpha(0.08);
+                HorizontalLayout {
+                    padding: 3px;
+                    padding-right: 10px;
+                    spacing: 7px;
+                    Rectangle {
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 11px;
+                        border-width: 1px;
+                        border-color: Theme.gold-dim;
+                        background: Theme.bg-0;
+                        clip: true;
+                        if root.has-portrait: Image {
+                            width: 100%;
+                            height: 100%;
+                            source: root.portrait;
+                            image-fit: cover;
+                        }
+                        if !root.has-portrait: Text {
+                            text: root.portrait-initial;
+                            color: Theme.gold-dim;
+                            font-family: Theme.serif;
+                            font-size: Theme.text-sm;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: root.champion;
+                        color: Theme.gold;
+                        font-size: Theme.text-sm;
+                        font-weight: 700;
+                        letter-spacing: 0.3px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+            HeaderButton {
+                label: root.collapsed ? root.labels.restore : root.labels.minimize;
+                icon: root.collapsed ? "M 1.5 1.5 L 9.5 1.5 L 9.5 9.5 L 1.5 9.5 Z" : "M 1 8.5 L 10 8.5";
+                clicked => { root.minimize(); }
+            }
+            HeaderButton {
+                label: root.labels.hide;
+                icon: "M 1 1 L 10 10 M 10 1 L 1 10";
+                clicked => { root.hide-requested(); }
+            }
+        }
+        Hairline {
+            gold: true;
+        }
+    }
+}

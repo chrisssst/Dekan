@@ -1,0 +1,166 @@
+import { Theme, GoldButton, Caps } from "../theme.slint";
+import { ScrollView, ComboBox } from "std-widgets.slint";
+import { ChromaGem, SkinRow, ModLineKind, ModLine, OverlayLabels, SelectionOrigin } from "parts/overlay_types.slint";
+import { Card } from "parts/overlay_cards.slint";
+import { ModEntry } from "parts/overlay_controls.slint";
+
+export component SkinList inherits ScrollView {
+    in property <bool> mods-tab;
+    in property <[SkinRow]> rows;
+    in property <[ModLine]> mod-lines;
+    in property <[string]> import-categories;
+    in-out property <int> import-index;
+    in property <string> empty-big;
+    in property <string> empty-sub;
+    in property <int> columns;
+    in property <int> selected-id;
+    in property <int> selected-skin;
+    in property <SelectionOrigin> origin;
+    in property <OverlayLabels> labels;
+    callback choose(int);
+    callback gem-hovered(ChromaGem, length, length, bool);
+    callback mod-clicked(string, string);
+    callback import-mod(int);
+    callback open-mods-folder();
+    callback list-scrolled();
+    vertical-stretch: 1;
+    changed viewport-y => { root.list-scrolled(); }
+    VerticalLayout {
+        width: root.visible-width;
+        alignment: start;
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 4px;
+        padding-bottom: 14px;
+        spacing: 6px;
+        if !root.mods-tab && root.rows.length == 0: VerticalLayout {
+            min-height: root.visible-height - 24px;
+            alignment: center;
+            spacing: 8px;
+            padding-left: 24px;
+            padding-right: 24px;
+            HorizontalLayout {
+                alignment: center;
+                Image {
+                    source: @image-url("../assets/logo.png");
+                    width: 40px;
+                    height: 40px;
+                    opacity: 0.28;
+                }
+            }
+            Text {
+                text: root.empty-big;
+                color: Theme.gold-bright;
+                font-size: Theme.text-base;
+                font-weight: 600;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.empty-sub;
+                color: Theme.muted;
+                font-size: Theme.text-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        if !root.mods-tab: VerticalLayout {
+            spacing: 6px;
+            for row in root.rows: HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                for card in row.cards: Card {
+                    width: (root.visible-width - 24px - (root.columns - 1) * 6px) / root.columns;
+                    card: card;
+                    selected-id: root.selected-id;
+                    selected-skin: root.selected-skin;
+                    origin: root.origin;
+                    labels: root.labels;
+                    chosen(id) => { root.choose(id); }
+                    gem-hovered(gem, x, y, on) => { root.gem-hovered(gem, x, y, on); }
+                }
+            }
+        }
+        if root.mods-tab: VerticalLayout {
+            spacing: 5px;
+            for line in root.mod-lines: VerticalLayout {
+                if line.kind == ModLineKind.section: VerticalLayout {
+                    padding-top: 6px;
+                    padding-bottom: 2px;
+                    Caps {
+                        text: line.text.to-uppercase();
+                    }
+                }
+                if line.kind == ModLineKind.group: VerticalLayout {
+                    padding-top: 6px;
+                    Text {
+                        text: line.text;
+                        color: Theme.muted;
+                        font-size: Theme.text-xs;
+                        font-weight: 600;
+                        letter-spacing: 0.8px;
+                    }
+                }
+                if line.kind == ModLineKind.entry: ModEntry {
+                    line: line;
+                    clicked => { root.mod-clicked(line.slot, line.id); }
+                }
+                if line.kind == ModLineKind.empty: VerticalLayout {
+                    padding: 28px;
+                    spacing: 8px;
+                    Text {
+                        text: line.text;
+                        color: Theme.gold-bright;
+                        font-size: Theme.text-base;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: line.detail;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+                if line.kind == ModLineKind.message: VerticalLayout {
+                    padding: 20px;
+                    Text {
+                        text: line.text;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            HorizontalLayout {
+                padding-top: 6px;
+                spacing: 6px;
+                ComboBox {
+                    model: root.import-categories;
+                    current-index <=> root.import-index;
+                    horizontal-stretch: 1;
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                GoldButton {
+                    border-radius: 3px;
+                    min-height: 30px;
+                    font-size: Theme.text-sm;
+                    text: root.labels.import-mod;
+                    clicked => { root.import-mod(root.import-index); }
+                }
+                GoldButton {
+                    border-radius: 3px;
+                    min-height: 30px;
+                    font-size: Theme.text-sm;
+                    text: root.labels.open-folder;
+                    clicked => { root.open-mods-folder(); }
+                }
+            }
+        }
+    }
+}
