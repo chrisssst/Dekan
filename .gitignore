@@ -58,6 +58,7 @@ relay-worker/.dev.vars
 # No exceptions: internal skills and notes never ship with the public repository.
 .claude/
 .agents/
+.serena/
 CLAUDE.local.md
 graphify-out/
 

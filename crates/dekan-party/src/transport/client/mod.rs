@@ -24,6 +24,16 @@ const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 const BACKOFF_MIN: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
 
+const STABLE_SESSION: Duration = Duration::from_secs(60);
+
+fn retry_backoff(backoff: Duration, session_lasted: Duration) -> Duration {
+    if session_lasted >= STABLE_SESSION {
+        BACKOFF_MIN
+    } else {
+        backoff
+    }
+}
+
 enum SessionEnd {
     Cancelled,
     ClosedByRelay,
@@ -75,7 +85,10 @@ impl PartyClient {
 
         let exit = loop {
             set_party_status(&self.state_tx, PartyStatus::Connecting);
-            match self.session(&url, &cipher, &cancel).await {
+            let started = tokio::time::Instant::now();
+            let ended = self.session(&url, &cipher, &cancel).await;
+            backoff = retry_backoff(backoff, started.elapsed());
+            match ended {
                 Ok(SessionEnd::Cancelled) => break PartyExit::Left,
                 Err(PartyError::RoomFull) => {
                     warn!("Party: the relay refused us because the room is full; not retrying");

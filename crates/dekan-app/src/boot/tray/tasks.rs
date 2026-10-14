@@ -69,28 +69,15 @@ pub fn spawn_injector_install(
 
 pub fn spawn_update_check(
     supervisor: &mut dekan_core::supervisor::Supervisor,
-    tray_controller: &dekan_platform::tray::TrayController,
-    state_dir_path: &std::path::Path,
+    offer: crate::boot::update::UpdateOffer,
     update_notice: &dekan_app::update_check::UpdateNotice,
-    state_rx: &dekan_core::state::StateReceiver,
 ) {
-    let update_tray = tray_controller.clone();
+    let state_rx_update = offer.state_rx.clone();
     let check = dekan_app::update_check::UpdateCheck {
-        state_dir: state_dir_path.to_path_buf(),
+        state_dir: offer.state_dir.clone(),
         notice: update_notice.clone(),
-        notify: Box::new(move |latest| {
-            let text = dekan_platform::i18n::text();
-            update_tray.notify(
-                &dekan_platform::i18n::fill(
-                    text.update_available_title,
-                    "version",
-                    &latest.to_string(),
-                ),
-                text.update_available_body,
-            );
-        }),
+        notify: Box::new(move |latest| Box::pin(crate::boot::update::offer(offer.clone(), latest))),
     };
-    let state_rx_update = state_rx.clone();
     supervisor.spawn("update-check", move |child_token| {
         dekan_app::update_check::run(check, state_rx_update, child_token)
     });

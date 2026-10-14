@@ -1,6 +1,6 @@
 # Dekan 1.4 rebrand notes
 
-This package is based on the upstream Bullet 1.4 source tree.
+This package is based on the upstream Bullet 1.5 source tree.
 
 Customized for Dekan:
 

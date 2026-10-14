@@ -100,7 +100,7 @@ Dekan was inspired by [Rose](https://github.com/Alban1911/Rose), a Python projec
   outdated skin files.
 - **In your language.** The interface is available in English, Turkish.
 - **New version notice.** When a new release is published, Dekan tells you once in a Windows notification and
-  keeps a download link in the control panel. It never downloads or installs anything by itself.
+  keeps a download link in the control panel. Installed copies ask before updating. If you accept, Dekan downloads the installer, verifies the signed checksum, closes, updates and reopens. Portable/source copies only get the download page.
 - **Free and open source.** Dekan costs nothing. If you paid for it, you were scammed.
 
 ## Why Dekan
@@ -148,6 +148,31 @@ Setup takes three steps: install Dekan, add the injector, start Dekan.
 
 3. Run the installer. Windows asks for administrator permission **once, to install** into
    `C:\Program Files\Dekan`. Dekan itself never runs as administrator.
+
+#### From a terminal
+
+Open PowerShell (not as administrator) and run:
+
+```powershell
+irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1 | iex
+```
+
+The script reads the newest release from GitHub, checks the installer against the release's `SHA256SUMS` and its
+signature, installs silently (Windows asks for administrator permission once) and starts Dekan. Nothing is
+installed if a check fails, and every failure ends with an error that says why, so scripts and coding agents can run
+the same command unattended:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1 | iex"
+```
+
+| Option | Environment variable | Effect |
+| --- | --- | --- |
+| `-Version 1.3` | `DEKAN_VERSION=1.3` | Installs that release instead of the newest |
+| `-PreRelease` | `DEKAN_PRERELEASE=1` | Installs the newest release, pre-releases included |
+| `-NoLaunch` | `DEKAN_NO_LAUNCH=1` | Installs without starting Dekan |
+
+Options are passed with `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1))) -NoLaunch`.
 
 ### Step 2 — Add the injector
 
@@ -380,7 +405,10 @@ C:\Program Files\Dekan\              installed program (read-only for users)
   latest Dekan release number and compare the injector files of LTK Manager releases with the audited ones
   (both off with `DEKAN_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only receives encrypted
   data.
-- It never downloads or runs an update. A new release is only announced; you install it yourself.
+- It never updates without asking. When a newer release is out, Dekan asks once, outside champion select and
+  matches, whether to update. **Yes** downloads the installer, checks it against the release's signed checksum
+  list, closes Dekan and runs the installer (Windows asks for permission), which opens the new version; **No**
+  keeps your version. Anything that fails the check is never run: the download page opens instead.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Dekan\logs`.
 
 ### What you should know

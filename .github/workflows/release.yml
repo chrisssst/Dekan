@@ -179,6 +179,22 @@ jobs:
           "$hash *$name" | Set-Content -NoNewline -Encoding ascii dist/installer/SHA256SUMS
           Get-Content dist/installer/SHA256SUMS
 
+      - name: Build the signing tool without the key
+        shell: pwsh
+        run: cargo build --package xtask
+
+      - name: Sign the checksums for in-app updates
+        shell: pwsh
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if (-not $env:RELEASE_SIGNING_KEY) {
+            "::warning::RELEASE_SIGNING_KEY is not set; installed copies will only be pointed at the download page"
+            exit 0
+          }
+          cargo xtask sign-sums dist/installer/SHA256SUMS
+          if ($LASTEXITCODE -ne 0) { throw "sign-sums failed" }
+
       - id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -198,6 +214,7 @@ jobs:
             dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
             dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe.sigstore.json
             dist/installer/SHA256SUMS
+            dist/installer/SHA256SUMS.sig
 
   publish:
     name: Publish pre-release
@@ -219,5 +236,5 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
           SHA: ${{ github.sha }}
         run: |
-          gh release create "$TAG" out/*.exe out/*.sigstore.json out/SHA256SUMS \
+          gh release create "$TAG" out/*.exe out/*.sigstore.json out/SHA256SUMS* \
             --target "$SHA" --prerelease --generate-notes --title "Dekan $TAG"

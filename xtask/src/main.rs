@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::ExitStatus;
 
 use audit::{client_audit, install_audit, mod_audit, skin_audit};
-use build::{check, package, version};
+use build::{check, package, signing, version};
 use lint::{adr008, comment_lexers, comments};
 use probes::{app, classic, mesh, wad};
 use testing::{fuzz, harness, smoke};
@@ -24,6 +24,8 @@ fn main() {
         "package" => package::run_package(),
         "installer" => package::run_installer(&args[2..]),
         "set-version" => version::run_set_version(&args[2..]),
+        "release-key" => signing::run_release_key(&args[2..]),
+        "sign-sums" => signing::run_sign_sums(&args[2..]),
         "client-probe" => app::run_client_probe(),
         "overlay-demo" => app::run_overlay_demo(),
         "library-probe" => app::run_library_probe(args.get(2).and_then(|a| a.parse().ok())),
@@ -55,6 +57,12 @@ fn print_help() {
     eprintln!("Commands:");
     eprintln!(
         "  set-version      - Stamp the workspace version in Cargo.toml and Cargo.lock (<major.minor>)"
+    );
+    eprintln!(
+        "  release-key      - Generate the update signing key pair; the private half goes to a file outside the repository (<file>)"
+    );
+    eprintln!(
+        "  sign-sums        - Sign a SHA256SUMS with RELEASE_SIGNING_KEY into SHA256SUMS.sig, checked against the embedded public key (<file>)"
     );
     eprintln!(
         "  client-probe     - Report the League Client window state and where the overlay would sit"

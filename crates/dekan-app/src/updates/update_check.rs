@@ -3,16 +3,20 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use futures_util::future::BoxFuture;
+
 use dekan_core::phase::GamePhase;
 use dekan_core::state::StateReceiver;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
+use crate::self_update::{Offer, ReleaseAsset};
+
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
 const USER_AGENT: &str = concat!("Dekan/", env!("CARGO_PKG_VERSION"), " (update check)");
-const FIRST_CHECK_DELAY: Duration = Duration::from_secs(45);
+const FIRST_CHECK_DELAY: Duration = Duration::from_secs(15);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const BUSY_RETRY: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -77,9 +81,11 @@ struct LatestRelease {
     draft: bool,
     #[serde(default)]
     prerelease: bool,
+    #[serde(default)]
+    assets: Vec<ReleaseAsset>,
 }
 
-pub fn newer_release(current: Version, body: &str) -> Result<Option<Version>, String> {
+pub fn newer_release(current: Version, body: &str) -> Result<Option<Offer>, String> {
     let release: LatestRelease =
         serde_json::from_str(body).map_err(|e| format!("unreadable release data: {e}"))?;
     if release.draft || release.prerelease {
@@ -87,7 +93,10 @@ pub fn newer_release(current: Version, body: &str) -> Result<Option<Version>, St
     }
     let latest = Version::parse(&release.tag_name)
         .ok_or_else(|| format!("release tag '{}' is not a version", release.tag_name))?;
-    Ok((latest > current).then_some(latest))
+    Ok((latest > current).then_some(Offer {
+        version: latest,
+        assets: release.assets,
+    }))
 }
 
 #[must_use]
@@ -158,13 +167,10 @@ pub fn remember_notified(state_dir: &Path, version: Version) {
 pub struct UpdateCheck {
     pub state_dir: PathBuf,
     pub notice: UpdateNotice,
-    pub notify: Box<dyn Fn(Version) + Send>,
+    pub notify: Box<dyn Fn(Offer) -> BoxFuture<'static, ()> + Send>,
 }
 
-async fn fetch_latest(
-    client: &reqwest::Client,
-    current: Version,
-) -> Result<Option<Version>, String> {
+async fn fetch_latest(client: &reqwest::Client, current: Version) -> Result<Option<Offer>, String> {
     let response = client
         .get(latest_release_api())
         .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -201,9 +207,11 @@ pub async fn run(check: UpdateCheck, state_rx: StateReceiver, token: Cancellatio
     if !pause(&token, FIRST_CHECK_DELAY).await {
         return;
     }
+    crate::self_update::clear_staging(&check.state_dir);
     loop {
         match fetch_latest(&client, current).await {
-            Ok(Some(latest)) => {
+            Ok(Some(offer)) => {
+                let latest = offer.version;
                 if check.notice.available() != Some(latest) {
                     info!(current = %current, latest = %latest, "A newer Dekan release is available");
                     check.notice.set(latest);
@@ -214,8 +222,10 @@ pub async fn run(check: UpdateCheck, state_rx: StateReceiver, token: Cancellatio
                             return;
                         }
                     }
-                    (check.notify)(latest);
-                    remember_notified(&check.state_dir, latest);
+                    (check.notify)(offer).await;
+                    if token.is_cancelled() {
+                        return;
+                    }
                 }
             }
             Ok(None) => debug!(current = %current, "Dekan is up to date"),
@@ -269,15 +279,16 @@ mod tests {
     fn only_a_newer_published_release_is_offered() {
         let current = v("1.1");
         let newer = r#"{"tag_name":"v1.2","draft":false,"prerelease":false,"html_url":"x"}"#;
-        assert_eq!(newer_release(current, newer), Ok(Some(v("1.2"))));
+        let offered = |body: &str| newer_release(current, body).map(|o| o.map(|o| o.version));
+        assert_eq!(offered(newer), Ok(Some(v("1.2"))));
         let same = r#"{"tag_name":"v1.1"}"#;
-        assert_eq!(newer_release(current, same), Ok(None));
+        assert_eq!(offered(same), Ok(None));
         let older = r#"{"tag_name":"v1.0.0"}"#;
-        assert_eq!(newer_release(current, older), Ok(None));
+        assert_eq!(offered(older), Ok(None));
         let pre = r#"{"tag_name":"v9.0","prerelease":true}"#;
-        assert_eq!(newer_release(current, pre), Ok(None));
+        assert_eq!(offered(pre), Ok(None));
         let draft = r#"{"tag_name":"v9.0","draft":true}"#;
-        assert_eq!(newer_release(current, draft), Ok(None));
+        assert_eq!(offered(draft), Ok(None));
     }
 
     #[test]

@@ -25,6 +25,10 @@ pub fn game_already_loading() -> Option<(u32, Duration)> {
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }
 
+fn exit_code_hex(code: i32) -> String {
+    format!("{:#010X}", code as u32)
+}
+
 async fn wait_out_loading_game() {
     let mut reported = false;
     while let Some((pid, age)) = game_already_loading() {
@@ -233,6 +237,7 @@ impl InjectionPipeline {
                 error!(
                     error = %e,
                     exit_code = ?exit,
+                    exit_code_hex = ?exit.map(exit_code_hex),
                     "The patcher never reported that it is watching for the game; the skin will not load"
                 );
                 self.publish(InjectionStatus::Failed {
@@ -279,10 +284,14 @@ impl InjectionPipeline {
                 if let Some(code) = overlay.exited_within(Duration::from_millis(500)).await {
                     warn!(
                         exit_code = code,
+                        exit_code_hex = %exit_code_hex(code),
                         "The patcher exited before confirming the hook; the overlay is not active"
                     );
                     return InjectionStatus::Failed {
-                        error: format!("the patcher exited with code {code} before hooking"),
+                        error: format!(
+                            "the patcher exited with code {code} ({}) before hooking",
+                            exit_code_hex(code)
+                        ),
                     };
                 }
 

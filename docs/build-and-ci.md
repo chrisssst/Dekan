@@ -178,6 +178,7 @@ The second form works offline with the Sigstore bundle published next to the ins
 | Approval required for workflows from outside collaborators | First-time contributors cannot run workflows unreviewed |
 | `SCORECARD_TOKEN` secret: fine-grained token for this repository only, *Administration: Read-only* | The default token cannot read rulesets, so the Scorecard Branch-Protection check scores 0 even when the ruleset exists |
 | SignPath project; `SIGNPATH_API_TOKEN` secret; `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_EXE_CONFIGURATION_SLUG` and `SIGNPATH_SETUP_CONFIGURATION_SLUG` variables | Authenticode signing of `dekan.exe` and the installer. Without the secret the signing steps are skipped and the release ships unsigned, which Windows SmartScreen and antivirus reputation treat as an unknown program |
+| `RELEASE_SIGNING_KEY` secret: the hex PKCS#8 Ed25519 key from `cargo xtask release-key <file outside the repo>` | Signs `SHA256SUMS` into `SHA256SUMS.sig`, which installed copies require before running an update. `sign-sums` refuses a key whose public half is not the one built into `dekan-app`. Without the secret the release ships without the signature and installed copies only get the download page |
 
 ## Packaging
 

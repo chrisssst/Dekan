@@ -35,6 +35,7 @@ logic that decides **what** to inject and **when**.
 | --- | --- |
 | `main.rs` | Startup, tray, lifecycle and shutdown |
 | `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and patcher DLL reports |
+| `boot/startup/update.rs` | The update question (Yes/No, once per version), the fallback to the download page, and running the verified installer after shutdown |
 | `boot/startup/injector.rs` | The startup injector check and the automatic or panel-requested injector install |
 | `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions, and the supervised tasks the tray starts (notices, update and LTK checks, activation) |
 | `trigger/mod.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
@@ -60,7 +61,8 @@ logic that decides **what** to inject and **when**.
 | `updates/injector_install.rs` | Installs the injector on request (startup refusal or the panel's **Install injector**): downloads both files from the newest signed LTK Manager tag, verifies the publisher's signature, stages them under the state folder and copies them into `tools` as `.partial` files that are verified again before the rename; when Windows denies the copy, `main.rs` reruns `dekan.exe --install-injector <staging> <tools>` elevated, which does the same and accepts only Dekan's own `tools` folders |
 | `updates/ltk_release/mod.rs` | Lists the published LTK Manager releases every six hours and checks the publisher's signature on the injector files of each release it has not seen yet, newest first, until one is trusted. That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is announced once and the panel offers **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the trusted publisher changes. Off with `DEKAN_UPDATE_CHECK=0` |
 | `updates/ltk_release/fetch.rs` | The GitHub requests: release list, injector download and signature inspection |
-| `updates/update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/update_check.rs` | Reads the latest published release from GitHub 15 s after launch and every six hours, and hands a newer one to the update question once; the control panel shows it too. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/self_update/mod.rs` | Verifies and stages an update: the release assets, the Ed25519 signature of `SHA256SUMS` against the embedded release key, the installer's SHA-256, staging under `state/update` |
 | `logging.rs` | Log setup and level handling (`DEKAN_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Dekan running without administrator rights |
 

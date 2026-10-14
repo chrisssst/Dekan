@@ -102,3 +102,16 @@ fn test_we_announce_only_a_valid_pick_for_our_own_champion() {
         "without our PUUID nobody could verify us"
     );
 }
+
+#[test]
+fn test_a_stable_session_restarts_the_reconnect_backoff() {
+    assert_eq!(retry_backoff(BACKOFF_MAX, STABLE_SESSION), BACKOFF_MIN);
+    assert_eq!(
+        retry_backoff(BACKOFF_MAX, Duration::from_secs(3 * 3600)),
+        BACKOFF_MIN
+    );
+    assert_eq!(
+        retry_backoff(Duration::from_secs(8), Duration::from_secs(2)),
+        Duration::from_secs(8)
+    );
+}

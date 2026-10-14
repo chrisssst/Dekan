@@ -173,6 +173,11 @@ pub fn is_expected_status(message: &str) -> bool {
 }
 
 #[must_use]
+pub fn joined_too_late(message: &str) -> bool {
+    message.contains("joined too late")
+}
+
+#[must_use]
 pub fn is_dll_failure(level: &str, message: &str) -> bool {
     if is_expected_status(message) {
         return false;

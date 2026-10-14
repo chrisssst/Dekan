@@ -13,4 +13,4 @@ pub(crate) use selection::book_store;
 pub use selection::{
     catalog, historic_store, mod_repair, mods_store, overlay_session, preset_store, skin_sync,
 };
-pub use updates::{injector_install, ltk_release, update_check};
+pub use updates::{injector_install, ltk_release, self_update, update_check};

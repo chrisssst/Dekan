@@ -72,9 +72,15 @@ to the workflow and the commit that produced it.
   file, flushed and renamed over the original, and the original is copied once to `state\mod_originals`
   first. Only the link list of the affected property files changes. Nothing outside Dekan's own
   `custom_mods` is ever written.
-- Updates are announced, never applied: Dekan reads the tag of the latest published release from the GitHub
-  API, compares it with its own version and shows a notice. It downloads no file and runs nothing; the notice
-  opens the release page in the browser, and only `https://` pages can be opened.
+- Updates run only after the user says yes. Dekan reads the latest published release from the GitHub API and,
+  outside champion select and matches, asks once per version. On yes it downloads `SHA256SUMS` and
+  `SHA256SUMS.sig`, checks the Ed25519 signature against the public key built into Dekan (the private key is
+  a release secret, never in the repository), requires the list to name `Dekan-Setup-<that version>-x64.exe`,
+  accepts only assets under the project's `releases/download/` URL and compares the installer's SHA-256 after
+  the download and again right before running it, holding the file open without write or delete sharing until
+  the installer exits. Any mismatch, or a release without a signature, runs nothing and opens the release page. The
+  installer is started unelevated and asks for elevation itself, so it reopens Dekan as the original user;
+  Dekan itself never elevates for an update. Copies not installed by the setup only get the notice.
 - Party mode never sends account ids or names. The relay sees a room id derived from the invite key and
   encrypted blobs, nothing else.
 

@@ -106,7 +106,14 @@ impl InjectionTrigger {
         );
 
         if let Some(armed) = armed {
-            if armed.key == key {
+            if armed.key.same_own_pick(&key) {
+                if armed.key.party != key.party {
+                    info!(
+                        champ_id,
+                        entry_id = ?entry_id,
+                        "Party skins changed after the patcher was armed; injecting the armed overlay with the earlier teammate picks"
+                    );
+                }
                 return self.confirm_armed(armed, champ_id, started_at).await;
             }
 
