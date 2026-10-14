@@ -326,5 +326,36 @@ fn test_a_patcher_for_an_abandoned_skin_is_disarmed_on_evidence_only() {
     ));
 }
 
+#[test]
+fn test_a_teammate_pick_change_keeps_the_armed_patcher_until_its_replacement() {
+    let armed = ArmKey {
+        champ_id: 9,
+        entry_id: Some(9034),
+        mods: 0,
+        classic_slot: None,
+        party: 2_284_058_962_661_815_573,
+        second: None,
+        lobby: false,
+    };
+    let teammate_changed = ArmKey {
+        party: 7_850_864_699_615_393_803,
+        ..armed
+    };
+
+    assert!(armed.same_own_pick(&teammate_changed));
+    assert!(!should_disarm(WantedSkin::Skin(teammate_changed), armed));
+    assert!(matches!(
+        arm_decision(WantedSkin::Skin(teammate_changed), Some(armed)),
+        ArmDecision::Schedule(request) if request.key == teammate_changed
+    ));
+
+    let own_changed = ArmKey {
+        entry_id: Some(9027),
+        ..teammate_changed
+    };
+    assert!(!armed.same_own_pick(&own_changed));
+    assert!(should_disarm(WantedSkin::Skin(own_changed), armed));
+}
+
 mod files;
 mod lobby;

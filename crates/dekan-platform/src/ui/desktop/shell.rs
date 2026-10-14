@@ -120,6 +120,24 @@ pub fn message_box_question(title: &str, text: &str) -> bool {
     answer == IDYES
 }
 
+pub fn dismiss_question(title: &str) -> bool {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, GetWindowThreadProcessId, IDNO, PostMessageW, WM_COMMAND,
+    };
+
+    unsafe {
+        let Ok(dialog) = FindWindowW(w!("#32770"), &HSTRING::from(title)) else {
+            return false;
+        };
+        let mut owner = 0u32;
+        GetWindowThreadProcessId(dialog, Some(&mut owner));
+        owner == GetCurrentProcessId()
+            && PostMessageW(dialog, WM_COMMAND, WPARAM(IDNO.0 as usize), LPARAM(0)).is_ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

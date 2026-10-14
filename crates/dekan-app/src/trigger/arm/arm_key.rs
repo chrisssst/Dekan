@@ -32,6 +32,13 @@ impl ArmKey {
         }
     }
 
+    pub(crate) fn same_own_pick(&self, other: &ArmKey) -> bool {
+        ArmKey {
+            party: other.party,
+            ..*self
+        } == *other
+    }
+
     pub(crate) fn picks(&self) -> Vec<(u32, u32)> {
         self.entry_id
             .map(|entry_id| (self.champ_id, entry_id))
@@ -197,7 +204,7 @@ pub(crate) fn should_disarm(wanted: WantedSkin, key: ArmKey) -> bool {
     match wanted {
         WantedSkin::Unknown => false,
         WantedSkin::Nothing => true,
-        WantedSkin::Skin(wanted) => wanted != key,
+        WantedSkin::Skin(wanted) => !wanted.same_own_pick(&key),
     }
 }
 

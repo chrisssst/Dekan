@@ -66,6 +66,26 @@ pub fn report_game_build(
     Some(stamp)
 }
 
+pub fn report_injector_files(files: &[&std::path::Path]) {
+    for file in files {
+        let Ok(bytes) = std::fs::read(file) else {
+            continue;
+        };
+        let modified_unix = std::fs::metadata(file)
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|age| age.as_secs());
+        info!(
+            file = %file.display(),
+            bytes = bytes.len(),
+            modified_unix = ?modified_unix,
+            sha256 = %dekan_inject::dll_validator::compute_sha256(&bytes),
+            "Injector file found"
+        );
+    }
+}
+
 pub fn report_ltk_dll_support(
     stamp: Option<u32>,
     installed: Option<dekan_app::ltk_release::InstalledDll>,

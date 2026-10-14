@@ -71,6 +71,7 @@ async fn main() -> Result<()> {
 
     let shutdown_token = CancellationToken::new();
     let mut supervisor = dekan_core::supervisor::Supervisor::new(shutdown_token.clone());
+    let pending_update = dekan_app::self_update::PendingUpdate::default();
 
     boot::reports::remove_retired_files(&state_dir_path);
 
@@ -142,6 +143,7 @@ async fn main() -> Result<()> {
     let game_build =
         boot::reports::report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
     boot::reports::report_ltk_dll_support(game_build, installed_dll.read(&paths.ltk_dll_path));
+    boot::reports::report_injector_files(&[&paths.ltk_host_exe, &paths.ltk_dll_path]);
 
     let required_tools = trigger::required_tool_files(&paths);
 
@@ -277,10 +279,14 @@ async fn main() -> Result<()> {
         ) {
             boot::tasks::spawn_update_check(
                 &mut supervisor,
-                &tray_controller,
-                &state_dir_path,
+                boot::update::UpdateOffer {
+                    tray: tray_controller.clone(),
+                    state_dir: state_dir_path.clone(),
+                    state_rx: state_rx.clone(),
+                    pending: pending_update.clone(),
+                    shutdown: shutdown_token.clone(),
+                },
                 &update_notice,
-                &state_rx,
             );
             boot::tasks::spawn_ltk_check(
                 &mut supervisor,
@@ -376,7 +382,9 @@ async fn main() -> Result<()> {
         );
     }
     info!("Dekan shut down cleanly");
+    let update = boot::update::prepare_install(&pending_update);
     drop(logging);
+    boot::update::run_installer(update, instance_guard);
 
     Ok(())
 }

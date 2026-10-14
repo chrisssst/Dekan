@@ -11,6 +11,8 @@ Project automation, run through Cargo: `cargo xtask <command>`. Nothing here shi
 | `comments` | Fails on any comment in a tracked code file other than a one-line tool directive. `--strip` removes them: each file is read by a lexer for its language (Rust, JS/TS, CSS, HTML, TOML, YAML with the bash or PowerShell inside `run:`, Inno Setup), so text inside strings, raw strings, regular expressions, template literals and heredocs is never touched. A file is written only after it lexes again with the same directives and exactly the same code lines. The removed text goes to `target/comments-removed.md` (`--report <file>`) so it can be moved into the docs |
 | `package` | Release build into `dist\`, plus `SHA256SUMS` |
 | `installer` | Runs `package`, then Inno Setup, producing `dist\installer\Dekan-Setup-<version>-x64.exe` with the workspace version |
+| `release-key` | Generates the update signing key pair: the private key goes, as hex, to a new file that must be outside the repository; the public key is printed as the `RELEASE_PUBLIC_KEY` line for `dekan-app` |
+| `sign-sums` | Signs a `SHA256SUMS` with `RELEASE_SIGNING_KEY` into `SHA256SUMS.sig` next to it, after checking the key matches the embedded public key |
 | `install-audit` | After installing or uninstalling, checks files and registry entries against what the installer promises, plus the publisher signature of any injector file the user placed in `tools\` |
 
 ## Diagnostic probes

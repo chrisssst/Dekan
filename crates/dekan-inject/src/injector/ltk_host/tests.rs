@@ -168,3 +168,11 @@ fn blank_and_unknown_lines_are_dropped() {
 fn default_flags_opt_out_of_ah_by_default() {
     assert_eq!(hook_flags::OPT_OUT_AH_V1, 4);
 }
+
+#[test]
+fn test_a_late_dll_join_is_told_apart_from_other_lines() {
+    assert!(joined_too_late(
+        "init in process: joined too late, not overlaying"
+    ));
+    assert!(!joined_too_late("init done"));
+}

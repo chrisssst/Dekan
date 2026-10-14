@@ -61,6 +61,13 @@ pub(super) static ENGLISH: Text = Text {
     detail_not_elevated: "running without elevation",
     update_available_title: "Dekan {version} is available",
     update_available_body: "Click here to open the download page. Nothing is downloaded or installed without you.",
+    update_offer_title: "Update available: Dekan {version}",
+    update_offer_body: "Dekan {version} is available. Update now?
+
+Yes: Dekan downloads the verified installer, closes, updates and opens again (Windows asks for permission).
+No: keep this version; you can update later from the download page.",
+    update_failed_title: "The update could not be installed",
+    update_failed_body: "The download page is opening so you can update by hand.",
     panel_update_line: "Version {version} is available (you have {current}).",
     panel_update_download: "Open download page",
     check_ltk: "LTK injector",

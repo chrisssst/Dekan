@@ -219,3 +219,9 @@ async fn test_a_spent_late_budget_ends_unconfirmed() {
     );
     overlay.shutdown().await;
 }
+
+#[test]
+fn test_exit_codes_are_shown_as_ntstatus_hex() {
+    assert_eq!(exit_code_hex(-1_073_741_819), "0xC0000005");
+    assert_eq!(exit_code_hex(1), "0x00000001");
+}
