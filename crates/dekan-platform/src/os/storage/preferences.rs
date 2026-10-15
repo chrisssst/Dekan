@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -21,6 +21,58 @@ pub static RANDOM_SKIN: Preference =
 
 pub static LIGHT_LOADING: Preference =
     Preference::new("light_loading.json", "light game loading", true);
+
+static THEME_MODE: AtomicI32 = AtomicI32::new(1);
+static THEME_LOADED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredTheme {
+    mode: i32,
+}
+
+#[must_use]
+pub fn theme_mode() -> i32 {
+    if !THEME_LOADED.load(Ordering::Acquire) {
+        let mode = crate::paths::state_dir()
+            .ok()
+            .and_then(|dir| std::fs::read(dir.join("theme.json")).ok())
+            .and_then(|bytes| serde_json::from_slice::<StoredTheme>(&bytes).ok())
+            .map_or(1, |stored| normalize_theme(stored.mode));
+
+        THEME_MODE.store(mode, Ordering::Release);
+        THEME_LOADED.store(true, Ordering::Release);
+    }
+
+    THEME_MODE.load(Ordering::Acquire)
+}
+
+pub fn set_theme_mode(mode: i32) -> Result<i32, PlatformError> {
+    let mode = normalize_theme(mode);
+    THEME_MODE.store(mode, Ordering::Release);
+    THEME_LOADED.store(true, Ordering::Release);
+
+    let path = crate::paths::state_dir()?.join("theme.json");
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| PlatformError::Io {
+            context: format!("failed to create {}", parent.display()),
+            source: e,
+        })?;
+    }
+
+    let json = serde_json::to_vec(&StoredTheme { mode })
+        .map_err(|e| PlatformError::Path(format!("theme preference: {e}")))?;
+
+    crate::fs::atomic_write(&path, &json, true)?;
+    Ok(mode)
+}
+
+fn normalize_theme(mode: i32) -> i32 {
+    match mode {
+        0..=2 => mode,
+        _ => 1,
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stored {

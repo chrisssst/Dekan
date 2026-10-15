@@ -6,10 +6,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 const APPLICATION_ID: &str = "1560203618194292858";
-const DEKAN_LOGO: &str = "3e2e030c-3aeb-4814-82d9-1a301b1322a1";
+const DEKAN_LOGO: &str = "dekan-logo-512";
 
 const DOWNLOAD_URL: &str = "https://github.com/chrisssst/Dekan/releases/latest";
-const DISCORD_URL: &str = "https://discord.gg/kutsal";
+const DISCORD_URL: &str = "https://discord.gg/dekan";
 
 struct PresenceInfo {
     details: String,

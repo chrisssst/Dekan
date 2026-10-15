@@ -166,9 +166,16 @@ pub fn run_installer(install: Option<ReadyInstall>, instance_guard: Option<Singl
     {
         command.raw_arg(format!("/DIR=\"{}\"", dir.display()));
     }
-    let exit = command.spawn().and_then(|mut setup| setup.wait());
-    if !exit.is_ok_and(|status| status.success()) {
-        relaunch();
+    match command.spawn() {
+        Ok(_) => {
+            info!(
+                "Update installer started; Dekan is exiting so the installed files can be replaced"
+            );
+        }
+        Err(e) => {
+            error!(error = %e, "Could not start the update installer");
+            relaunch();
+        }
     }
 }
 

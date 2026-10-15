@@ -9,7 +9,7 @@ export component WelcomeWindow inherits Window {
     callback dismiss();
     property <bool> shown;
     title: "Dekan — League of Legends Skin Changer";
-    icon: @image-url("assets/emblem.svg");
+    icon: @image-url("assets/logo.png");
     preferred-width: 530px;
     preferred-height: 440px;
     min-width: 420px;
@@ -41,7 +41,7 @@ export component WelcomeWindow inherits Window {
         HorizontalLayout {
             spacing: 14px;
             Image {
-                source: @image-url("assets/emblem.svg");
+                source: @image-url("assets/logo.png");
                 width: 38px;
                 height: 38px;
             }
@@ -66,7 +66,7 @@ export component WelcomeWindow inherits Window {
             border-radius: 8px;
             border-width: 1px;
             border-color: Theme.surface-line;
-            background: @linear-gradient(180deg, #1a2434b3 0%, #10161fe6 100%);
+            background: Theme.card-fill;
             drop-shadow-blur: 20px;
             drop-shadow-offset-y: 4px;
             drop-shadow-color: #00000059;
@@ -127,7 +127,7 @@ export component WelcomeWindow inherits Window {
                     }
                     Text {
                         text: item;
-                        color: #d8e2ec;
+                        color: Theme.text;
                         font-size: 12.5px;
                         wrap: word-wrap;
                         horizontal-stretch: 1;

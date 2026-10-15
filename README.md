@@ -17,12 +17,12 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <a href="https://discord.gg/kutsal"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/dekan"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/chrisssst/Dekan/releases/latest"><b>Download</b></a> ·
-  <a href="https://discord.gg/kutsal"><b>Discord community</b></a> ·
+  <a href="https://discord.gg/dekan"><b>Discord community</b></a> ·
   <a href="https://github.com/chrisssst/Dekan/issues"><b>Report a bug</b></a>
 </p>
 
@@ -432,11 +432,11 @@ Please report security issues privately through
 | The skin does not load and LTK Manager is open | Close LTK Manager: its patcher and Dekan's cannot run at the same time |
 
 When you open an issue, attach the Dekan log from the match where it failed. Without it the problem is
-usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/kutsal).
+usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/dekan).
 
 ## Community
 
-Join the **[Dekan Discord](https://discord.gg/kutsal)** to get help with setup, report what works in each game mode, share
+Join the **[Dekan Discord](https://discord.gg/dekan)** to get help with setup, report what works in each game mode, share
 custom mods and hear about new builds first. Pre-releases are announced there before they are promoted, so
 it is the best place to help test them.
 
@@ -450,7 +450,7 @@ If Dekan is useful to you, **a star on GitHub** helps other players find it.
 
 The project is maintained by **Dekan**: [GitHub](https://github.com/chrisssst/Dekan).
 
-For help and bug reports, the [Discord community](https://discord.gg/kutsal) and
+For help and bug reports, the [Discord community](https://discord.gg/dekan) and
 [GitHub issues](https://github.com/chrisssst/Dekan/issues) are the fastest routes. Security issues go through a
 [private advisory](https://github.com/chrisssst/Dekan/security/advisories/new).
 

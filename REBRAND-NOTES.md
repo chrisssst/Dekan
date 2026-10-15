@@ -12,7 +12,7 @@ Customized for Dekan:
 - supplied Dekan logo for app, installer and the Slint UI
 - interface languages reduced to Turkish and English
 - Turkish is the default/fallback interface language; English remains available for English locales
-- Discord community links point to `https://discord.gg/kutsal`
+- Discord community links point to `https://discord.gg/dekan`
 - existing Dekan release/promote/star-notification workflow customizations are retained
 
 The original MIT license and upstream attribution are preserved in `LICENSE`, `THIRD-PARTY-NOTICES.md` and `UPSTREAM-NOTICE.md`.
