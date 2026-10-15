@@ -15,12 +15,13 @@ const SUMS_FILE: &str = "SHA256SUMS";
 pub const SIGNATURE_FILE: &str = "SHA256SUMS.sig";
 const FILE_SHARE_READ: u32 = 1;
 
-pub const SILENT_INSTALL: [&str; 5] = [
+pub const SILENT_INSTALL: [&str; 6] = [
     "/VERYSILENT",
     "/SUPPRESSMSGBOXES",
     "/NORESTART",
     "/CLOSEAPPLICATIONS",
     "/FORCECLOSEAPPLICATIONS",
+    "/RELAUNCH=1",
 ];
 
 const RELEASE_PUBLIC_KEY: [u8; 32] = [
