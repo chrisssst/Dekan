@@ -71,6 +71,13 @@ async fn main() -> Result<()> {
 
     let shutdown_token = CancellationToken::new();
     let mut supervisor = dekan_core::supervisor::Supervisor::new(shutdown_token.clone());
+
+    let discord_state = state_rx.clone();
+
+    supervisor.spawn("discord-presence", move |child_token| {
+        dekan_app::discord_presence::run(discord_state, child_token)
+    });
+
     let pending_update = dekan_app::self_update::PendingUpdate::default();
 
     boot::reports::remove_retired_files(&state_dir_path);

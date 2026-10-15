@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 mod diagnostics;
+pub mod discord_presence;
 mod game;
 mod party;
 mod selection;
