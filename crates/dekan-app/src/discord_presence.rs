@@ -46,7 +46,6 @@ async fn presence_info(state: &AppState) -> PresenceInfo {
                 champion_name = assets.name.clone();
             }
 
-            // Önce Dekan içinde seçilen kostümü kullan.
             let selected_entry = state
                 .overlay_target
                 .as_ref()
@@ -61,7 +60,6 @@ async fn presence_info(state: &AppState) -> PresenceInfo {
                     .map(str::to_owned);
             }
 
-            // Görselde chroma olsa bile ana skin splash'ını kullan.
             let selected_skin = state
                 .overlay_target
                 .as_ref()
