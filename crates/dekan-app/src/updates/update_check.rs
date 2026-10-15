@@ -16,8 +16,8 @@ use crate::self_update::{Offer, ReleaseAsset};
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
 const USER_AGENT: &str = concat!("Dekan/", env!("CARGO_PKG_VERSION"), " (update check)");
-const FIRST_CHECK_DELAY: Duration = Duration::from_secs(15);
-const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const FIRST_CHECK_DELAY: Duration = Duration::from_secs(5);
+const CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const BUSY_RETRY: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const NOTIFIED_FILE: &str = "update_notified.txt";

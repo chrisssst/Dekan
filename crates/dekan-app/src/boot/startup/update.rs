@@ -167,9 +167,12 @@ pub fn run_installer(install: Option<ReadyInstall>, instance_guard: Option<Singl
         command.raw_arg(format!("/DIR=\"{}\"", dir.display()));
     }
     let exit = command.spawn().and_then(|mut setup| setup.wait());
+
     if !exit.is_ok_and(|status| status.success()) {
-        relaunch();
+        warn!("The update installer did not finish successfully");
     }
+
+    relaunch();
 }
 
 fn relaunch() {
