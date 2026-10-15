@@ -13,7 +13,7 @@ Dekan follows the [Contributor Covenant, version 2.1](https://www.contributor-co
 ## Scope
 
 This applies to the GitHub repository (issues, pull requests, discussions) and to the
-[Dekan Discord](https://discord.gg/kutsal).
+[Dekan Discord](https://discord.gg/dekan).
 
 ## Enforcement
 

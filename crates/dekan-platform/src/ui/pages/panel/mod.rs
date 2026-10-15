@@ -7,10 +7,15 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use tracing::{debug, warn};
 
 use super::runtime;
-use super::views::{ControlPanel, PanelAction, PanelCheckRow, PanelLabels};
+use super::views::{ControlPanel, PanelAction, PanelCheckRow, PanelLabels, Theme};
 use crate::tray::TrayEvent;
 
 const REFRESH: Duration = Duration::from_millis(700);
+
+#[must_use]
+pub(crate) fn active_theme() -> i32 {
+    crate::preferences::theme_mode()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelCheck {
@@ -78,6 +83,10 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
     PanelLabels {
         version: crate::version::display_version().into(),
         section_options: text.panel_section_options.into(),
+        theme: text.panel_theme.into(),
+        theme_classic: text.panel_theme_classic.into(),
+        theme_crimson: text.panel_theme_crimson.into(),
+        theme_obsidian: text.panel_theme_obsidian.into(),
         section_party: text.menu_group_party.into(),
         section_folders: text.menu_group_folders.into(),
         section_diagnostics: text.panel_section_diagnostics.into(),
@@ -164,6 +173,22 @@ fn open(links: PanelLinks) {
             return;
         }
     };
+    window.global::<Theme>().set_mode(active_theme());
+
+    let theme_window = window.as_weak();
+    window.on_theme_changed(move |mode| {
+        let mode = match crate::preferences::set_theme_mode(mode) {
+            Ok(mode) => mode,
+            Err(e) => {
+                warn!(error = %e, "Could not save the selected theme");
+                crate::preferences::theme_mode()
+            }
+        };
+        if let Some(window) = theme_window.upgrade() {
+            window.global::<Theme>().set_mode(mode);
+        }
+    });
+
     runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
 
     let last = std::rc::Rc::new(RefCell::new(None::<PanelSnapshot>));

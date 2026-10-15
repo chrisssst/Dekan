@@ -18,8 +18,9 @@ export component ControlPanel inherits Window {
     in property <string> ltk-download;
     in property <[PanelCheckRow]> checks;
     callback action(PanelAction);
+    callback theme-changed(int);
     title: "Dekan";
-    icon: @image-url("../assets/emblem.svg");
+    icon: @image-url("../assets/logo.png");
     preferred-width: 460px;
     preferred-height: 640px;
     min-width: 380px;
@@ -38,7 +39,7 @@ export component ControlPanel inherits Window {
                     padding-bottom: 12px;
                     spacing: 12px;
                     Image {
-                        source: @image-url("../assets/emblem.svg");
+                        source: @image-url("../assets/logo.png");
                         width: 34px;
                         height: 34px;
                     }
@@ -90,6 +91,45 @@ export component ControlPanel inherits Window {
                 }
                 Section {
                     heading: root.labels.section-options;
+
+                    VerticalLayout {
+                        spacing: 7px;
+
+                        Text {
+                            text: root.labels.theme;
+                            color: Theme.text;
+                            font-size: Theme.text-base;
+                            font-weight: 600;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 6px;
+
+                            GoldButton {
+                                text: root.labels.theme-classic;
+                                primary: Theme.mode == 0;
+                                clicked => { root.theme-changed(0); }
+                            }
+
+                            GoldButton {
+                                text: root.labels.theme-crimson;
+                                primary: Theme.mode == 1;
+                                clicked => { root.theme-changed(1); }
+                            }
+
+                            GoldButton {
+                                text: root.labels.theme-obsidian;
+                                primary: Theme.mode == 2;
+                                clicked => { root.theme-changed(2); }
+                            }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.surface-line;
+                        }
+                    }
+
                     Toggle {
                         divider: false;
                         label: root.labels.random-skin;
