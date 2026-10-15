@@ -39,6 +39,7 @@ reqwest = { workspace = true }
 ring.workspace = true
 sha2.workspace = true
 thiserror = { workspace = true }
+discord-rich-presence = "1.1.0"
 
 [build-dependencies]
 winres = "0.1"
