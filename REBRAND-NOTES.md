@@ -7,7 +7,7 @@ Customized for Dekan:
 - application/product name, executable and installer names
 - Rust crate/package names (`dekan-*`)
 - `%LOCALAPPDATA%\Dekan`, registry/autostart names and `DEKAN_*` variables
-- party/protocol branding (`DEKAN1` / `dekan-party`) while retaining the upstream public relay endpoint for compatibility
+- party/protocol branding (`DEKAN1` / `dekan-party`) using the Dekan Cloudflare relay and migrating the former default
 - Windows version metadata, installer metadata and GitHub workflow branding
 - supplied Dekan logo for app, installer and the Slint UI
 - interface languages reduced to Turkish and English

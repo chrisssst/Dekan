@@ -17,8 +17,10 @@ The update imports source v1.6 (`3cfa3d76646837a8ac797402afeca42c147f9ec1`) into
 - The dependency updates, relay changes, archive safety checks and CI workflow changes are included.
 - Cargo's version floor is unchanged. The existing release workflow selects the next Dekan version.
 
-The existing party relay network hostname is retained for connectivity. It is an external service endpoint,
-not a product label; replacing it requires a working Dekan relay deployment and URL.
+The default party relay is `wss://dekan-party-relay.heeazk.workers.dev`. Existing `party.json` files using the
+previous built-in default migrate to this address without losing additional fields. Custom relay URLs and
+explicit environment overrides stay unchanged. The legacy hostname exists only as a migration match, never
+as the new default or a product label.
 
 ## Validation
 
@@ -32,6 +34,10 @@ Passed:
   interface and both locale dictionaries; Clippy with `-D warnings` also passed for this Windows target.
   Theme-button and overlay theme propagation regression tests are compiled, but their Windows UI runtime
   has not been executed.
+- Party crate: 28 tests passed and Clippy with warnings denied on the Linux host target, including saved
+  relay migration, custom relay preservation and malformed-file preservation.
+- The deployed Dekan relay returned HTTP 200 with its service identity; two WebSocket clients joined one
+  random test room and received a selection-clear update.
 - Relay worker TypeScript check, 22 tests and npm audit (zero reported vulnerabilities).
 - actionlint 1.7.12; zizmor 1.31.1 offline (no findings, existing suppressions retained).
 - cargo-deny 0.20.2: advisories, bans, licenses and sources passed. It reported stale advisory-ignore warnings.

@@ -35,7 +35,9 @@ each other directly. They exchange encrypted messages through a relay, and the r
 
 ## Relays
 
-- The public relay runs on Cloudflare Workers (`relay-worker/` at the repository root).
+- The default relay is `wss://dekan-party-relay.heeazk.workers.dev` on Cloudflare Workers (`relay-worker/`).
+  Saved preferences using the previous default migrate automatically; custom relay URLs and environment
+  overrides are preserved.
 - `dekan-relay` is a Rust server that speaks the same protocol, for anyone who wants to host their own.
 
 Encryption fails instead of panicking when the operating system's random generator fails, so nothing is sent.
