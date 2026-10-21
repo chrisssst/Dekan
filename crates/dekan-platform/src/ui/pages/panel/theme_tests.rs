@@ -5,8 +5,8 @@ use i_slint_backend_testing::ElementHandle;
 
 #[test]
 fn options_keep_dekan_theme_callbacks_in_both_languages() {
+    let window = tall_panel();
     for language in [Language::Turkish, Language::English] {
-        let window = tall_panel();
         let text = language.text();
         window.set_labels(labels(text));
         window.set_tab(1);

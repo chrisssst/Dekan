@@ -35,8 +35,11 @@ Passed:
 - Clippy with `-D warnings` for those three crates, all targets, on the Linux host target.
 - `cargo check -p dekan-platform --all-targets --target x86_64-pc-windows-msvc --locked`, including the Slint
   interface and both locale dictionaries; Clippy with `-D warnings` also passed for this Windows target.
-  Theme-button and overlay theme propagation regression tests are compiled, but their Windows UI runtime
-  has not been executed.
+  Windows CI also passed workspace Clippy and the release executable build at revision
+  `2eabb164db04feb4789c7b5fc8f9f4b4861fe059`. The overlay theme propagation regression passed on Windows.
+- The four locale tests passed through a native harness with the Windows locale API stubbed. Turkish
+  labels follow the symbol and sentence-case rules. The both-language theme test reuses one panel so the
+  Slint backend initializes once on its test thread. A fresh complete Windows run is still required.
 - Party crate: 28 tests passed and Clippy with warnings denied on the Linux host target, including saved
   relay migration, custom relay preservation and malformed-file preservation.
 - The deployed Dekan relay returned HTTP 200 with its service identity; two WebSocket clients joined one
