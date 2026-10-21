@@ -44,7 +44,7 @@ pub(crate) fn load<T: DeserializeOwned + Default>(path: &Path, what: &str) -> T 
                 file = %path.display(),
                 what,
                 moved_to = %aside.display(),
-                moved = moved.is_ok(),
+                moved_error = ?moved.err(),
                 error = %e,
                 "Saved selections file is not valid; it was set aside and starts empty"
             );

@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use dekan_wad::prop::tree::{self, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
+use tracing::warn;
 
 use crate::error::ClassicError;
 use crate::gear_toggle::{ClipEntries, FIELD_HASH, bin_error, clip_at, clip_refs, h, hash_value};
@@ -175,22 +176,40 @@ pub fn alias_missing_clips(
         return Ok(None);
     };
     let present: BTreeSet<u32> = entries.iter().filter_map(|(k, _)| k.as_u32()).collect();
-    let aliases: Vec<ClipAlias> = spells
+    let missing: Vec<(u32, &String)> = spells
         .iter()
         .enumerate()
         .map(|(slot, spell)| (spell_slot_clip(slot), spell))
         .filter(|(clip, _)| base_keys.contains(clip) && !present.contains(clip))
-        .filter_map(|(clip, spell)| pick_variant(entries, clip, spell))
         .collect();
+    let aliases: Vec<ClipAlias> = missing
+        .iter()
+        .filter_map(|(clip, spell)| pick_variant(entries, *clip, spell))
+        .collect();
+    if aliases.len() < missing.len() {
+        warn!(
+            missing = missing.len(),
+            aliased = aliases.len(),
+            "Spell clips the skin's graph lacks have no unambiguous variant and stay missing"
+        );
+    }
     if aliases.is_empty() {
         return Ok(None);
     }
+    let mut unplaced = 0usize;
     for alias in &aliases {
         let Some(source) = clip_at(entries, alias.variant) else {
+            unplaced += 1;
             continue;
         };
         let clip = entries[source].1.clone();
         entries.push((hash_value(alias.missing), clip));
+    }
+    if unplaced > 0 {
+        warn!(
+            unplaced,
+            "Variant clips chosen for missing spell clips were not found in the graph"
+        );
     }
     file.entries[at].body = tree::write_fields(&graph).map_err(bin_error)?;
     let bytes = serialize_prop_file(&file).map_err(bin_error)?;

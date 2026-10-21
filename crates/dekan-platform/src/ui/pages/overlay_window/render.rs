@@ -21,6 +21,7 @@ impl Overlay {
             previews: HashMap::new(),
             preview_for: None,
             presets: PresetsView::default(),
+            party: None,
             expanded: None,
         }
     }
@@ -44,7 +45,26 @@ impl Overlay {
         let target = HWND(self.hwnd as *mut _);
         let (x, y, width, height) = (rect.left, rect.top, rect.width(), rect.height());
         unsafe {
-            let _ = SetWindowPos(target, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE); // ignore-ok: a refused reposition is retried by the next tracking tick, 200 ms later
+            match SetWindowPos(
+                target,
+                Some(HWND_TOPMOST),
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE,
+            ) {
+                Ok(()) => {
+                    if REPOSITION_FAILED.swap(false, Ordering::Relaxed) {
+                        debug!("Overlay window repositioned after a refusal");
+                    }
+                }
+                Err(e) => {
+                    if !REPOSITION_FAILED.swap(true, Ordering::Relaxed) {
+                        warn!(error = %e, "Overlay window could not be repositioned; retrying on the next tracking tick");
+                    }
+                }
+            }
             let _ = ShowWindow(target, SW_SHOWNOACTIVATE); // ignore-ok: returns the previous visibility, not an error
         }
     }
@@ -81,14 +101,30 @@ impl Overlay {
 
     pub(super) fn set_catalog(&mut self, catalog: Catalog) {
         self.language = Language::for_locale(catalog.locale.as_deref());
-        self.tiles = catalog
-            .skins
-            .iter()
-            .filter_map(|skin| {
-                let image = runtime::image(skin.tile.as_deref()?)?;
-                Some((skin.id, image))
-            })
-            .collect();
+        let mut tiles = HashMap::new();
+        let mut undecodable = 0usize;
+        let mut first_undecodable = None;
+        for skin in &catalog.skins {
+            let Some(bytes) = skin.tile.as_deref() else {
+                continue;
+            };
+            match runtime::image(bytes) {
+                Some(image) => {
+                    tiles.insert(skin.id, image);
+                }
+                None => {
+                    undecodable += 1;
+                    first_undecodable.get_or_insert(skin.id);
+                }
+            }
+        }
+        if let Some(first_skin) = first_undecodable {
+            warn!(
+                count = undecodable,
+                first_skin, "Skin tiles could not be decoded; their cards show no image"
+            );
+        }
+        self.tiles = tiles;
         self.mods = catalog.mods.clone();
         self.catalog = catalog;
         self.selected = None;
@@ -169,9 +205,19 @@ impl Overlay {
         let (footer, quote) = model::footer(&self.catalog, false, text);
         self.view.set_footer_right(footer.into());
         self.view.set_footer_quote(quote);
+        self.render_party();
         self.view.set_mods_tab(self.mods_tab);
         self.render_list();
         self.render_selection();
+    }
+
+    pub(super) fn render_party(&self) {
+        let line = self.party.map_or_else(String::new, |party| {
+            let text =
+                crate::i18n::fill(self.text().overlay_party, "n", &party.members.to_string());
+            crate::i18n::fill(&text, "skins", &party.teammate_skins.to_string())
+        });
+        self.view.set_party_line(line.into());
     }
 
     pub(super) fn render_list(&mut self) {

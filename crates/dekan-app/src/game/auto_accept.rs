@@ -30,6 +30,7 @@ pub async fn run(mut state_rx: StateReceiver, token: CancellationToken) {
 }
 
 async fn accept(state_rx: &StateReceiver, token: &CancellationToken) {
+    let mut last_error = String::new();
     for attempt in 1..=ATTEMPTS {
         tokio::select! {
             _ = token.cancelled() => return,
@@ -40,25 +41,31 @@ async fn accept(state_rx: &StateReceiver, token: &CancellationToken) {
         {
             return;
         }
-        let Some(client) = client().await else {
-            warn!("Match found, but the client API is unavailable; not accepted automatically");
-            return;
+        let client = match dekan_lcu::client::LcuClient::discover().await {
+            Ok(client) => client,
+            Err(e) => {
+                warn!(error = %e, "Match found, but the client API is unavailable; not accepted automatically");
+                return;
+            }
         };
         match client.accept_ready_check().await {
             Ok(true) => {
                 info!(attempt, "Match accepted automatically");
                 return;
             }
-            Ok(false) => debug!(attempt, "The client did not take the automatic accept yet"),
-            Err(e) => debug!(attempt, error = %e, "Automatic accept request failed"),
+            Ok(false) => {
+                debug!(attempt, "The client did not take the automatic accept yet");
+                last_error = "the client did not take the accept".to_owned();
+            }
+            Err(e) => {
+                debug!(attempt, error = %e, "Automatic accept request failed");
+                last_error = e.to_string();
+            }
         }
     }
     warn!(
         attempts = ATTEMPTS,
+        last_error = %last_error,
         "Match found, but the automatic accept was not taken"
     );
-}
-
-async fn client() -> Option<dekan_lcu::client::LcuClient> {
-    dekan_lcu::client::LcuClient::discover().await.ok()
 }

@@ -1,6 +1,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chacha20poly1305::aead::Generate;
+use sha2::{Digest, Sha256};
 
 use crate::error::PartyError;
 
@@ -50,6 +51,19 @@ impl PartyToken {
             host_member,
             key: <[u8; 32]>::try_generate().map_err(no_randomness)?,
         })
+    }
+
+    #[must_use]
+    pub fn for_lobby(party_id: &str) -> Self {
+        let key = Sha256::new()
+            .chain_update(b"dekan-party/lobby/v1")
+            .chain_update(party_id.as_bytes())
+            .finalize();
+        Self {
+            issued_at: 0,
+            host_member: 0,
+            key: key.into(),
+        }
     }
 
     #[must_use]
@@ -159,6 +173,19 @@ mod tests {
         let printed = format!("{token:?}");
         assert!(printed.contains("<redacted>"));
         assert!(!printed.contains(&format!("{:?}", token.key())));
+    }
+
+    #[test]
+    fn test_everyone_in_a_lobby_derives_the_same_room_and_no_one_else_does() {
+        let mine = PartyToken::for_lobby("6f1c2a0e-party");
+        let friend = PartyToken::for_lobby("6f1c2a0e-party");
+        assert_eq!(mine.key(), friend.key());
+        assert_ne!(mine.key(), PartyToken::for_lobby("another-party").key());
+        assert_ne!(
+            crate::crypto::room_id(mine.key()),
+            "6f1c2a0e-party",
+            "the relay never sees the lobby id"
+        );
     }
 
     #[test]

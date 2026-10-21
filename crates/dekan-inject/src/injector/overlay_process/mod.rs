@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -24,7 +24,10 @@ pub struct OverlayProcess {
     signals: mpsc::UnboundedReceiver<PatcherSignal>,
     _stdout_reader: Option<tokio::task::JoinHandle<()>>,
     _stderr_reader: Option<tokio::task::JoinHandle<()>>,
+    hooked: bool,
 }
+
+const READER_DRAIN: Duration = Duration::from_millis(500);
 
 impl OverlayProcess {
     pub async fn spawn_ltk_host(
@@ -93,8 +96,9 @@ impl OverlayProcess {
 
         let stderr_reader = stderr.map(|err| {
             tokio::spawn(async move {
-                let mut reader = BufReader::new(err).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
+                let mut reader = BufReader::new(err);
+                let mut buf = Vec::new();
+                while let Some(line) = next_host_line(&mut reader, &mut buf, "stderr").await {
                     match ltk_host::stderr_level(&line) {
                         StderrLevel::Error => error!(target: "overlay::ltk-stderr", "{}", line),
                         StderrLevel::Warn | StderrLevel::Unknown => {
@@ -113,6 +117,7 @@ impl OverlayProcess {
             signals: rx,
             _stdout_reader: stdout_reader,
             _stderr_reader: stderr_reader,
+            hooked: false,
         })
     }
 
@@ -124,9 +129,16 @@ impl OverlayProcess {
         let unconfirmed = || InjectError::HookUnconfirmed {
             timeout_ms: timeout.as_millis() as u64,
         };
+        if self.hooked {
+            return Ok(());
+        }
         let wait = async {
             loop {
                 match self.signals.recv().await {
+                    Some(PatcherSignal::Hooked) => {
+                        self.hooked = true;
+                        return Ok(());
+                    }
                     Some(signal) if signal == wanted => return Ok(()),
                     Some(_) => {}
                     None => {
@@ -146,7 +158,11 @@ impl OverlayProcess {
         let child = self.child.as_mut()?;
         match child.try_wait() {
             Ok(Some(status)) => Some(status.code().unwrap_or(-1)),
-            _ => None,
+            Ok(None) => None,
+            Err(e) => {
+                warn!(error = %e, "The patcher's exit status could not be read");
+                None
+            }
         }
     }
 
@@ -154,18 +170,15 @@ impl OverlayProcess {
         let child = self.child.as_mut()?;
         match tokio::time::timeout(grace, child.wait()).await {
             Ok(Ok(status)) => Some(status.code().unwrap_or(-1)),
-            _ => None,
+            Ok(Err(e)) => {
+                warn!(error = %e, "The patcher's exit status could not be read");
+                None
+            }
+            Err(_) => None,
         }
     }
 
     pub async fn shutdown(mut self) {
-        if let Some(h) = self._stdout_reader.take() {
-            h.abort();
-        }
-        if let Some(h) = self._stderr_reader.take() {
-            h.abort();
-        }
-
         drop(self._stdin.take());
 
         if let Some(mut child) = self.child.take() {
@@ -174,12 +187,37 @@ impl OverlayProcess {
                     info!(exit_code = ?status.code(), "Overlay process exited cleanly on stdin close");
                 }
                 _ => match child.kill().await {
-                    Ok(()) => {
-                        let code = child.wait().await.ok().and_then(|s| s.code());
-                        info!(exit_code = ?code, "Overlay process terminated");
-                    }
+                    Ok(()) => match child.wait().await {
+                        Ok(status) => {
+                            info!(exit_code = ?status.code(), "Overlay process terminated");
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Overlay process killed; its exit status could not be read");
+                        }
+                    },
                     Err(e) => warn!(error = %e, "Failed to terminate overlay process"),
                 },
+            }
+        }
+
+        for (stream, reader) in [
+            ("stdout", self._stdout_reader.take()),
+            ("stderr", self._stderr_reader.take()),
+        ] {
+            let Some(reader) = reader else {
+                continue;
+            };
+            let abort = reader.abort_handle();
+            match tokio::time::timeout(READER_DRAIN, reader).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!(stream, error = %e, "LTK host output reader failed"),
+                Err(_) => {
+                    abort.abort();
+                    debug!(
+                        stream,
+                        "LTK host output still open after the patcher exited; reader stopped"
+                    );
+                }
             }
         }
     }
@@ -201,11 +239,41 @@ impl Drop for OverlayProcess {
     }
 }
 
+async fn next_host_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+    stream: &'static str,
+) -> Option<String> {
+    buf.clear();
+    match reader.read_until(b'\n', buf).await {
+        Ok(0) => None,
+        Ok(_) => Some(
+            String::from_utf8_lossy(buf)
+                .trim_end_matches(['\r', '\n'])
+                .to_owned(),
+        ),
+        Err(e) => {
+            warn!(
+                target: "overlay::ltk",
+                stream,
+                error = %e,
+                "Stopped reading the LTK host output; later host messages are lost"
+            );
+            None
+        }
+    }
+}
+
 async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSender<PatcherSignal>) {
-    let mut reader = BufReader::new(out).lines();
-    while let Ok(Some(raw)) = reader.next_line().await {
+    let mut reader = BufReader::new(out);
+    let mut buf = Vec::new();
+    while let Some(raw) = next_host_line(&mut reader, &mut buf, "stdout").await {
         let Some(event) = ltk_host::parse_host_event(&raw) else {
-            debug!(target: "overlay::ltk", "{}", raw);
+            if raw.trim_start().starts_with("status ") {
+                warn!(target: "overlay::ltk", line = %raw, "The patcher reported a status Dekan does not recognize");
+            } else {
+                debug!(target: "overlay::ltk", "{}", raw);
+            }
             continue;
         };
 

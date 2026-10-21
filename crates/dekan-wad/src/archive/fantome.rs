@@ -1,5 +1,6 @@
 use std::io::{Read, Seek};
 
+use tracing::warn;
 use zip::ZipArchive;
 
 use crate::error::WadError;
@@ -14,7 +15,10 @@ pub fn wad_names_in_archive<R: Read + Seek>(
         let file = archive
             .by_index(i)
             .map_err(|e| WadError::InvalidFantome(format!("zip read error: {e}")))?;
-        if let Some(wad) = wad_name_in_path(&file.name().replace('\\', "/")) {
+        let name = file
+            .name()
+            .map_err(|e| WadError::InvalidFantome(format!("zip entry name error: {e}")))?;
+        if let Some(wad) = wad_name_in_path(&name.replace('\\', "/")) {
             names.insert(wad);
         }
     }
@@ -62,7 +66,10 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
         if file.is_dir() {
             continue;
         }
-        let name = file.name().replace('\\', "/");
+        let name = file
+            .name()
+            .map_err(|e| WadError::InvalidFantome(format!("zip entry name error: {e}")))?
+            .replace('\\', "/");
         let root = name.split('/').next().unwrap_or_default();
         if (root.eq_ignore_ascii_case("WAD") || root.eq_ignore_ascii_case("RAW"))
             && name.len() > root.len() + 1
@@ -71,11 +78,24 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
         } else if name.eq_ignore_ascii_case("META/info.json") && file.size() <= MAX_MANIFEST {
             let mut text = String::new();
             let size = file.size();
-            if file.take(size).read_to_string(&mut text).is_ok() {
-                shape.manifest =
-                    serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-                        .is_ok_and(|v| v.is_object());
+            match file.take(size).read_to_string(&mut text) {
+                Ok(_) => {
+                    shape.manifest = serde_json::from_str::<serde_json::Value>(
+                        text.trim_start_matches('\u{feff}'),
+                    )
+                    .is_ok_and(|v| v.is_object());
+                    if !shape.manifest {
+                        warn!("META/info.json is not a JSON object");
+                    }
+                }
+                Err(e) => warn!(error = %e, "META/info.json could not be read as text"),
             }
+        } else if name.eq_ignore_ascii_case("META/info.json") {
+            warn!(
+                bytes = file.size(),
+                limit = MAX_MANIFEST,
+                "META/info.json is larger than allowed"
+            );
         }
     }
     Ok(shape)

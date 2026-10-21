@@ -1,14 +1,28 @@
 use std::path::{Path, PathBuf};
 
+use tracing::warn;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum InjectorRefusal {
     Missing,
     NotTrusted(Vec<(PathBuf, String)>),
 }
 
+fn is_present(file: &Path) -> bool {
+    match std::fs::metadata(file) {
+        Ok(meta) => meta.is_file(),
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(file = %file.display(), error = %e, "An injector file could not be inspected; it is treated as missing");
+            }
+            false
+        }
+    }
+}
+
 #[must_use]
 pub fn injector_refusal(host: &Path, dll: &Path) -> Option<InjectorRefusal> {
-    if !host.is_file() || !dll.is_file() {
+    if ![host, dll].into_iter().all(is_present) {
         return Some(InjectorRefusal::Missing);
     }
     let refused: Vec<(PathBuf, String)> = [host, dll]

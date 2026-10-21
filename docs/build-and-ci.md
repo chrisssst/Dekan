@@ -9,18 +9,19 @@ crate inherits its version from `[workspace.package]` in the root `Cargo.toml`.
 ## Local checks
 
 ```powershell
-cargo xtask check    # error-handling sweep, no comments in code, rustfmt, clippy -D warnings, all tests
+cargo xtask check    # error-handling sweep, no comments, file sizes, rustfmt, clippy -D warnings, all tests
 cargo deny check     # advisories, licenses, banned crates, sources
 ```
 
 `cargo xtask check` runs, in order:
 
 1. the error-handling sweep (every discarded `Result` must carry a written justification),
-2. the comment check (`cargo xtask comments`: no comment in a tracked code file other than a one-line tool
-   directive),
-3. `cargo fmt --all -- --check`,
-4. `cargo clippy --workspace --all-targets -- -D warnings`,
-5. `cargo test --workspace`.
+2. the comment check (`cargo xtask comments`: no comment in a code file, tracked or untracked and not ignored,
+   other than a one-line tool directive),
+3. the file size check (no code file over 400 lines, no folder with more than 5 code files, tests included),
+4. `cargo fmt --all -- --check`,
+5. `cargo clippy --workspace --all-targets -- -D warnings`,
+6. `cargo test --workspace`.
 
 ## Running the tests without Windows
 
@@ -52,7 +53,7 @@ claim what only a higher one can show.
 | --- | --- | --- | --- |
 | Assets and runtime | Dekan's own generator, mod import and staging, compatibility check and overlay builder, on a synthetic game install built by the test | The chosen skin, its companions and a custom mod end up in the archives the game would open: slot 0 holds the skin's own definition, every link resolves, the animation graph the skin names is reachable, archives that share a path agree, headers and untouched bytes are the game's, output is deterministic | `crates/dekan-app/tests/skin_pipeline.rs` (runs everywhere, including CI) |
 | Same, on the installed game | The same production code against a real install | The above for every champion, skin and chroma of the current patch | `cargo xtask harness`, `cargo xtask skin-audit`, `native_overlay_faithful` (ignored; needs the game) |
-| Interface | Dekan's Slint windows (overlay, control panel, About, party dialog) | Every button, tab, toggle, gem, card and key sends the command or event it names, through the accessibility tree; search folds accents; the mods panel, previews and empty states render from the same data the app passes | `ui/pages/<window>/tests.rs` (headless, every run) and `cargo xtask ipc-probe` on the real window |
+| Interface | Dekan's Slint windows (overlay, control panel, welcome, party dialog) | Every button, tab, toggle, gem, card and key sends the command or event it names, through the accessibility tree; search folds accents; the mods panel, previews and empty states render from the same data the app passes | `ui/pages/<window>/tests.rs` (headless, every run) and `cargo xtask ipc-probe` on the real window |
 | Real match | The game engine | How the skin looks and animates in game: models, animations, shaders, particles | Manual, with the log; the only layer that can show it |
 
 The first two layers show that Dekan loads and applies the skin files correctly. They do not render
@@ -70,7 +71,7 @@ starts with read-only permissions, and no workflow runs pull request code with a
 | `ci.yml` | Format, lint, test | `Cargo.lock` is current, and `cargo xtask check` passes on Windows |
 | | Release build | The release profile builds, the executable carries its file details, and its manifest runs it without elevation |
 | | Dependencies | `cargo deny`: no known advisory, no disallowed license, no banned crate or unknown source |
-| | Relay worker | `npm audit` and a strict TypeScript typecheck |
+| | Relay worker | `npm ci`, `npm audit` and a strict TypeScript typecheck (`npm run check`) |
 | | Workflow lint and audit | `actionlint` (syntax, expressions) and `zizmor` (template injection, credential leaks, unpinned actions) |
 | | **CI OK** | Aggregate: fails if any job above failed, was cancelled or skipped |
 | `security.yml` | CodeQL | Static analysis of Rust, TypeScript and the workflows themselves (`security-extended` queries) |
@@ -78,6 +79,7 @@ starts with read-only permissions, and no workflow runs pull request code with a
 | | Dependency review | On pull requests: blocks new dependencies with known vulnerabilities |
 | | **Security OK** | Aggregate of the jobs above |
 
+`release.yml` runs on every push to `main` except documentation-only ones (Markdown, `docs/`, `LICENSE`).
 `security.yml` also runs weekly, so new advisories and queries reach code that has not changed.
 
 ### From approval to release
@@ -91,10 +93,10 @@ maintainer approves a pull request
               makes it the next major; the workspace version in Cargo.toml is a floor), stamped into
               Cargo.toml and Cargo.lock by `cargo xtask set-version`, full gate without cache,
               dekan.exe signed, installer built around it and signed (when signing is configured),
-              checksums,
+              checksums, SHA256SUMS.sig (the release fails without the release key),
               build provenance attestation → published as a PRE-RELEASE
               └─ after testing it in a real match, a maintainer runs promote.yml, which checks
-                 the checksums and the attestation and marks the release as latest
+                 the checksums, their signature and the attestation and marks the release as latest
 ```
 
 **What auto-merge refuses**, even with an approval:
@@ -106,12 +108,15 @@ maintainer approves a pull request
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
   `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger (`trigger/`), the
   whole injector folder (`crates/dekan-inject/src/injector/`: host, overlay process, DLL validation), the
-  party cipher and token (`crates/dekan-party/src/security/`), and the relay's deploy config. These are
-  merged by hand.
+  injector installer (`crates/dekan-app/src/updates/injector_install.rs`), the self-update code
+  (`updates/self_update/`, `updates/update_check.rs`), the terminal installer (`install.ps1`), the Authenticode verifier
+  (`crates/dekan-platform/src/os/system/authenticode/`), the party cipher and token
+  (`crates/dekan-party/src/security/`), and the relay's deploy config. The tool configuration files
+  (`.gitleaks.toml`, `clippy.toml`) are protected too. These are merged by hand.
 
 The `main` branch ruleset (`.github/rulesets/main.json`) enforces the rest: pull requests only, squash merges,
-a code owner's approval, stale approvals dismissed on push, required checks up to date with `main`, no force
-pushes or deletions.
+a code owner's approval of the latest push, stale approvals dismissed on push, resolved review threads, signed
+commits, linear history, required checks up to date with `main`, no force pushes or deletions.
 
 ### Why the workflows are shaped this way
 
@@ -178,11 +183,12 @@ The second form works offline with the Sigstore bundle published next to the ins
 | Approval required for workflows from outside collaborators | First-time contributors cannot run workflows unreviewed |
 | `SCORECARD_TOKEN` secret: fine-grained token for this repository only, *Administration: Read-only* | The default token cannot read rulesets, so the Scorecard Branch-Protection check scores 0 even when the ruleset exists |
 | SignPath project; `SIGNPATH_API_TOKEN` secret; `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_EXE_CONFIGURATION_SLUG` and `SIGNPATH_SETUP_CONFIGURATION_SLUG` variables | Authenticode signing of `dekan.exe` and the installer. Without the secret the signing steps are skipped and the release ships unsigned, which Windows SmartScreen and antivirus reputation treat as an unknown program |
-| `RELEASE_SIGNING_KEY` secret: the hex PKCS#8 Ed25519 key from `cargo xtask release-key <file outside the repo>` | Signs `SHA256SUMS` into `SHA256SUMS.sig`, which installed copies require before running an update. `sign-sums` refuses a key whose public half is not the one built into `dekan-app`. Without the secret the release ships without the signature and installed copies only get the download page |
+| `RELEASE_SIGNING_KEY` secret: the hex PKCS#8 Ed25519 key from `cargo xtask release-key <file outside the repo>` | Signs `SHA256SUMS` into `SHA256SUMS.sig`, which installed copies require before running an update. `sign-sums` refuses a key whose public half is not the one built into `dekan-app`. Without the secret the release fails |
 
 ## Packaging
 
-- `cargo xtask package` builds the release, copies it to `dist\` and writes `SHA256SUMS`. It owns the release
+- `cargo xtask package` builds the release (`--locked`), copies `dekan.exe` and `dekan-relay.exe` to
+  `dist\`, writes the default `party.json` and `SHA256SUMS`, and fails if the relay binary is missing. It owns the release
   compiler flags: the C runtime is linked statically, code targets `x86-64-v2` (SSE4.2 and POPCNT, which every CPU
   that meets League's minimum requirements has), and the build machine's paths (Cargo home, toolchain,
   workspace) are rewritten, whatever `RUSTFLAGS` holds. A set `RUSTFLAGS` (CI uses `-D warnings`) otherwise
@@ -197,6 +203,9 @@ The second form works offline with the Sigstore bundle published next to the ins
 - `cargo xtask installer` passes the workspace version to Inno Setup (`installer/dekan.iss`) and produces
   `Dekan-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `dist\dekan.exe` already there instead
   of rebuilding it, so the release can sign the binary before it goes into the installer.
+- The release publishes the installer, its Sigstore bundle, `SHA256SUMS` and `SHA256SUMS.sig`. Installed copies
+  check an update's installer against the signed checksum list before running it, and `install.ps1` (the
+  terminal install from the README) checks the installer against `SHA256SUMS` and its signature.
 - The release signs with Authenticode through SignPath. The Sigstore attestation proves where a build came from
   to anyone who checks it with `gh`, but Windows does not read it: only an Authenticode signature counts for
   SmartScreen and antivirus reputation.

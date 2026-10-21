@@ -70,6 +70,12 @@ allow-wildcard-paths = true
 [advisories]
 unmaintained = "workspace"
 yanked = "warn"
+ignore = [
+    { id = "RUSTSEC-2026-0367", reason = "zip extract() keeps Unix SUID/SGID bits; Dekan never calls extract(), its own Windows extractor writes plain files" },
+    { id = "RUSTSEC-2026-0368", reason = "zip extract() follows symlink targets; Dekan never calls extract() and its extractor refuses symlink entries" },
+    { id = "RUSTSEC-2026-0369", reason = "zip extract() applies Unix permissions through symlinks; Dekan never calls extract() and runs on Windows only" },
+    { id = "RUSTSEC-2026-0381", reason = "webpki-roots 0.26.11 is the semver shim re-exporting webpki-roots 1.x, locked at the fixed 1.0.10" },
+]
 
 [sources]
 unknown-registry = "deny"

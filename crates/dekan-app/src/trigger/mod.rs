@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use dekan_core::phase::GamePhase;
 use dekan_core::state::{InjectionStatus, StateReceiver, StateSender, set_injection_status};
 use dekan_inject::overlay::OverlayConfig;
 use dekan_inject::pipeline::{InjectionPipeline, PipelineConfig};
@@ -11,15 +12,17 @@ use tracing::{debug, error, info, warn};
 
 mod arm;
 mod prepare;
+mod support;
 
 use arm::{arm_key, arming};
 use arm_key::{
-    ArmDecision, ArmKey, ArmRequest, arm_decision, arms_in_lobby, build_key, is_classic,
-    lobby_mods_fingerprint, party_skins, should_disarm, wanted_skin,
+    ArmDecision, ArmKey, ArmRequest, WantedSkin, arm_decision, arms_in_lobby, build_key,
+    is_classic, lobby_mods_fingerprint, party_skins, should_disarm, wanted_skin_when,
 };
-use arming::{ArmedPatcher, Arming, next_armed};
+use arming::{ArmedPatcher, Arming, next_armed, resume_for_reconnect};
 pub use paths::{ResolvedPaths, ToolsSource, required_tool_files, tools_ready};
 use prepare::paths;
+use support::{match_ended, note_wanted, prefer_lazy_wad_checks};
 
 pub struct InjectionTrigger {
     state_tx: StateSender,
@@ -47,7 +50,10 @@ impl InjectionTrigger {
         let mut arming: Option<Arming<'_>> = None;
         let mut pending_arm: Option<ArmRequest> = None;
         let mut lcu_divergence_seen: Option<u32> = None;
+        let mut failed_arm: Option<ArmKey> = None;
+        let mut last_wanted: Option<WantedSkin> = None;
         let mut tools_missing_reported = false;
+        let mut injection_off_reported = false;
 
         info!(
             tools = %self.paths.tools_dir.display(),
@@ -82,6 +88,14 @@ impl InjectionTrigger {
                             continue;
                         }
 
+                        if !dekan_platform::preferences::INJECTION.is_enabled() {
+                            debug!(
+                                entry_id = ?request.key.entry_id,
+                                "Skin injection is turned off; the pending patcher build is dropped"
+                            );
+                            continue;
+                        }
+
                         if let Some(superseded) = arming.take() {
                             info!(
                                 superseded_entry = ?superseded.key.entry_id,
@@ -98,6 +112,13 @@ impl InjectionTrigger {
                             );
                             previous.overlay.shutdown().await;
                         }
+                        if let Some(running) = active_overlay.take() {
+                            info!(
+                                entry_id = ?request.key.entry_id,
+                                "A new pick arrived; stopping the patcher that served the previous one"
+                            );
+                            running.shutdown().await;
+                        }
                         arming = Some(Arming {
                             key: request.key(),
                             task: Box::pin(self.arm_patcher(request)),
@@ -106,6 +127,14 @@ impl InjectionTrigger {
                 }
 
                 result = next_armed(&mut arming) => {
+                    if let (None, Some(finished)) = (&result, arming.take()) {
+                        warn!(
+                            champ_id = finished.key.champ_id,
+                            entry_id = ?finished.key.entry_id,
+                            "The patcher could not be armed; this pick is not retried until the selection changes, and the game-start path will build against the running game"
+                        );
+                        failed_arm = Some(finished.key);
+                    }
                     arming = None;
                     armed = result;
                     lcu_divergence_seen = None;
@@ -118,9 +147,35 @@ impl InjectionTrigger {
 
                     let state = state_rx.borrow().clone();
 
-                    if state.phase.is_in_game() && !injected_session {
+                    if !dekan_platform::preferences::INJECTION.is_enabled() {
+                        if let Some(overlay) = active_overlay.take() {
+                            info!(phase = ?state.phase, "Skin injection turned off; stopping the running patcher so a reconnect loads the game's own files");
+                            overlay.shutdown().await;
+                        }
+                    }
+
+                    if state.phase == GamePhase::Reconnect && injected_session {
+                        injected_session = false;
+                        let wanted = wanted_skin_when(&state, dekan_platform::preferences::INJECTION.is_enabled());
+                        (armed, active_overlay) = resume_for_reconnect(active_overlay.take(), wanted);
+                        info!(kept = ?armed.as_ref().map(|a| a.key.entry_id), "Game left for the reconnect screen; the skin can be changed before reconnecting");
+                    }
+
+                    let reconnecting = state.phase == GamePhase::Reconnect;
+                    if state.phase.is_in_game() && !reconnecting && !injected_session {
                         injected_session = true;
                         pending_arm = None;
+
+                        if !dekan_platform::preferences::INJECTION.is_enabled() {
+                            if let Some(abandoned) = arming.take() {
+                                info!(entry_id = ?abandoned.key.entry_id, "Skin injection turned off; abandoning the patcher build");
+                            }
+                            if let Some(stale) = armed.take() {
+                                stale.overlay.shutdown().await;
+                            }
+                            info!(phase = ?state.phase, "Game started with skin injection turned off; nothing is injected this match");
+                            continue;
+                        }
 
                         if let Some(in_flight) = arming.take() {
 
@@ -162,8 +217,21 @@ impl InjectionTrigger {
                             "Game entered in-game phase; completing the injection"
                         );
                         active_overlay = self.handle_game_start(&state, armed.take(), &token).await;
-                    } else if (state.phase.is_champ_select() || arms_in_lobby(&state)) && !injected_session {
-                        let wanted = wanted_skin(&state);
+                    } else if (state.phase.is_champ_select() || arms_in_lobby(&state) || reconnecting) && !injected_session {
+                        let injection_enabled = dekan_platform::preferences::INJECTION.is_enabled();
+                        if !injection_enabled && !injection_off_reported {
+                            injection_off_reported = true;
+                            info!("Skin injection is turned off; this pick will not be injected");
+                        }
+                        let wanted = wanted_skin_when(&state, injection_enabled);
+                        note_wanted(&mut last_wanted, wanted, state.phase);
+                        if failed_arm.is_some_and(|failed| match wanted {
+                            WantedSkin::Nothing => true,
+                            WantedSkin::Skin(key) => key != failed,
+                            WantedSkin::Unknown => false,
+                        }) {
+                            failed_arm = None;
+                        }
 
                         let current = armed
                             .as_ref()
@@ -216,6 +284,9 @@ impl InjectionTrigger {
 
                         match arm_decision(wanted, current) {
                             ArmDecision::Settled => pending_arm = None,
+                            ArmDecision::Schedule(request) if failed_arm == Some(request.key) => {
+                                pending_arm = None;
+                            }
                             ArmDecision::Schedule(request) => {
 
                                 let already_queued = pending_arm
@@ -236,6 +307,7 @@ impl InjectionTrigger {
                     } else if state.phase.is_between_matches()
                         && (injected_session
                             || tools_missing_reported
+                            || injection_off_reported
                             || armed.is_some()
                             || arming.is_some()
                             || pending_arm.is_some())
@@ -243,8 +315,11 @@ impl InjectionTrigger {
                         debug!("Resetting injection session state for next match");
                         injected_session = false;
                         tools_missing_reported = false;
+                        injection_off_reported = false;
                         pending_arm = None;
                         lcu_divergence_seen = None;
+                        failed_arm = None;
+                        last_wanted = None;
                         if let Some(abandoned) = arming.take() {
                             info!(
                                 entry_id = ?abandoned.key.entry_id,
@@ -277,7 +352,11 @@ impl InjectionTrigger {
             Ok(Some(exe_path)) => exe_path
                 .parent()
                 .and_then(dekan_platform::paths::normalize_game_dir),
-            _ => None,
+            Ok(None) => None,
+            Err(e) => {
+                debug!(pid, error = %e, "The game process path could not be read; using the known game folder");
+                None
+            }
         });
 
         let dir = from_process
@@ -286,6 +365,8 @@ impl InjectionTrigger {
             .unwrap_or_else(|| self.paths.game_dir.clone());
         if dir.is_dir() {
             dekan_inject::overlay_builder::prewarm_game_index(&dir);
+        } else {
+            warn!(game = %dir.display(), "The game folder is not known or does not exist; the overlay build may fail");
         }
         dir
     }
@@ -311,32 +392,7 @@ const ARM_DEBOUNCE: Duration = Duration::from_millis(900);
 
 const INITIAL_ARM_DEBOUNCE: Duration = Duration::from_millis(100);
 
-fn prefer_lazy_wad_checks(game_dir: &Path) {
-    match dekan_platform::client_settings::disable_crash_reporting(game_dir) {
-        Ok(true) => info!(
-            "Turned the League client's crash reporting off so the injector checks archives as the game loads them"
-        ),
-        Ok(false) => debug!(
-            "The League client's crash reporting is already off or the client has no settings yet"
-        ),
-        Err(e) => warn!(
-            error = %e,
-            "Could not turn the League client's crash reporting off; the injector checks every archive as the match starts"
-        ),
-    }
-}
 const GAME_PROCESS_POLL: Duration = Duration::from_millis(100);
-
-async fn match_ended(state_rx: &mut StateReceiver) {
-    loop {
-        if state_rx.borrow_and_update().phase.is_between_matches() {
-            return;
-        }
-        if state_rx.changed().await.is_err() {
-            return std::future::pending().await;
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

@@ -50,27 +50,24 @@ impl Language {
 static ACTIVE_LANGUAGE: std::sync::RwLock<Option<Language>> = std::sync::RwLock::new(None);
 
 pub fn set_active_locale(locale: &str) {
-    if let Some(lang) = Language::from_locale(locale) {
-        if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
-            *lock = Some(lang);
+    match Language::from_locale(locale) {
+        Some(lang) => {
+            *ACTIVE_LANGUAGE.write().unwrap_or_else(|e| e.into_inner()) = Some(lang);
         }
+        None => tracing::debug!(locale, "Unsupported locale; the language is unchanged"),
     }
 }
 
 pub fn reset_active_language() {
-    if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
-        *lock = None;
-    }
+    *ACTIVE_LANGUAGE.write().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 #[must_use]
 pub fn active_language() -> Language {
-    if let Ok(lock) = ACTIVE_LANGUAGE.read() {
-        if let Some(lang) = *lock {
-            return lang;
-        }
+    match *ACTIVE_LANGUAGE.read().unwrap_or_else(|e| e.into_inner()) {
+        Some(lang) => lang,
+        None => Language::Turkish,
     }
-    Language::Turkish
 }
 
 #[must_use]
@@ -93,6 +90,7 @@ pub struct Text {
     pub status_in_game_confirmed: &'static str,
     pub status_in_game_unconfirmed: &'static str,
     pub status_in_game_failed: &'static str,
+    pub status_in_game_patcher_killed: &'static str,
     pub status_reconnecting: &'static str,
 
     pub party_off: &'static str,
@@ -123,7 +121,16 @@ pub struct Text {
     pub panel_theme_crimson: &'static str,
     pub panel_theme_obsidian: &'static str,
     pub panel_section_diagnostics: &'static str,
+    pub panel_tab_home: &'static str,
+    pub panel_tab_party: &'static str,
+    pub panel_tab_help: &'static str,
+    pub panel_all_clear: &'static str,
+    pub panel_attention: &'static str,
+    pub panel_see_diagnostics: &'static str,
+    pub panel_party_hint: &'static str,
     pub panel_random_skin_hint: &'static str,
+    pub menu_injection: &'static str,
+    pub panel_injection_hint: &'static str,
     pub menu_light_loading: &'static str,
     pub panel_light_loading_hint: &'static str,
     pub check_injector: &'static str,
@@ -215,6 +222,11 @@ pub struct Text {
     pub party_dialog_btn_cancel: &'static str,
     pub party_dialog_copied: &'static str,
     pub party_dialog_error_empty: &'static str,
+    pub party_invite_title: &'static str,
+    pub party_invite_desc: &'static str,
+    pub party_invite_join: &'static str,
+    pub party_invite_later: &'static str,
+    pub log_folder_failed: &'static str,
 
     pub import_title: &'static str,
     pub import_refused: &'static str,
@@ -242,6 +254,7 @@ pub struct Text {
     pub overlay_no_library_big: &'static str,
     pub overlay_no_library_sub: &'static str,
     pub overlay_connected: &'static str,
+    pub overlay_party: &'static str,
     pub overlay_skin_one: &'static str,
     pub overlay_skin_many: &'static str,
     pub overlay_tab_skins: &'static str,

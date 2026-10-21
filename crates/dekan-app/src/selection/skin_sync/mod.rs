@@ -186,10 +186,13 @@ fn extract_skins<B: AsRef<[u8]>>(
 
     let mut extracted_count = 0usize;
     let mut total_bytes_extracted = 0u64;
+    let mut oversized = 0usize;
+    let mut first_oversized: Option<String> = None;
+    let mut truncated: Option<String> = None;
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
-        let raw_name = entry.name().to_string();
+        let raw_name = entry.name()?.into_owned();
 
         let relative_skin_path = if let Some(idx) = raw_name.find("/skins/") {
             &raw_name[idx + "/skins/".len()..]
@@ -208,22 +211,17 @@ fn extract_skins<B: AsRef<[u8]>>(
 
         let entry_size = entry.size();
         if entry_size > limits.max_single_file_bytes {
-            warn!(
-                entry = %raw_name,
-                size = entry_size,
-                max = limits.max_single_file_bytes,
-                "Skipping archive entry exceeding single-file limit"
-            );
+            oversized += 1;
+            first_oversized.get_or_insert_with(|| format!("{raw_name} ({entry_size} bytes)"));
             continue;
         }
 
         total_bytes_extracted += entry_size;
         if total_bytes_extracted > limits.max_total_bytes {
-            warn!(
-                total = total_bytes_extracted,
-                max = limits.max_total_bytes,
-                "Archive extraction stopped: total byte limit exceeded"
-            );
+            truncated = Some(format!(
+                "the total byte limit of {} was exceeded",
+                limits.max_total_bytes
+            ));
             break;
         }
 
@@ -240,13 +238,26 @@ fn extract_skins<B: AsRef<[u8]>>(
         extracted_count += 1;
 
         if extracted_count >= limits.max_entries {
-            warn!(
-                count = extracted_count,
-                max = limits.max_entries,
-                "Archive extraction stopped: entry count limit reached"
-            );
+            truncated = Some(format!(
+                "the entry limit of {} was reached",
+                limits.max_entries
+            ));
             break;
         }
+    }
+
+    if let Some(first) = first_oversized {
+        warn!(
+            skipped = oversized,
+            first,
+            max = limits.max_single_file_bytes,
+            "Archive entries exceeding the single-file limit were skipped"
+        );
+    }
+    if let Some(reason) = truncated {
+        return Err(SkinSyncError::InvalidResponse(format!(
+            "extraction stopped after {extracted_count} files because {reason}; the library may be incomplete"
+        )));
     }
 
     info!(
@@ -305,7 +316,9 @@ pub async fn sync_skin_library(
     let extracted =
         download_and_extract_skins(&client, &config.zip_url, library_dir, &limits).await?;
 
-    let _ = save_local_sha(library_dir, &remote_sha); // ignore-ok: failure to write version file does not invalidate the extracted files
+    if let Err(e) = save_local_sha(library_dir, &remote_sha) {
+        warn!(error = %e, "The skin library version could not be saved; the next start downloads it again");
+    }
 
     Ok(SkinSyncResult::Updated {
         sha: remote_sha,

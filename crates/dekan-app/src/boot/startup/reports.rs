@@ -21,6 +21,21 @@ pub fn log_profile_resolution() {
     }
 }
 
+pub fn report_dir_fallback<E: std::fmt::Display>(
+    what: &str,
+    resolved: &Result<std::path::PathBuf, E>,
+    used: &std::path::Path,
+) {
+    if let Err(e) = resolved {
+        warn!(
+            folder = what,
+            error = %e,
+            fallback = %used.display(),
+            "Folder could not be resolved; using a temporary one"
+        );
+    }
+}
+
 pub fn report_game_build(
     state_dir: &std::path::Path,
     game_dir: &std::path::Path,
@@ -68,8 +83,12 @@ pub fn report_game_build(
 
 pub fn report_injector_files(files: &[&std::path::Path]) {
     for file in files {
-        let Ok(bytes) = std::fs::read(file) else {
-            continue;
+        let bytes = match std::fs::read(file) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                warn!(file = %file.display(), error = %e, "Injector file could not be read for the report");
+                continue;
+            }
         };
         let modified_unix = std::fs::metadata(file)
             .and_then(|meta| meta.modified())

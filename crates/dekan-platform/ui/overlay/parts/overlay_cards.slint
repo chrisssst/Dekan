@@ -1,4 +1,4 @@
-import { Theme } from "../../theme.slint";
+import { Theme, CheckGlyph } from "../../theme.slint";
 import { ChromaGem, SkinCard, OverlayLabels, SelectionOrigin } from "overlay_types.slint";
 
 export component Chamfer inherits Path {
@@ -40,13 +40,10 @@ export component Gem inherits Rectangle {
         height: root.height - 4px + root.grow;
         fill: root.gem.form ? Theme.gold-dim : root.gem.color;
     }
-    if root.selected: Text {
-        text: "✓";
-        color: white;
-        font-size: 10px;
-        font-weight: 900;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    if root.selected: CheckGlyph {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        stroke: white;
     }
     touch := TouchArea {
         mouse-cursor: pointer;
@@ -106,7 +103,7 @@ export component Card inherits Rectangle {
         Rectangle {
             width: 56px;
             height: 56px;
-            border-radius: 6px;
+            border-radius: 8px;
             border-width: 1px;
             border-color: root.selected ? Theme.gold : Theme.line;
             background: @linear-gradient(160deg, Theme.card-hover 0%, Theme.bg-0 100%);
@@ -131,30 +128,31 @@ export component Card inherits Rectangle {
             spacing: 7px;
             alignment: center;
             Text {
-                text: root.card.name.to-uppercase();
-                color: root.card.name-unknown ? Theme.muted : Theme.text;
+                text: root.card.name;
+                color: root.card.name-unknown ? Theme.muted : root.selected ? Theme.gold-bright : Theme.text;
+                font-family: Theme.serif;
                 font-italic: root.card.name-unknown;
-                font-size: Theme.text-base;
-                font-weight: 600;
-                letter-spacing: 0.3px;
+                font-size: 14px;
+                font-weight: 700;
                 overflow: elide;
             }
             if root.tagged: HorizontalLayout {
                 alignment: start;
                 Rectangle {
-                    border-radius: 3px;
+                    border-radius: 8px;
                     border-width: 1px;
                     border-color: Theme.gold-dim;
+                    background: Theme.gold.with-alpha(0.08);
                     HorizontalLayout {
-                        padding-left: 6px;
-                        padding-right: 6px;
+                        padding-left: 8px;
+                        padding-right: 8px;
                         padding-top: 1px;
                         padding-bottom: 1px;
                         Text {
-                            text: (root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.origin == SelectionOrigin.preset ? root.labels.preset-tag : root.labels.random-tag).to-uppercase();
+                            text: root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.origin == SelectionOrigin.preset ? root.labels.preset-tag : root.labels.random-tag;
                             color: Theme.gold;
                             font-size: Theme.text-xs;
-                            letter-spacing: 0.4px;
+                            font-weight: 600;
                         }
                     }
                 }
@@ -179,12 +177,8 @@ export component Card inherits Rectangle {
     accessible-checkable: true;
     accessible-checked: root.selected;
     accessible-action-default => { root.chosen(root.card.id); }
-    if root.selected: Text {
+    if root.selected: CheckGlyph {
         x: parent.width - 22px;
-        y: 8px;
-        text: "✓";
-        color: Theme.gold;
-        font-size: Theme.text-sm;
-        font-weight: 700;
+        y: 10px;
     }
 }

@@ -40,6 +40,12 @@ pub enum WadError {
     #[error("invalid header size: buffer has {actual} bytes, expected at least {expected}")]
     InvalidHeaderSize { actual: usize, expected: usize },
 
+    #[error("unsupported hash index version: {0}")]
+    UnsupportedIndexVersion(u32),
+
+    #[error("invalid hash index: {0}")]
+    InvalidHashIndex(String),
+
     #[error("invalid PROP: {0}")]
     InvalidProp(String),
 

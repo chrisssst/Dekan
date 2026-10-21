@@ -7,6 +7,9 @@ on:
 
 permissions: {}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   enable:
     name: Enable auto-merge
@@ -14,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: approval
           path: approval
@@ -33,7 +36,7 @@ jobs:
 
       - name: GitHub App token
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.DEKAN_BOT_APP_ID }}
           private-key: ${{ secrets.DEKAN_BOT_PRIVATE_KEY }}
@@ -75,7 +78,7 @@ jobs:
           [[ "$approved" == true ]] || { echo "::error::no approval of $SHA from a maintainer"; exit 1; }
 
           files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
-          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger(\.rs$|/)|crates/dekan-app/src/updates/injector_install\.rs$|crates/dekan-inject/src/injector/|crates/dekan-party/src/security/|crates/dekan-platform/src/os/system/authenticode(\.rs$|/)|relay-worker/wrangler\.toml$|xtask/)'
+          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger(\.rs$|/)|crates/dekan-app/src/updates/(injector_install\.rs$|update_check\.rs$|self_update/)|install\.ps1$|crates/dekan-inject/src/injector/|crates/dekan-party/src/security/|crates/dekan-platform/src/os/system/authenticode(\.rs$|/)|relay-worker/wrangler\.toml$|xtask/)'
           blocked=$(grep -E "$protected" <<<"$files" || true)
           if [[ -n "$blocked" ]]; then
             echo "::warning::PR #$PR touches protected paths and must be merged by hand:"

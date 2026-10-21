@@ -33,13 +33,23 @@ pub fn restore_originals(roots: &[PathBuf], state_dir: &Path) -> RestoreOutcome 
             };
             let backup_root = originals.join(relative);
             let backups = if backup_root.is_dir() {
-                files_in(&backup_root).unwrap_or_default()
+                match files_in(&backup_root) {
+                    Ok(files) => files,
+                    Err(e) => {
+                        outcome.failed.push(format!(
+                            "could not read the backup of '{}': {e}",
+                            path.display()
+                        ));
+                        continue;
+                    }
+                }
             } else if backup_root.is_file() {
                 vec![backup_root.clone()]
             } else {
                 Vec::new()
             };
             if backups.is_empty() {
+                debug!(mod_path = %path.display(), "Repaired custom mod has no backup to put back");
                 continue;
             }
             let mut moved = 0;
@@ -69,6 +79,7 @@ pub fn restore_originals(roots: &[PathBuf], state_dir: &Path) -> RestoreOutcome 
     info!(
         mods = outcome.restored,
         failed = outcome.failed.len(),
+        first_failure = outcome.failed.first().map_or("-", String::as_str),
         "Custom mods restored to their original files at the user's request"
     );
     outcome

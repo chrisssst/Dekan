@@ -148,15 +148,29 @@ impl InjectionTrigger {
             )
             .await;
 
-        info!(
-            champ_id,
-            entry_id = ?armed.key.entry_for(champ_id),
-            status = ?status,
-            armed_before_game = armed.armed_before_game,
-            registered_lcu_skin = ?armed.lcu_skin,
-            hook_ms = started_at.elapsed().as_millis(),
-            "Injection completed from the pre-armed patcher"
-        );
+        let entry_id = armed.key.entry_for(champ_id);
+        let hook_ms = started_at.elapsed().as_millis();
+        if status == InjectionStatus::Confirmed {
+            info!(
+                champ_id,
+                entry_id = ?entry_id,
+                status = ?status,
+                armed_before_game = armed.armed_before_game,
+                registered_lcu_skin = ?armed.lcu_skin,
+                hook_ms,
+                "Injection completed from the pre-armed patcher"
+            );
+        } else {
+            warn!(
+                champ_id,
+                entry_id = ?entry_id,
+                status = ?status,
+                armed_before_game = armed.armed_before_game,
+                registered_lcu_skin = ?armed.lcu_skin,
+                hook_ms,
+                "The pre-armed patcher did not confirm the hook; the skin may not load"
+            );
+        }
         set_injection_status(&self.state_tx, status);
         Some(armed.overlay)
     }
@@ -181,6 +195,7 @@ impl InjectionTrigger {
         let mods = self.collect_mods(key).await?;
 
         let mut game_pid = None;
+        let mut last_lookup_error: Option<String> = None;
         let discovery_started = tokio::time::Instant::now();
         let max_wait = Duration::from_secs(60);
 
@@ -189,9 +204,14 @@ impl InjectionTrigger {
                 ProcessFinder::find_any_process(&dekan_platform::game_version::GAME_EXES)
             })
             .await;
-            if let Ok(Ok(Some(pid))) = found {
-                game_pid = Some(pid);
-                break;
+            match found {
+                Ok(Ok(Some(pid))) => {
+                    game_pid = Some(pid);
+                    break;
+                }
+                Ok(Ok(None)) => {}
+                Ok(Err(e)) => last_lookup_error = Some(e.to_string()),
+                Err(e) => last_lookup_error = Some(e.to_string()),
             }
             tokio::time::sleep(GAME_PROCESS_POLL).await;
         }
@@ -199,7 +219,10 @@ impl InjectionTrigger {
         let pid = match game_pid {
             Some(pid) => pid,
             None => {
-                warn!("Timed out waiting for the game process to spawn");
+                warn!(
+                    last_lookup_error = last_lookup_error.as_deref().unwrap_or("-"),
+                    "Timed out waiting for the game process to spawn"
+                );
                 set_injection_status(
                     &self.state_tx,
                     InjectionStatus::Failed {

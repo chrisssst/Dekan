@@ -56,6 +56,17 @@ fn the_overlay_shows_only_during_champ_select() {
 }
 
 #[test]
+fn the_reconnect_screen_reopens_the_overlay_to_change_the_skin() {
+    assert!(dekan_platform::preferences::INJECTION.is_enabled());
+    assert!(wanted_for_state(&in_phase(GamePhase::Reconnect, false)));
+    assert!(wanted_for_state(&in_phase(GamePhase::Reconnect, true)));
+    assert!(!last_call_for_a_skin(&in_phase(
+        GamePhase::Reconnect,
+        false
+    )));
+}
+
+#[test]
 fn a_lobby_that_picks_champions_shows_the_overlay_until_the_match_starts() {
     for phase in [
         GamePhase::Lobby,

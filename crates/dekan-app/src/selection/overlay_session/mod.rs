@@ -31,7 +31,10 @@ fn target_is_stale(target: Option<&OverlayTarget>, champion: Option<ChampionId>)
 
 #[must_use]
 fn wanted_for_state(state: &AppState) -> bool {
-    state.phase.is_champ_select() || (state.lobby.is_some() && state.phase.is_before_champ_select())
+    state.phase.is_champ_select()
+        || (state.lobby.is_some() && state.phase.is_before_champ_select())
+        || (state.phase == GamePhase::Reconnect
+            && dekan_platform::preferences::INJECTION.is_enabled())
 }
 
 #[must_use]
@@ -144,6 +147,7 @@ impl OverlaySession {
         let mut catalog_key = CatalogKey::default();
         let mut catalog_champion: Option<ChampionId> = None;
         let mut catalog: Option<Catalog> = None;
+        let mut party_shown = None;
 
         loop {
             tokio::select! {
@@ -222,6 +226,19 @@ impl OverlaySession {
                             state.lobby.as_ref().map(dekan_core::lobby::LobbyPicks::champions),
                         )
                     };
+                    let party = {
+                        let state = self.state_rx.borrow();
+                        dekan_core::party::party_summary(
+                            &state.shown_party_status(),
+                            &state.party_peers,
+                            &state.team,
+                            state.local_puuid.as_deref(),
+                        )
+                    };
+                    if party != party_shown {
+                        party_shown = party;
+                        self.controller.set_party(party);
+                    }
                     self.record_historic(confirmed, target.as_ref());
                     if lobby.is_none() {
                         self.lobby_restored.clear();

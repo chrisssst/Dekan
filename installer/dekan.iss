@@ -9,7 +9,7 @@
 #endif
 #define MyAppPublisher "Dekan"
 #define MyAppDescription "League of Legends skin changer for Windows"
-#define MyAppCopyright "Dekan build. Original Bullet copyright (c) 2026 Isllan Toso. MIT License."
+#define MyAppCopyright "Copyright (c) 2026 Dekan. MIT License."
 #define MyAppURL "https://github.com/chrisssst/Dekan"
 #define MyPublisherURL "https://github.com/chrisssst/Dekan"
 #define MyAppExeName "dekan.exe"
@@ -65,6 +65,8 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 Type: filesandordirs; Name: "{localappdata}\Programs\Dekan"
 Type: files; Name: "{app}\tools\*.orig"
 Type: files; Name: "{app}\tools\*.bak"
+Type: files; Name: "{app}\tools\cloudflared.exe"
+Type: files; Name: "{app}\tools\tools.zip"
 Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 
 [Dirs]

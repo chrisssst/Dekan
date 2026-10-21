@@ -20,7 +20,7 @@ pub(crate) fn run_wad_writer_probe(args: &[String]) {
         println!(
             "uso: cargo xtask wad-writer-probe [--root <pasta>] <filtro...>   (ex.: Champions/Annie, Maps/Shipping; '.' = todos)"
         );
-        return;
+        std::process::exit(2);
     }
     let scratch =
         std::env::temp_dir().join(format!("dekan_wad_writer_probe_{}", std::process::id()));
@@ -58,6 +58,7 @@ pub(crate) fn run_wad_writer_probe(args: &[String]) {
             Ok(source) => source,
             Err(e) => {
                 println!("  {} nao abriu: {e}", rel.display());
+                total_bad += 1;
                 continue;
             }
         };
@@ -72,6 +73,7 @@ pub(crate) fn run_wad_writer_probe(args: &[String]) {
             Ok(outcome) => outcome,
             Err(e) => {
                 println!("  {} copia falhou: {e}", rel.display());
+                total_bad += 1;
                 continue;
             }
         };
@@ -119,4 +121,7 @@ pub(crate) fn run_wad_writer_probe(args: &[String]) {
     }
     let _ = std::fs::remove_dir_all(&scratch); // ignore-ok: probe scratch folder
     println!("\ntotal: {total_entries} entradas, {total_bad} divergentes");
+    if total_bad > 0 || files.is_empty() {
+        std::process::exit(1);
+    }
 }

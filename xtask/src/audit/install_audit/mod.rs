@@ -82,17 +82,18 @@ pub fn audit_files(
                     ),
                 ));
             }
-            let strays: Vec<String> = std::fs::read_dir(&tools_dir)
-                .map(|entries| {
-                    entries
-                        .flatten()
-                        .map(|e| e.file_name().to_string_lossy().into_owned())
+            let (strays, listed) = match list_names(&tools_dir) {
+                Ok(names) => (
+                    names
+                        .into_iter()
                         .filter(|name| !tools.iter().any(|t| t.eq_ignore_ascii_case(name)))
-                        .collect()
-                })
-                .unwrap_or_default();
+                        .collect::<Vec<String>>(),
+                    true,
+                ),
+                Err(e) => (vec![e], false),
+            };
             checks.push(check(
-                strays.is_empty(),
+                listed && strays.is_empty(),
                 format!(
                     "no file in {} beyond the shipped tools {strays:?}",
                     tools_dir.display()
@@ -104,20 +105,21 @@ pub fn audit_files(
                 !layout.program_dir.exists(),
                 format!("{} removed", layout.program_dir.display()),
             ));
-            let left: Vec<String> = std::fs::read_dir(&layout.data_dir)
-                .map(|entries| {
-                    entries
-                        .flatten()
-                        .map(|e| e.file_name().to_string_lossy().into_owned())
+            let (left, listed) = match list_names(&layout.data_dir) {
+                Ok(names) => (
+                    names
+                        .into_iter()
                         .filter(|name| {
                             !(kept_user_content
                                 && USER_CONTENT.iter().any(|u| u.eq_ignore_ascii_case(name)))
                         })
-                        .collect()
-                })
-                .unwrap_or_default();
+                        .collect::<Vec<String>>(),
+                    true,
+                ),
+                Err(e) => (vec![e], false),
+            };
             checks.push(check(
-                left.is_empty(),
+                listed && left.is_empty(),
                 format!(
                     "nothing left in {} {}(found {left:?})",
                     layout.data_dir.display(),
@@ -242,6 +244,22 @@ pub fn parse_phase(args: &[String]) -> Option<Phase> {
         }),
         _ => None,
     }
+}
+
+fn list_names(dir: &std::path::Path) -> Result<Vec<String>, String> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("{} unreadable: {e}", dir.display())),
+    };
+    let mut names = Vec::new();
+    for entry in entries {
+        match entry {
+            Ok(entry) => names.push(entry.file_name().to_string_lossy().into_owned()),
+            Err(e) => return Err(format!("{} unreadable: {e}", dir.display())),
+        }
+    }
+    Ok(names)
 }
 
 pub(crate) fn run_install_audit(args: &[String]) {

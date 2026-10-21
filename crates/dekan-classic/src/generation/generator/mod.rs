@@ -76,7 +76,9 @@ pub fn slot_identity(slot_bin: &[u8]) -> Result<SlotIdentity, ClassicError> {
 pub use aliases::*;
 pub use characters::*;
 pub use classic::*;
+pub use cleanup::remove_stale_generated;
 pub use prewarm::*;
+pub(crate) use record::*;
 pub use retarget::*;
 pub use standard::*;
 
@@ -106,6 +108,7 @@ pub(crate) fn remove_if_present(dir: &Path) -> Result<(), ClassicError> {
     }
 }
 
+mod cleanup;
 mod cycle;
 mod forms;
 mod reuse;
@@ -117,7 +120,7 @@ use forms::form_models;
 #[cfg(test)]
 use forms::forms_tests;
 use rift::{characters, classic};
-use slots::retarget;
+use slots::{record, retarget};
 use store::{aliases, prewarm, standard};
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ fn facts() -> Facts {
         party_line: "p".into(),
         in_room: false,
         auto_accept: false,
+        injection: true,
         random_skin: true,
         light_loading: true,
         autostart: false,
@@ -252,7 +253,14 @@ fn test_diagnostics_zip_holds_recent_logs_and_every_manifest() {
     let mut archive =
         zip::ZipArchive::new(std::fs::File::open(&zip_path).expect("zip")).expect("archive");
     let names: Vec<String> = (0..archive.len())
-        .map(|i| archive.by_index(i).expect("entry").name().to_owned())
+        .map(|i| {
+            archive
+                .by_index(i)
+                .expect("entry")
+                .name()
+                .expect("name")
+                .into_owned()
+        })
         .collect();
     assert_eq!(
         names,

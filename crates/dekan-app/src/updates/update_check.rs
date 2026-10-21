@@ -89,6 +89,7 @@ pub fn newer_release(current: Version, body: &str) -> Result<Option<Offer>, Stri
     let release: LatestRelease =
         serde_json::from_str(body).map_err(|e| format!("unreadable release data: {e}"))?;
     if release.draft || release.prerelease {
+        debug!(tag = %release.tag_name, draft = release.draft, prerelease = release.prerelease, "The latest release is a draft or pre-release; not offered");
         return Ok(None);
     }
     let latest = Version::parse(&release.tag_name)
@@ -138,20 +139,33 @@ pub struct UpdateNotice(Arc<Mutex<Option<Version>>>);
 impl UpdateNotice {
     #[must_use]
     pub fn available(&self) -> Option<Version> {
-        self.0.lock().map(|v| *v).unwrap_or_default()
+        self.0.lock().map(|slot| *slot).unwrap_or_else(|e| {
+            debug!(error = %e, "Update notice lock poisoned; no update is shown");
+            None
+        })
     }
 
     fn set(&self, version: Version) {
-        if let Ok(mut slot) = self.0.lock() {
-            *slot = Some(version);
+        match self.0.lock() {
+            Ok(mut slot) => *slot = Some(version),
+            Err(e) => {
+                warn!(error = %e, version = %version, "Update notice lock poisoned; the update is not shown")
+            }
         }
     }
 }
 
 #[must_use]
 pub fn already_notified(state_dir: &Path, version: Version) -> bool {
-    std::fs::read_to_string(state_dir.join(NOTIFIED_FILE))
-        .is_ok_and(|saved| saved.trim() == version.to_string())
+    match std::fs::read_to_string(state_dir.join(NOTIFIED_FILE)) {
+        Ok(saved) => saved.trim() == version.to_string(),
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(error = %e, "Could not read the update notice record; the notice may repeat");
+            }
+            false
+        }
+    }
 }
 
 pub fn remember_notified(state_dir: &Path, version: Version) {
@@ -170,19 +184,34 @@ pub struct UpdateCheck {
     pub notify: Box<dyn Fn(Offer) -> BoxFuture<'static, ()> + Send>,
 }
 
-async fn fetch_latest(client: &reqwest::Client, current: Version) -> Result<Option<Offer>, String> {
+enum CheckError {
+    Network(String),
+    Format(String),
+}
+
+async fn fetch_latest(
+    client: &reqwest::Client,
+    current: Version,
+) -> Result<Option<Offer>, CheckError> {
     let response = client
         .get(latest_release_api())
         .header(reqwest::header::USER_AGENT, USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CheckError::Network(e.to_string()))?;
     if !response.status().is_success() {
-        return Err(format!("GitHub answered HTTP {}", response.status()));
+        return Err(CheckError::Network(format!(
+            "GitHub answered HTTP {} for {}",
+            response.status(),
+            latest_release_api()
+        )));
     }
-    let body = response.text().await.map_err(|e| e.to_string())?;
-    newer_release(current, &body)
+    let body = response
+        .text()
+        .await
+        .map_err(|e| CheckError::Network(e.to_string()))?;
+    newer_release(current, &body).map_err(CheckError::Format)
 }
 
 async fn pause(token: &CancellationToken, duration: Duration) -> bool {
@@ -208,6 +237,7 @@ pub async fn run(check: UpdateCheck, state_rx: StateReceiver, token: Cancellatio
         return;
     }
     crate::self_update::clear_staging(&check.state_dir);
+    let mut format_warned: Option<String> = None;
     loop {
         match fetch_latest(&client, current).await {
             Ok(Some(offer)) => {
@@ -229,7 +259,15 @@ pub async fn run(check: UpdateCheck, state_rx: StateReceiver, token: Cancellatio
                 }
             }
             Ok(None) => debug!(current = %current, "Dekan is up to date"),
-            Err(e) => debug!(error = %e, "Update check failed; trying again later"),
+            Err(CheckError::Network(e)) => {
+                debug!(error = %e, "Update check failed; trying again later");
+            }
+            Err(CheckError::Format(e)) => {
+                if format_warned.as_deref() != Some(e.as_str()) {
+                    warn!(error = %e, "Update check cannot read GitHub's latest release; updates will not be offered until this changes");
+                    format_warned = Some(e);
+                }
+            }
         }
         if !pause(&token, CHECK_INTERVAL).await {
             return;

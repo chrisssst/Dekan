@@ -14,17 +14,33 @@ struct PartyFile {
 }
 
 pub fn relay_url(state_dir: &Path) -> Result<String, PartyError> {
-    let raw = match std::env::var(RELAY_ENV) {
-        Ok(url) if !url.trim().is_empty() => url,
-        _ => {
+    let from_env = match std::env::var(RELAY_ENV) {
+        Ok(url) if !url.trim().is_empty() => Some(url),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            tracing::warn!(
+                variable = RELAY_ENV,
+                "The relay variable is not valid Unicode; using party.json"
+            );
+            None
+        }
+        _ => None,
+    };
+    let raw = match from_env {
+        Some(url) => url,
+        None => {
             let path = state_dir.join(RELAY_FILE);
             if !path.exists() {
-                // ignore-ok: best-effort creation; if it fails (e.g. read-only filesystem), fallback to DEFAULT_RELAY_URL
-                let _ = std::fs::create_dir_all(state_dir);
-                let default_content = format!("{{\n  \"relay_url\": \"{DEFAULT_RELAY_URL}\"\n}}\n");
-
-                // ignore-ok: best-effort write; if it fails, fallback to DEFAULT_RELAY_URL
-                let _ = std::fs::write(&path, default_content);
+                let default_content = format!(
+                    "{{
+  \"relay_url\": \"{DEFAULT_RELAY_URL}\"
+}}
+"
+                );
+                let written = std::fs::create_dir_all(state_dir)
+                    .and_then(|()| std::fs::write(&path, default_content));
+                if let Err(e) = written {
+                    tracing::warn!(path = %path.display(), error = %e, "Could not write the default party.json; using the built-in relay");
+                }
                 DEFAULT_RELAY_URL.to_string()
             } else {
                 let bytes = std::fs::read(&path).map_err(|e| {

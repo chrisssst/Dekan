@@ -2,6 +2,27 @@ use super::*;
 
 const MAX_DESCRIPTION_CHARS: usize = 300;
 
+static REPORTED_REJECTS: std::sync::Mutex<std::collections::BTreeSet<PathBuf>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+fn report_rejected(dir: &Path, rejected: Vec<PathBuf>) {
+    let mut reported = REPORTED_REJECTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let new: Vec<PathBuf> = rejected
+        .into_iter()
+        .filter(|path| reported.insert(path.clone()))
+        .collect();
+    if let Some(first) = new.first() {
+        warn!(
+            dir = %dir.display(),
+            rejected = new.len(),
+            first = %first.display(),
+            "Entries skipped: not a mod folder (META/info.json plus WAD/ or RAW/) nor an archive"
+        );
+    }
+}
+
 #[must_use]
 pub fn is_valid_mod_dir(dir: &Path) -> bool {
     let Some(meta) = child_dir_ci(dir, "META") else {
@@ -62,11 +83,11 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
     };
 
     let mut found = Vec::new();
-    let mut rejected = 0usize;
+    let mut rejected = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
-            rejected += 1;
+            rejected.push(path);
             continue;
         };
         if file_name.starts_with('.') {
@@ -78,7 +99,7 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
                 continue;
             }
             if !is_valid_mod_dir(&path) {
-                rejected += 1;
+                rejected.push(path);
                 continue;
             }
             (file_name, ModPackage::Directory)
@@ -104,13 +125,7 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
         });
     }
 
-    if rejected > 0 {
-        debug!(
-            dir = %dir.display(),
-            rejected,
-            "Entries skipped: not a mod folder (META/info.json plus WAD/ or RAW/) nor an archive"
-        );
-    }
+    report_rejected(dir, rejected);
     found.sort_by_key(|entry| entry.name.to_lowercase());
     found
 }

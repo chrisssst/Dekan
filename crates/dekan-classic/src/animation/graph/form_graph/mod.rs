@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
+use tracing::{debug, warn};
 
 use crate::error::ClassicError;
 use crate::form_clips::{animation_of, specialize_gear_choices, strip_form_parts};
@@ -210,6 +211,10 @@ pub fn build_form_graph(
     if map_mut(&mut graph, "mTrackDataMap").is_none()
         || keys_of(&mut graph, "mTrackDataMap").contains(&h(FORM_TRACK))
     {
+        debug!(
+            graph = format!("{graph_key:08x}"),
+            "Form graph skipped: no track map, or already carries the form track"
+        );
         return Ok(None);
     }
     let Some(clips) = map_mut(&mut graph, "mClipDataMap") else {
@@ -219,10 +224,20 @@ pub fn build_form_graph(
         .iter()
         .filter_map(|(k, v)| Some((k.as_u32()?, v.clone())))
         .collect();
-    if originals.len() != clips.len()
-        || originals.contains_key(&h("Toggle"))
-        || originals.len() * (2 * count - 1) + 4 * count > MAX_CLIPS
-    {
+    if originals.len() * (2 * count - 1) + 4 * count > MAX_CLIPS {
+        warn!(
+            graph = format!("{graph_key:08x}"),
+            clips = originals.len(),
+            forms = count,
+            "Form graph skipped: the copies of every clip would exceed the clip limit"
+        );
+        return Ok(None);
+    }
+    if originals.len() != clips.len() || originals.contains_key(&h("Toggle")) {
+        debug!(
+            graph = format!("{graph_key:08x}"),
+            "Form graph skipped: duplicate clip keys or a Toggle clip already exists"
+        );
         return Ok(None);
     }
 

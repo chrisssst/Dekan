@@ -108,7 +108,7 @@ pub(crate) fn run_mesh_roundtrip(args: &[String]) {
     for example in meshes.examples.iter().chain(&skeletons.examples) {
         println!("  {example}");
     }
-    if meshes.differs + skeletons.differs + unreadable_entries > 0 {
+    if meshes.differs + skeletons.differs + unreadable_entries + unreadable > 0 || wads.is_empty() {
         std::process::exit(1);
     }
 }

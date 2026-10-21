@@ -1,3 +1,5 @@
+use tracing::debug;
+
 use crate::error::WadError;
 use crate::hash::wad_path_hash;
 
@@ -34,12 +36,12 @@ impl<'a> HashIndex<'a> {
         }
 
         if &data[0..4] != HASH_INDEX_MAGIC {
-            return Err(WadError::InvalidProp("invalid BHSH index magic".into()));
+            return Err(WadError::InvalidHashIndex("bad BHSH magic".into()));
         }
 
         let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
         if version != HASH_INDEX_VERSION {
-            return Err(WadError::UnsupportedVersion(version as u8, 0));
+            return Err(WadError::UnsupportedIndexVersion(version));
         }
 
         let entry_count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
@@ -64,11 +66,36 @@ impl<'a> HashIndex<'a> {
             });
         }
 
-        Ok(Self {
+        let index = Self {
             data,
             entry_count,
             string_pool_offset,
-        })
+        };
+        index.validate()?;
+        Ok(index)
+    }
+
+    fn validate(&self) -> Result<(), WadError> {
+        let mut previous: Option<u64> = None;
+        for idx in 0..self.entry_count {
+            let entry = self.read_entry(idx);
+            if previous.is_some_and(|prev| prev >= entry.hash) {
+                return Err(WadError::InvalidHashIndex(format!(
+                    "entry {idx} is not in ascending hash order"
+                )));
+            }
+            previous = Some(entry.hash);
+            let end = self
+                .string_pool_offset
+                .checked_add(entry.str_offset as usize)
+                .and_then(|start| start.checked_add(usize::from(entry.str_len)));
+            if end.is_none_or(|end| end > self.data.len()) {
+                return Err(WadError::InvalidHashIndex(format!(
+                    "entry {idx} points outside the string pool"
+                )));
+            }
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -119,7 +146,13 @@ impl<'a> HashIndex<'a> {
 
                 if str_end <= self.data.len() {
                     let bytes = &self.data[str_start..str_end];
-                    return std::str::from_utf8(bytes).ok();
+                    return match std::str::from_utf8(bytes) {
+                        Ok(path) => Some(path),
+                        Err(e) => {
+                            debug!(hash = format!("{target_hash:016x}"), error = %e, "Hash index string is not UTF-8");
+                            None
+                        }
+                    };
                 }
                 return None;
             }
@@ -242,5 +275,34 @@ mod tests {
         assert!(index.is_empty());
         assert_eq!(index.len(), 0);
         assert!(index.find_path("anything").is_none());
+    }
+
+    #[test]
+    fn test_unknown_version_and_unsorted_table_are_refused() {
+        let mut builder = HashIndexBuilder::new();
+        builder.insert("a.bin");
+        builder.insert("b.bin");
+        let good = builder.build();
+
+        let mut wrong_version = good.clone();
+        wrong_version[4..8].copy_from_slice(&99u32.to_le_bytes());
+        assert!(matches!(
+            HashIndex::parse(&wrong_version),
+            Err(WadError::UnsupportedIndexVersion(99))
+        ));
+
+        let mut unsorted = good;
+        let first = HASH_INDEX_HEADER_SIZE;
+        let second = first + HASH_INDEX_ENTRY_SIZE;
+        let (a, b) = (
+            unsorted[first..first + 8].to_vec(),
+            unsorted[second..second + 8].to_vec(),
+        );
+        unsorted[first..first + 8].copy_from_slice(&b);
+        unsorted[second..second + 8].copy_from_slice(&a);
+        assert!(matches!(
+            HashIndex::parse(&unsorted),
+            Err(WadError::InvalidHashIndex(_))
+        ));
     }
 }

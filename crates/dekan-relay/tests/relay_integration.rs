@@ -17,6 +17,7 @@ fn make_state(champion: u32, skin: u32, puuid: &str) -> AppState {
         phase: GamePhase::ChampSelect,
         champion_id: Some(champion),
         local_puuid: Some(puuid.into()),
+        party_share: true,
         overlay_target: Some(OverlayTarget {
             champion_id: champion,
             skin_id: skin,

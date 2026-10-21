@@ -4,11 +4,42 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use dekan_platform::process::ProcessFinder;
 
+use std::sync::Mutex;
+
 use tracing::{debug, warn};
 
 use crate::error::LcuError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+static LAST_PROBLEM: Mutex<Option<String>> = Mutex::new(None);
+
+fn first_report(key: &str) -> bool {
+    match LAST_PROBLEM.lock() {
+        Ok(last) if last.as_deref() == Some(key) => false,
+        Ok(mut last) => {
+            *last = Some(key.to_owned());
+            true
+        }
+        Err(_) => true,
+    }
+}
+
+fn clear_report() {
+    if let Ok(mut last) = LAST_PROBLEM.lock() {
+        *last = None;
+    }
+}
+
+macro_rules! warn_once {
+    ($key:expr, $($arg:tt)+) => {
+        if first_report($key) {
+            warn!($($arg)+)
+        } else {
+            debug!($($arg)+)
+        }
+    };
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct Lockfile {
     pub process_name: String,
 
@@ -19,6 +50,18 @@ pub struct Lockfile {
     pub auth_token: String,
 
     pub protocol: String,
+}
+
+impl std::fmt::Debug for Lockfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lockfile")
+            .field("process_name", &self.process_name)
+            .field("pid", &self.pid)
+            .field("port", &self.port)
+            .field("auth_token", &"<redacted>")
+            .field("protocol", &self.protocol)
+            .finish()
+    }
 }
 
 impl Lockfile {
@@ -69,7 +112,8 @@ impl Lockfile {
             Ok(content) => content,
 
             Err(e) => {
-                warn!(
+                warn_once!(
+                    &format!("read:{}:{:?}", path.display(), e.kind()),
                     path = %path.display(),
                     error = %e,
                     kind = ?e.kind(),
@@ -94,7 +138,8 @@ impl Lockfile {
                 Ok(lockfile)
             }
             Err(e) => {
-                warn!(
+                warn_once!(
+                    &format!("malformed:{}:{e}", path.display()),
                     path = %path.display(),
                     error = %e,
                     bytes = content.len(),
@@ -112,7 +157,11 @@ impl Lockfile {
                 return Some(p.to_path_buf());
             }
 
-            warn!(path = %p.display(), "Configured lockfile path does not exist; falling back to discovery");
+            warn_once!(
+                &format!("configured:{}", p.display()),
+                path = %p.display(),
+                "Configured lockfile path does not exist; falling back to discovery"
+            );
         }
 
         if let Ok(env_val) = std::env::var("LCU_LOCKFILE") {
@@ -121,7 +170,11 @@ impl Lockfile {
                 debug!(path = %env_path.display(), source = "LCU_LOCKFILE", "Lockfile located");
                 return Some(env_path);
             }
-            warn!(path = %env_path.display(), "LCU_LOCKFILE is set but points nowhere");
+            warn_once!(
+                &format!("env:{}", env_path.display()),
+                path = %env_path.display(),
+                "LCU_LOCKFILE is set but points nowhere"
+            );
         }
 
         for proc_name in &dekan_platform::game_version::CLIENT_EXES {
@@ -146,7 +199,8 @@ impl Lockfile {
                         }
                     }
 
-                    warn!(
+                    warn_once!(
+                        &format!("beside:{}", exe_path.display()),
                         process = proc_name,
                         exe = %exe_path.display(),
                         tried = candidates.len(),
@@ -155,7 +209,12 @@ impl Lockfile {
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    warn!(process = proc_name, error = %e, "Could not inspect processes while looking for the client");
+                    warn_once!(
+                        &format!("inspect:{proc_name}:{e}"),
+                        process = proc_name,
+                        error = %e,
+                        "Could not inspect processes while looking for the client"
+                    );
                 }
             }
         }
@@ -187,7 +246,8 @@ impl Lockfile {
             Ok(None) => false,
 
             Err(e) => {
-                warn!(
+                warn_once!(
+                    &format!("alive:{}:{e}", self.pid),
                     pid = self.pid,
                     error = %e,
                     "Could not verify whether the client process is alive; assuming it is"
@@ -202,7 +262,8 @@ impl Lockfile {
         let lockfile = Self::from_file(&path)?;
 
         if !lockfile.is_client_alive() {
-            warn!(
+            warn_once!(
+                &format!("stale:{}:{}", path.display(), lockfile.pid),
                 path = %path.display(),
                 pid = lockfile.pid,
                 port = lockfile.port,
@@ -211,6 +272,7 @@ impl Lockfile {
             return Err(LcuError::LockfileNotFound);
         }
 
+        clear_report();
         Ok(lockfile)
     }
 

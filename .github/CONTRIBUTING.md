@@ -15,9 +15,10 @@ page explains what makes a contribution easy to accept.
 
 1. Windows 10/11 x64, [Rust](https://rustup.rs) (the toolchain in `rust-toolchain.toml` installs itself) and,
    for the installer, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
-2. `cargo build` and `cargo xtask check` must pass before you open a pull request.
+2. `cargo build` and `cargo xtask check` must pass before you open a pull request, and `cargo deny check` too
+   when dependencies changed.
 3. Read the README of the crate you are changing (`crates/<crate>/README.md`) and the relevant page in
-   [`docs/`](docs/README.md).
+   [`docs/`](../docs/README.md).
 
 ## Rules the code follows
 
@@ -32,6 +33,8 @@ page explains what makes a contribution easy to accept.
   record. The only comments allowed are one-line tool directives: `// ignore-ok: <why>`, `# zizmor: ignore[...]`
   and the version after a pinned action SHA. `cargo xtask check` enforces this, and
   `cargo xtask comments --strip` removes the rest after proving the code is unchanged.
+- No code file over 400 lines and no folder with more than 5 code files, tests included. `cargo xtask check`
+  enforces both.
 - No hardcoded drive letters, folders, servers or languages.
 - Log state changes, never inside a loop.
 - A new dependency needs a short written justification in the pull request.
@@ -43,14 +46,16 @@ page explains what makes a contribution easy to accept.
 - **Anything that changes what happens in game** (injection, game modes, party mode) must include evidence
   from a real match: the Dekan log, and what you saw. Passing tests is not enough for these changes.
 - CI must be green. After a maintainer approves, the pull request merges automatically once every required
-  check passes. Changes to workflows, the installer, trusted hashes, injector code or the party cipher are
+  check passes. Changes to workflows, the installer, `xtask`, the toolchain and dependency policy, the lockfile, the
+  injection trigger, the injector code and its trust check, the party cipher or the relay's deploy config are
   merged by hand.
 
 ## Releases
 
-Maintainers bump the version in the root `Cargo.toml`. The merge publishes a pre-release, and it becomes the
-latest release only after it has been tested in a real match. See [docs/build-and-ci.md](docs/build-and-ci.md).
+Nobody bumps the version by hand. The merge publishes a pre-release whose version is the last release plus one
+minor (the next major for a pull request labelled `breaking`), and it becomes the latest release only after it has
+been tested in a real match. See [docs/build-and-ci.md](../docs/build-and-ci.md).
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions are licensed under the [MIT License](../LICENSE).

@@ -15,7 +15,7 @@ pub(crate) const FIELD_POINTER: u8 = 0x82;
 pub(crate) const FIELD_EMBED: u8 = 0x83;
 pub(crate) const FIELD_LINK: u8 = 0x84;
 pub(crate) const FIELD_FLAG: u8 = 0x87;
-pub(crate) const STENCIL_BASE: u8 = 40;
+pub(crate) const FORM_STENCILS: [u8; 10] = [42, 43, 44, 45, 46, 47, 48, 54, 55, 57];
 pub(crate) const STENCIL_WRITE: u8 = 1;
 pub(crate) const STENCIL_EQUAL: u8 = 2;
 pub(crate) const EMITTER_LISTS: [&str; 2] = [
@@ -26,16 +26,21 @@ pub(crate) const WHITE: &str = "assets/shared/materials/white.tex";
 pub(crate) const GROUND_BONE: &str = "buffbone_glb_ground_loc";
 pub(crate) const MAX_DEPTH: usize = 16;
 
+pub(crate) fn form_stencil(form: usize) -> u8 {
+    FORM_STENCILS[form.min(FORM_STENCILS.len() - 1)]
+}
+
 pub(crate) fn raw(kind: u8, bytes: Vec<u8>) -> Value {
     Value::Raw { kind, bytes }
 }
 
 pub(crate) fn text(value: &str) -> Value {
-    let mut bytes = u16::try_from(value.len())
+    let body = &value.as_bytes()[..value.len().min(usize::from(u16::MAX))];
+    let mut bytes = u16::try_from(body.len())
         .unwrap_or(u16::MAX)
         .to_le_bytes()
         .to_vec();
-    bytes.extend_from_slice(value.as_bytes());
+    bytes.extend_from_slice(body);
     raw(FIELD_STRING, bytes)
 }
 
@@ -111,13 +116,7 @@ fn marker_system(form: usize, on_load: bool) -> Vec<Field> {
         ),
         named("miscRenderFlags", raw(FIELD_U8, vec![1])),
         named("stencilMode", raw(FIELD_U8, vec![STENCIL_WRITE])),
-        named(
-            "stencilRef",
-            raw(
-                FIELD_U8,
-                vec![STENCIL_BASE + u8::try_from(form).unwrap_or(0)],
-            ),
-        ),
+        named("stencilRef", raw(FIELD_U8, vec![form_stencil(form)])),
         named("isGroundLayer", raw(FIELD_FLAG, vec![1])),
         named("isUniformScale", raw(FIELD_FLAG, vec![1])),
         named(

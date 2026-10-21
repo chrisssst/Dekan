@@ -108,6 +108,18 @@ pub fn apply_session_to_state(state_tx: &StateSender, session: &ChampSelectSessi
             champion_id: p.champion_id,
         })
         .collect();
+    if team.len() < session.my_team.len() {
+        debug!(
+            roster = session.my_team.len(),
+            usable = team.len(),
+            without_id = session
+                .my_team
+                .iter()
+                .filter(|p| p.puuid.is_empty())
+                .count(),
+            "Champ select members left out of the party roster"
+        );
+    }
     set_team(state_tx, local_puuid, team);
 
     match session.local_selection() {

@@ -7,12 +7,18 @@ use dekan_platform::panel::{PanelCheck, PanelSnapshot};
 
 use crate::ltk_release::{InstalledDll, LtkStatus};
 
+mod export;
+mod redact;
+
+pub use export::export_diagnostics;
+
 #[derive(Debug, Clone)]
 pub struct Facts {
     pub status: String,
     pub party_line: String,
     pub in_room: bool,
     pub auto_accept: bool,
+    pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
     pub autostart: bool,
@@ -143,6 +149,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         party_line: facts.party_line.clone(),
         in_room: facts.in_room,
         auto_accept: facts.auto_accept,
+        injection: facts.injection,
         random_skin: facts.random_skin,
         light_loading: facts.light_loading,
         autostart: facts.autostart,
@@ -203,103 +210,6 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         .chain(custom_mods)
         .collect(),
     }
-}
-
-const DIAGNOSTIC_LOG_DAYS: u64 = 3;
-const DIAGNOSTIC_MAX_BYTES: u64 = 256 * 1024 * 1024;
-
-pub fn export_diagnostics(
-    logs_dir: &std::path::Path,
-    now: std::time::SystemTime,
-    screenshots: &[PathBuf],
-) -> Result<PathBuf, String> {
-    use std::io::Write;
-
-    let cutoff = now
-        .checked_sub(std::time::Duration::from_secs(
-            DIAGNOSTIC_LOG_DAYS * 24 * 60 * 60,
-        ))
-        .unwrap_or(std::time::UNIX_EPOCH);
-    let mut logs: Vec<PathBuf> = std::fs::read_dir(logs_dir)
-        .map_err(|e| format!("logs folder unreadable: {e}"))?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("dekan.log"))
-                && std::fs::metadata(path)
-                    .and_then(|m| m.modified())
-                    .is_ok_and(|t| t >= cutoff)
-        })
-        .collect();
-    logs.sort();
-    if logs.is_empty() {
-        return Err("no Dekan log from the last days".into());
-    }
-    let mut files: Vec<(String, PathBuf)> = logs
-        .iter()
-        .filter_map(|p| Some((p.file_name()?.to_str()?.to_owned(), p.clone())))
-        .collect();
-    if let Some(data_dir) = logs_dir.parent() {
-        let overlay = data_dir.join("overlay_manifest.json");
-        if overlay.is_file() {
-            files.push(("manifests/overlay_manifest.json".into(), overlay));
-        }
-        if let Ok(mods) = std::fs::read_dir(data_dir.join("mods")) {
-            let mut generated: Vec<(String, PathBuf)> = mods
-                .flatten()
-                .filter_map(|m| {
-                    let manifest = m.path().join("META").join("manifest.json");
-                    let name = m.file_name().to_str()?.to_owned();
-                    manifest
-                        .is_file()
-                        .then(|| (format!("manifests/{name}.json"), manifest))
-                })
-                .collect();
-            generated.sort();
-            files.extend(generated);
-        }
-    }
-    files.extend(screenshots.iter().filter_map(|shot| {
-        Some((
-            format!("screenshots/{}", shot.file_name()?.to_str()?),
-            shot.clone(),
-        ))
-    }));
-    let stamp = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let target = logs_dir.join(format!("dekan-diagnostics-{stamp}.zip"));
-    let partial = logs_dir.join(format!("dekan-diagnostics-{stamp}.zip.partial"));
-    let written = (|| -> Result<(), String> {
-        let file = std::fs::File::create(&partial).map_err(|e| e.to_string())?;
-        let mut zip = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        let mut total = 0u64;
-        for (name, path) in &files {
-            let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-            total += bytes.len() as u64;
-            if total > DIAGNOSTIC_MAX_BYTES {
-                return Err("logs larger than the diagnostic limit".into());
-            }
-            zip.start_file(name.as_str(), options)
-                .map_err(|e| e.to_string())?;
-            zip.write_all(&bytes).map_err(|e| e.to_string())?;
-        }
-        zip.finish().map_err(|e| e.to_string())?;
-        Ok(())
-    })();
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&partial); // ignore-ok: the export error is what gets reported
-        return Err(e);
-    }
-    std::fs::rename(&partial, &target).map_err(|e| {
-        let _ = std::fs::remove_file(&partial); // ignore-ok: the rename error is what gets reported
-        e.to_string()
-    })?;
-    Ok(target)
 }
 
 #[must_use]

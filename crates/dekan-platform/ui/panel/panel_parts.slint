@@ -1,40 +1,66 @@
-import { Theme, GoldButton, Switch, Caps } from "../theme.slint";
+import { Theme, GoldButton, Switch, Surface } from "../theme.slint";
 import { PanelCheckRow } from "panel_types.slint";
 
-export component Section inherits Rectangle {
+export component Section inherits Surface {
     in property <string> heading;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: Theme.surface-line;
-    background: Theme.surface;
     VerticalLayout {
-        padding-top: 12px;
-        padding-bottom: 12px;
-        padding-left: 14px;
-        padding-right: 14px;
-        spacing: 8px;
-        Caps {
-            text: root.heading.to-uppercase();
-            font-size: Theme.text-sm;
-            letter-spacing: 1.3px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 10px;
+        if root.heading != "": Text {
+            text: root.heading;
+            color: Theme.gold-bright;
+            font-size: Theme.text-base;
+            font-weight: 600;
         }
         @children
     }
 }
 
+export component PanelTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    min-width: label.preferred-width + 16px;
+    horizontal-stretch: 1;
+    height: 32px;
+    label := Text {
+        text: root.text;
+        color: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
+        font-size: Theme.text-base;
+        font-weight: root.active ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        animate color { duration: 160ms; }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+}
+
 export component CheckRow inherits Rectangle {
     in property <PanelCheckRow> check;
     HorizontalLayout {
-        spacing: 8px;
-        Text {
-            width: 14px;
-            text: root.check.ok ? "✓" : "!";
-            color: root.check.ok ? Theme.cyan : #e05a4f;
-            font-size: Theme.text-base;
-            font-weight: 700;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: start;
+            padding-top: 4px;
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: root.check.ok ? Theme.cyan : Theme.danger;
+            }
         }
         VerticalLayout {
             alignment: start;
+            spacing: 1px;
             Text {
                 text: root.check.label;
                 color: Theme.text;
@@ -43,7 +69,7 @@ export component CheckRow inherits Rectangle {
             }
             Text {
                 text: root.check.detail;
-                color: Theme.muted;
+                color: root.check.ok ? Theme.muted : Theme.danger-text;
                 font-size: Theme.text-sm;
                 wrap: word-wrap;
             }
@@ -57,22 +83,26 @@ export component Toggle inherits Rectangle {
     in property <bool> checked;
     in property <bool> divider: true;
     callback toggled();
+    border-radius: 8px;
+    background: touch.has-hover ? #ffffff07 : #ffffff00;
+    animate background { duration: 120ms; }
     VerticalLayout {
         if root.divider: Rectangle {
             height: 1px;
             background: Theme.surface-line;
         }
         HorizontalLayout {
-            padding-top: 7px;
-            padding-bottom: 7px;
-            spacing: 12px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            spacing: 14px;
             VerticalLayout {
                 alignment: start;
-                spacing: 2px;
+                spacing: 3px;
                 Text {
                     text: root.label;
                     color: Theme.text;
                     font-size: Theme.text-base;
+                    font-weight: 600;
                     wrap: word-wrap;
                 }
                 if root.hint != "": Text {
@@ -84,10 +114,69 @@ export component Toggle inherits Rectangle {
             }
             VerticalLayout {
                 alignment: start;
-                padding-top: 1px;
                 Switch {
                     checked: root.checked;
                 }
+            }
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => { root.toggled(); }
+}
+
+export component PowerCard inherits Rectangle {
+    in property <string> label;
+    in property <string> hint;
+    in property <bool> checked;
+    callback toggled();
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: root.checked ? Theme.gold-dim : Theme.surface-line;
+    background: root.checked ? Theme.card-fill-selected : Theme.card-fill;
+    animate border-color { duration: 200ms; }
+    Rectangle {
+        x: 0;
+        y: 14px;
+        width: 3px;
+        height: parent.height - 28px;
+        border-radius: 1.5px;
+        background: root.checked ? Theme.gold : Theme.control-line;
+        animate background { duration: 200ms; }
+    }
+    HorizontalLayout {
+        padding: 18px;
+        padding-left: 20px;
+        spacing: 16px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 5px;
+            Text {
+                text: root.label;
+                color: Theme.gold-bright;
+                font-family: Theme.serif;
+                font-size: 17px;
+                font-weight: 700;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.hint;
+                color: Theme.muted;
+                font-size: Theme.text-sm;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Switch {
+                large: true;
+                checked: root.checked;
             }
         }
     }
@@ -105,26 +194,39 @@ export component Toggle inherits Rectangle {
 export component Notice inherits Rectangle {
     in property <string> line;
     in property <string> action;
+    in property <bool> warning;
     callback activated();
-    border-radius: 8px;
+    border-radius: 10px;
     border-width: 1px;
-    border-color: Theme.gold-dim;
-    background: Theme.card-fill;
+    border-color: root.warning ? Theme.danger : Theme.gold-dim;
+    background: root.warning ? Theme.danger.with-alpha(0.15) : Theme.card-fill;
+    Rectangle {
+        x: 0;
+        width: 3px;
+        border-radius: 1.5px;
+        background: root.warning ? Theme.danger : Theme.gold;
+    }
     VerticalLayout {
         padding-top: 12px;
         padding-bottom: 12px;
-        padding-left: 14px;
+        padding-left: 16px;
         padding-right: 14px;
-        spacing: 8px;
+        spacing: 10px;
         Text {
             text: root.line;
             color: Theme.gold-bright;
             font-size: Theme.text-base;
             wrap: word-wrap;
         }
-        if root.action != "": GoldButton {
-            text: root.action;
-            clicked => { root.activated(); }
+        if root.action != "": HorizontalLayout {
+            alignment: start;
+            GoldButton {
+                text: root.action;
+                primary: !root.warning;
+                hug: true;
+                horizontal-stretch: 0;
+                clicked => { root.activated(); }
+            }
         }
     }
 }

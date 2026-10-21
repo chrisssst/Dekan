@@ -181,6 +181,12 @@ impl InjectionTrigger {
             }
             Err(e) => {
                 error!(error = %e, "Rift Classic generation task failed");
+                set_injection_status(
+                    &self.state_tx,
+                    InjectionStatus::Failed {
+                        error: format!("Rift Classic: generation task failed: {e}"),
+                    },
+                );
                 None
             }
         }
@@ -347,6 +353,14 @@ impl InjectionTrigger {
             }
             Err(e) => {
                 error!(champ_id, error = %e, "Dynamic skin generation task failed");
+                if report_failure {
+                    set_injection_status(
+                        &self.state_tx,
+                        InjectionStatus::Failed {
+                            error: format!("Dynamic skin generation task failed: {e}"),
+                        },
+                    );
+                }
                 None
             }
         }

@@ -11,7 +11,10 @@ Files and responsibilities: `README.md`. Interface decision: ADR-035.
   the client, because stealing focus breaks champion select.
 - Every control has an accessible label; the headless UI tests find controls by it
   (`overlay_window/tests.rs`), so a control without one is untestable.
-- The look matches the previous HTML interface; the Slint attribution is the README badge, not inside the app.
+- One visual language across every window: navy surfaces with a top highlight (`Surface`), a gold radial `Halo`
+  behind the emblem, serif titles, segmented tabs, sentence case, no emoji or font glyphs as icons (vector `Path`).
+  Only what the software renderer draws: no transforms, drop shadows or rounded clips. The Slint attribution is the
+  README badge, not inside the app.
 
 ## Discovery and text
 

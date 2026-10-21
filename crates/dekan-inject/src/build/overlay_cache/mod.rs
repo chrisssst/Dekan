@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use dekan_wad::wad::WAD_HEADER_SIZE;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use xxhash_rust::xxh3::xxh3_64;
 
 use crate::error::InjectError;
@@ -66,27 +66,21 @@ fn compute_header_checksum(path: &Path) -> Option<(u64, u64)> {
     Some((size, checksum))
 }
 
-fn scan_mod_files(mod_dir: &Path) -> Vec<ModFileRecord> {
+fn scan_mod_files(mod_dir: &Path) -> std::io::Result<Vec<ModFileRecord>> {
     let mut records = Vec::new();
-    fn walk(root: &Path, current: &Path, records: &mut Vec<ModFileRecord>) {
-        let Ok(entries) = std::fs::read_dir(current) else {
-            return;
-        };
-        for entry in entries.flatten() {
+    fn walk(root: &Path, current: &Path, records: &mut Vec<ModFileRecord>) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(current)? {
+            let entry = entry?;
             let path = entry.path();
-            let Ok(ft) = entry.file_type() else {
-                continue;
-            };
+            let ft = entry.file_type()?;
             if ft.is_dir() {
-                walk(root, &path, records);
+                walk(root, &path, records)?;
             } else if ft.is_file() {
                 let Ok(rel) = path.strip_prefix(root) else {
                     continue;
                 };
                 let rel_str = rel.to_string_lossy().replace('\\', "/");
-                let Ok(meta) = entry.metadata() else {
-                    continue;
-                };
+                let meta = entry.metadata()?;
                 let size = meta.len();
                 let mtime_secs = meta
                     .modified()
@@ -101,25 +95,22 @@ fn scan_mod_files(mod_dir: &Path) -> Vec<ModFileRecord> {
                 });
             }
         }
+        Ok(())
     }
-    walk(mod_dir, mod_dir, &mut records);
+    walk(mod_dir, mod_dir, &mut records)?;
     records.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
-    records
+    Ok(records)
 }
 
-fn scan_wads(root: &Path) -> Vec<PathBuf> {
+fn scan_wads(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut wads = Vec::new();
-    fn walk(root: &Path, current: &Path, wads: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(current) else {
-            return;
-        };
-        for entry in entries.flatten() {
+    fn walk(root: &Path, current: &Path, wads: &mut Vec<PathBuf>) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(current)? {
+            let entry = entry?;
             let path = entry.path();
-            let Ok(ft) = entry.file_type() else {
-                continue;
-            };
+            let ft = entry.file_type()?;
             if ft.is_dir() {
-                walk(root, &path, wads);
+                walk(root, &path, wads)?;
             } else if ft.is_file() {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if name.to_ascii_lowercase().ends_with(".wad.client") {
@@ -129,10 +120,11 @@ fn scan_wads(root: &Path) -> Vec<PathBuf> {
                 }
             }
         }
+        Ok(())
     }
-    walk(root, root, &mut wads);
+    walk(root, root, &mut wads)?;
     wads.sort();
-    wads
+    Ok(wads)
 }
 
 pub struct OverlayCache;
@@ -146,8 +138,21 @@ impl OverlayCache {
         mods: &[String],
     ) -> Option<(usize, u64)> {
         let fingerprint_path = overlay_dir.join(FINGERPRINT_FILE);
-        let bytes = std::fs::read(&fingerprint_path).ok()?;
-        let fp: OverlayFingerprint = serde_json::from_slice(&bytes).ok()?;
+        let bytes = match std::fs::read(&fingerprint_path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(e) => {
+                debug!(file = %fingerprint_path.display(), error = %e, "Overlay cache: fingerprint unreadable");
+                return None;
+            }
+        };
+        let fp: OverlayFingerprint = match serde_json::from_slice(&bytes) {
+            Ok(fp) => fp,
+            Err(e) => {
+                debug!(file = %fingerprint_path.display(), error = %e, "Overlay cache: fingerprint is not valid JSON");
+                return None;
+            }
+        };
 
         if fp.version != CURRENT_SCHEMA_VERSION {
             debug!("Overlay cache: schema version mismatch");
@@ -176,7 +181,13 @@ impl OverlayCache {
                 debug!(mod_name = %name, "Overlay cache: mod not in fingerprint");
                 return None;
             };
-            let current_files = scan_mod_files(&mods_dir.join(name));
+            let current_files = match scan_mod_files(&mods_dir.join(name)) {
+                Ok(files) => files,
+                Err(e) => {
+                    debug!(mod_name = %name, error = %e, "Overlay cache: mod files could not be listed");
+                    return None;
+                }
+            };
             if expected_files != &current_files {
                 debug!(mod_name = %name, "Overlay cache: mod files modified or missing");
                 return None;
@@ -217,7 +228,13 @@ impl OverlayCache {
             observed_bytes += size;
         }
 
-        let disk_wads = scan_wads(overlay_dir);
+        let disk_wads = match scan_wads(overlay_dir) {
+            Ok(wads) => wads,
+            Err(e) => {
+                debug!(error = %e, "Overlay cache: overlay WADs could not be listed");
+                return None;
+            }
+        };
         if disk_wads.len() != fp.overlay_wads.len() {
             debug!(
                 disk = disk_wads.len(),
@@ -238,11 +255,22 @@ impl OverlayCache {
     ) -> Result<(), InjectError> {
         let mut mod_files = BTreeMap::new();
         for name in mods {
-            let files = scan_mod_files(&mods_dir.join(name));
+            let mod_dir = mods_dir.join(name);
+            let files = scan_mod_files(&mod_dir).map_err(|e| {
+                InjectError::Overlay(format!(
+                    "could not list mod files in '{}': {e}",
+                    mod_dir.display()
+                ))
+            })?;
             mod_files.insert(name.clone(), files);
         }
 
-        let overlay_wad_paths = scan_wads(overlay_dir);
+        let overlay_wad_paths = scan_wads(overlay_dir).map_err(|e| {
+            InjectError::Overlay(format!(
+                "could not list overlay WADs in '{}': {e}",
+                overlay_dir.display()
+            ))
+        })?;
         let mut overlay_wads = Vec::with_capacity(overlay_wad_paths.len());
         let mut game_wads = Vec::new();
         let mut total_bytes = 0u64;
@@ -264,14 +292,19 @@ impl OverlayCache {
             });
 
             let game_path = game_dir.join(&rel);
-            if game_path.exists() {
-                if let Some((g_size, g_checksum)) = compute_header_checksum(&game_path) {
-                    game_wads.push(GameWadRecord {
-                        rel_path: rel_str,
-                        size: g_size,
-                        header_checksum: g_checksum,
-                    });
+            match compute_header_checksum(&game_path) {
+                Some((g_size, g_checksum)) => game_wads.push(GameWadRecord {
+                    rel_path: rel_str,
+                    size: g_size,
+                    header_checksum: g_checksum,
+                }),
+                None if game_path.exists() => {
+                    return Err(InjectError::Overlay(format!(
+                        "game WAD unreadable while recording the overlay cache: {}",
+                        game_path.display()
+                    )));
                 }
+                None => {}
             }
         }
 
@@ -291,12 +324,14 @@ impl OverlayCache {
             .map_err(|e| InjectError::Overlay(format!("failed to serialize fingerprint: {e}")))?;
 
         let temp_path = overlay_dir.join(".overlay_fingerprint.tmp");
-        std::fs::write(&temp_path, encoded).map_err(InjectError::Io)?;
+        std::fs::write(&temp_path, encoded).map_err(|e| {
+            InjectError::Overlay(format!("could not write '{}': {e}", temp_path.display()))
+        })?;
 
         let final_path = overlay_dir.join(FINGERPRINT_FILE);
         std::fs::rename(&temp_path, &final_path).map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path); // ignore-ok: cleanup on rename error
-            InjectError::Io(e)
+            let _ = std::fs::remove_file(&temp_path); // ignore-ok: the rename error is what gets reported
+            InjectError::Overlay(format!("could not replace '{}': {e}", final_path.display()))
         })?;
 
         info!(
@@ -311,7 +346,15 @@ impl OverlayCache {
 
     pub fn invalidate(overlay_dir: &Path) {
         let path = overlay_dir.join(FINGERPRINT_FILE);
-        let _ = std::fs::remove_file(path); // ignore-ok: absent file is already invalidated
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => warn!(
+                file = %path.display(),
+                error = %e,
+                "Overlay cache fingerprint could not be removed; a stale overlay may be reused"
+            ),
+        }
     }
 }
 

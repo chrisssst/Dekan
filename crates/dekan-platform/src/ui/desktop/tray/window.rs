@@ -40,8 +40,11 @@ pub(super) fn run_tray_message_loop(
         ..Default::default()
     };
 
-    unsafe {
-        RegisterClassW(&wc);
+    if unsafe { RegisterClassW(&wc) } == 0 {
+        warn!(
+            error = %windows::core::Error::from_thread(),
+            "The tray window class could not be registered"
+        );
     }
 
     let hwnd = match unsafe {
@@ -61,7 +64,10 @@ pub(super) fn run_tray_message_loop(
         )
     } {
         Ok(h) => h,
-        Err(_) => return,
+        Err(e) => {
+            error!(error = %e, "The tray window could not be created; Dekan will run without a tray icon");
+            return;
+        }
     };
 
     let _ = ready_tx.send(hwnd.0 as isize); // ignore-ok: nobody is waiting any more; the thread tears itself down below
@@ -71,9 +77,15 @@ pub(super) fn run_tray_message_loop(
     };
     #[allow(clippy::manual_dangling_ptr)]
     let icon = unsafe {
-        LoadIconW(hinstance, PCWSTR(1 as *const u16))
-            .or_else(|_| LoadIconW(None, IDI_APPLICATION))
-            .unwrap_or(HICON(std::ptr::null_mut()))
+        LoadIconW(Some(hinstance.into()), PCWSTR(1 as *const u16))
+            .or_else(|e| {
+                warn!(error = %e, "The Dekan tray icon resource could not be loaded; using the default icon");
+                LoadIconW(None, IDI_APPLICATION)
+            })
+            .unwrap_or_else(|e| {
+                warn!(error = %e, "No tray icon could be loaded; the tray entry will have a blank icon");
+                HICON(std::ptr::null_mut())
+            })
     };
 
     let mut nid = NOTIFYICONDATAW {
@@ -113,7 +125,18 @@ pub(super) fn run_tray_message_loop(
 
     let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
     unsafe {
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+        loop {
+            let got = GetMessageW(&mut msg, None, 0, 0);
+            if got.0 == 0 {
+                break;
+            }
+            if got.0 < 0 {
+                error!(
+                    error = %windows::core::Error::from_thread(),
+                    "The tray message loop failed; the tray icon stops responding"
+                );
+                break;
+            }
             let _ = TranslateMessage(&msg); // ignore-ok: returns whether a key event was translated; this pump forwards either way
             DispatchMessageW(&msg);
         }
@@ -180,28 +203,30 @@ unsafe extern "system" fn tray_wnd_proc(
             LRESULT(0)
         }
         WM_UPDATE_STATUS => {
-            if let Ok(current) = state.status_shared.lock() {
-                state.status_text = current.clone();
-                let tooltip = format!(
-                    "Dekan v{}: {}",
-                    crate::version::display_version(),
-                    state.status_text
-                );
-                fill_wide(&mut state.nid.szTip, &tooltip);
-                state.nid.uFlags = NIF_TIP;
-                unsafe {
-                    let _ = Shell_NotifyIconW(NIM_MODIFY, &state.nid); // ignore-ok: a refused status update leaves the previous tooltip text in place
-                }
-                state.nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+            state.status_text = state
+                .status_shared
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let tooltip = format!(
+                "Dekan v{}: {}",
+                crate::version::display_version(),
+                state.status_text
+            );
+            fill_wide(&mut state.nid.szTip, &tooltip);
+            state.nid.uFlags = NIF_TIP;
+            unsafe {
+                let _ = Shell_NotifyIconW(NIM_MODIFY, &state.nid); // ignore-ok: a refused status update leaves the previous tooltip text in place
             }
+            state.nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
             LRESULT(0)
         }
         WM_TRAY_BALLOON => {
             let pending = state
                 .balloon_shared
                 .lock()
-                .ok()
-                .and_then(|mut slot| slot.take());
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
             if let Some(balloon) = pending {
                 fill_wide(&mut state.nid.szInfoTitle, &balloon.title);
                 fill_wide(&mut state.nid.szInfo, &balloon.body);
@@ -246,7 +271,10 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
     unsafe {
         let menu = match CreatePopupMenu() {
             Ok(m) => m,
-            Err(_) => return,
+            Err(e) => {
+                warn!(error = %e, "The tray menu could not be created");
+                return;
+            }
         };
 
         let status_item = format!(
@@ -278,7 +306,11 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
         let mut pt = POINT::default();
         let _ = GetCursorPos(&mut pt); // ignore-ok: menu falls back to position 0,0 instead of not opening
 
-        let _ = SetForegroundWindow(hwnd); // ignore-ok: focus is advisory; Windows refuses it by policy in several states
+        if !SetForegroundWindow(hwnd).as_bool() {
+            debug!(
+                "Windows refused the foreground for the tray menu; it may close on the first click"
+            );
+        }
 
         // ignore-ok: returns whether an item was chosen; the WM_COMMAND path handles the choice
         let _ = TrackPopupMenu(
@@ -286,7 +318,7 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
             pt.x,
             pt.y,
-            0,
+            None,
             hwnd,
             None,
         );

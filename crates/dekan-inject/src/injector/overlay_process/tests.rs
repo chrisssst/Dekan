@@ -18,6 +18,7 @@ fn idle(signals: mpsc::UnboundedReceiver<PatcherSignal>) -> OverlayProcess {
         signals,
         _stdout_reader: None,
         _stderr_reader: None,
+        hooked: false,
     }
 }
 
@@ -95,4 +96,29 @@ async fn silence_is_unconfirmed_and_a_closed_host_is_a_process_error() {
         .wait_for(PatcherSignal::Hooked, Duration::from_secs(5))
         .await;
     assert!(matches!(closed, Err(InjectError::Process(_))));
+}
+
+#[tokio::test]
+async fn a_hook_before_the_armed_line_counts_as_armed_and_stays_known() {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let mut process = idle(rx);
+    tx.send(PatcherSignal::Hooked).expect("send");
+    process
+        .wait_for(PatcherSignal::Armed, Duration::from_secs(5))
+        .await
+        .expect("a hooked patcher is armed");
+    process
+        .wait_for(PatcherSignal::Hooked, Duration::from_millis(50))
+        .await
+        .expect("the hook seen while arming is not lost");
+}
+
+#[tokio::test]
+async fn output_that_is_not_utf8_does_not_stop_the_reader() {
+    let mut output =
+        b"dll 3.10 1 2 INFO ltk_patcher_dll: redirected wad: Usu\xe1rios.wad.client\n".to_vec();
+    output.extend_from_slice(b"status 3.40 injected dll attached\n");
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    read_host_stdout(output.as_slice(), tx).await;
+    assert_eq!(rx.try_recv().ok(), Some(PatcherSignal::Hooked));
 }

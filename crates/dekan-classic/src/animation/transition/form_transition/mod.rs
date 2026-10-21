@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use dekan_wad::prop::parse_prop_file;
 use dekan_wad::prop::tree::{self, Value};
+use tracing::debug;
 
 use crate::error::ClassicError;
 use crate::gear_toggle::{bin_error, h};
@@ -71,7 +72,7 @@ pub fn transition_clips(
     tokens: &[Option<String>],
 ) -> Result<Vec<Option<u32>>, ClassicError> {
     let clips = situation_sounds(graph_bin, graph_key, situations)?;
-    Ok(tokens
+    let found: Vec<Option<u32>> = tokens
         .iter()
         .map(|token| {
             let token = token.as_deref()?;
@@ -83,7 +84,16 @@ pub fn transition_clips(
             let (first, _) = matches.next()?;
             matches.next().is_none().then_some(*first)
         })
-        .collect())
+        .collect();
+    let named = tokens.iter().flatten().count();
+    let matched = found.iter().flatten().count();
+    if matched < named {
+        debug!(
+            named,
+            matched, "Forms whose token matches no single transition clip change without one"
+        );
+    }
+    Ok(found)
 }
 
 #[cfg(test)]

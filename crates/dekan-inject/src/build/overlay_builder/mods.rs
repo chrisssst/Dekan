@@ -12,10 +12,20 @@ pub(super) fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectEr
     };
 
     let mut mounts = BTreeMap::new();
-    let mut wads = Vec::new();
-    collect_mod_wads(&mod_dir.join("WAD"), name, &mut wads);
+    let (mut wads, mut ignored) = (Vec::new(), Vec::new());
+    let wad_dir = mod_dir.join("WAD");
+    collect_mod_wads(&wad_dir, &mut wads, &mut ignored)
+        .map_err(|e| bad("unreadable folder", &wad_dir, &e))?;
+    if let Some(first) = ignored.first() {
+        warn!(
+            mod_name = %name,
+            ignored = ignored.len(),
+            first = %first.display(),
+            "Files in the mod's WAD folder are not WADs; ignored"
+        );
+    }
     for path in wads {
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        let Some(file_name) = path.file_name().map(|n| n.to_string_lossy()) else {
             continue;
         };
         let entries = if path.is_file() {
@@ -23,7 +33,7 @@ pub(super) fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectEr
         } else {
             pack_folder(&path).map_err(|e| bad("unreadable folder", &path, &e))?
         };
-        mounts.insert(mount_name(file_name), ModMount { entries });
+        mounts.insert(mount_name(&file_name), ModMount { entries });
     }
 
     let raw = mod_dir.join("RAW");
@@ -38,11 +48,19 @@ pub(super) fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectEr
     })
 }
 
-pub(super) fn collect_mod_wads(dir: &Path, mod_name: &str, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+pub(super) fn collect_mod_wads(
+    dir: &Path,
+    out: &mut Vec<PathBuf>,
+    ignored: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
     };
-    let mut children: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    let mut children = entries
+        .map(|e| e.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<PathBuf>>>()?;
     children.sort();
     for path in children {
         let lower = path
@@ -53,17 +71,19 @@ pub(super) fn collect_mod_wads(dir: &Path, mod_name: &str, out: &mut Vec<PathBuf
         if lower.ends_with(".wad.client") || lower.ends_with(".wad") {
             out.push(path);
         } else if path.is_dir() {
-            collect_mod_wads(&path, mod_name, out);
+            collect_mod_wads(&path, out, ignored)?;
         } else {
-            warn!(mod_name, file = %path.display(), "Not a WAD; ignored");
+            ignored.push(path);
         }
     }
+    Ok(())
 }
 
 pub(super) fn retype_stale_bins(
     game: &GameIndexMap,
     index: &mut ModIndex,
 ) -> Result<(), InjectError> {
+    let (mut unchecked, mut first_error) = (0usize, None);
     for (mount, mod_mount) in &mut index.mounts {
         let bins: Vec<(u64, Vec<u8>)> = mod_mount
             .entries
@@ -95,7 +115,9 @@ pub(super) fn retype_stale_bins(
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    debug!(mod_name = %index.name, mount = %mount, path_hash = format!("{hash:016x}"), error = %e, "Mod bin not checked against the game's property types")
+                    debug!(mod_name = %index.name, mount = %mount, path_hash = format!("{hash:016x}"), error = %e, "Mod bin not checked against the game's property types");
+                    unchecked += 1;
+                    first_error.get_or_insert_with(|| format!("{mount} {hash:016x}: {e}"));
                 }
             }
         }
@@ -107,6 +129,14 @@ pub(super) fn retype_stale_bins(
                 "Mod properties written as text were converted to the file references the game now expects"
             );
         }
+    }
+    if unchecked > 0 {
+        warn!(
+            mod_name = %index.name,
+            unchecked,
+            first_error = first_error.as_deref().unwrap_or_default(),
+            "Mod bins could not be checked against the game's property types; they are merged as they are"
+        );
     }
     Ok(())
 }
@@ -166,7 +196,10 @@ pub(super) fn pack_folder(
     dir: &Path,
 ) -> Result<BTreeMap<u64, WriterEntry>, dekan_wad::error::WadError> {
     let mut files = Vec::new();
-    collect_files(dir, &mut files);
+    collect_files(dir, &mut files).map_err(|e| dekan_wad::error::WadError::FileIo {
+        path: dir.display().to_string(),
+        source: e,
+    })?;
     let mut entries = BTreeMap::new();
     for file in files {
         let relative = file
@@ -183,22 +216,22 @@ pub(super) fn pack_folder(
     Ok(entries)
 }
 
-pub(super) fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut children: Vec<_> = entries.flatten().collect();
+pub(super) fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let mut children = std::fs::read_dir(dir)?.collect::<std::io::Result<Vec<_>>>()?;
     children.sort_by_key(|e| e.path());
     for entry in children {
-        match entry.file_type() {
-            Ok(kind) if kind.is_dir() => collect_files(&entry.path(), out),
-            Ok(kind) if kind.is_file() => out.push(entry.path()),
-            _ => {}
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            collect_files(&entry.path(), out)?;
+        } else if kind.is_file() {
+            out.push(entry.path());
         }
     }
+    Ok(())
 }
 
-pub(super) fn resolve_inside(index: &mut ModIndex) {
+pub(super) fn resolve_inside(index: &mut ModIndex) -> usize {
+    let mut conflicts = 0usize;
     let names: Vec<String> = index.mounts.keys().cloned().collect();
     for a in &names {
         for b in &names {
@@ -209,18 +242,21 @@ pub(super) fn resolve_inside(index: &mut ModIndex) {
                 continue;
             };
             if let Some(target) = index.mounts.get_mut(a) {
-                overwrite_shared(&mut target.entries, &source, &index.name);
+                conflicts += overwrite_shared(&mut target.entries, &source, &index.name);
             }
         }
     }
+    conflicts
 }
 
-pub(super) fn resolve_against(older: &mut ModIndex, newer: &ModIndex) {
+pub(super) fn resolve_against(older: &mut ModIndex, newer: &ModIndex) -> usize {
+    let mut conflicts = 0usize;
     for mount in older.mounts.values_mut() {
         for other in newer.mounts.values() {
-            overwrite_shared(&mut mount.entries, &other.entries, &newer.name);
+            conflicts += overwrite_shared(&mut mount.entries, &other.entries, &newer.name);
         }
     }
+    conflicts
 }
 
 pub(super) fn decoded_mod_entry(entry: &WriterEntry) -> Option<Vec<u8>> {
@@ -246,8 +282,12 @@ pub(super) fn drop_entries_identical_to_game(
     let Some(base) = game.get(base_name) else {
         return entries.clone();
     };
-    let Ok(base_wad) = WadFile::open(&base.path) else {
-        return entries.clone();
+    let base_wad = match WadFile::open(&base.path) {
+        Ok(wad) => wad,
+        Err(e) => {
+            debug!(wad = %base.path.display(), error = %e, "Game WAD unreadable; mod entries are not compared against it");
+            return entries.clone();
+        }
     };
     entries
         .iter()

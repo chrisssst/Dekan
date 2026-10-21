@@ -106,7 +106,7 @@ fn test_a_pending_update_is_taken_once() {
         path: PathBuf::from("setup.exe"),
         sha256: "0".repeat(64),
     };
-    pending.clone().set(staged.clone());
+    pending.clone().set(staged.clone()).expect("set");
     assert_eq!(pending.take(), Some(staged));
     assert_eq!(pending.take(), None);
 }

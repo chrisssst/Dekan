@@ -12,7 +12,7 @@ fn test_a_half_extracted_mod_directory_is_rebuilt_not_trusted() {
     {
         let file = std::fs::File::create(&archive_path).expect("archive");
         let mut writer = zip::ZipWriter::new(file);
-        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        let options: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
         writer.start_file("META/info.json", options).expect("meta");
         std::io::Write::write_all(&mut writer, br#"{"Name":"fixture"}"#).expect("meta body");
         writer

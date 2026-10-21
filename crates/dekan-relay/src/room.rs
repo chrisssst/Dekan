@@ -63,12 +63,19 @@ impl Room {
 
     #[must_use]
     pub fn is_full(&self) -> bool {
-        self.members.len() >= MAX_MEMBERS
+        self.live_members() >= MAX_MEMBERS
+    }
+
+    fn live_members(&self) -> usize {
+        self.members
+            .values()
+            .filter(|m| !m.sender.is_closed())
+            .count()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.members.is_empty()
+        self.live_members() == 0
     }
 
     pub fn snapshot(&self) -> String {
@@ -85,10 +92,20 @@ impl Room {
         .unwrap_or_else(|_| r#"{"type":"members","members":[]}"#.into())
     }
 
-    pub fn broadcast(&self) {
+    pub fn broadcast(&mut self) {
         let snap = self.snapshot();
-        for session in self.members.values() {
-            let _ = session.sender.try_send(snap.clone()); // ignore-ok: a full queue skips this snapshot; the next one carries the whole room
+        let mut skipped = 0usize;
+        self.members
+            .retain(|_, session| match session.sender.try_send(snap.clone()) {
+                Ok(()) => true,
+                Err(TrySendError::Full(_)) => {
+                    skipped += 1;
+                    true
+                }
+                Err(TrySendError::Closed(_)) => false,
+            });
+        if skipped > 0 {
+            warn!(skipped, "Snapshot skipped for members with a full queue");
         }
     }
 
@@ -106,7 +123,19 @@ impl Room {
         id
     }
 
-    pub fn update_join(&mut self, session_id: usize, summoner_id: u64) {
+    pub fn update_join(&mut self, session_id: usize, summoner_id: u64) -> usize {
+        if !self.members.contains_key(&session_id) {
+            return 0;
+        }
+        let before = self.members.len();
+        self.members.retain(|other, session| {
+            *other == session_id
+                || session
+                    .info
+                    .as_ref()
+                    .is_none_or(|info| info.summoner_id != summoner_id)
+        });
+        let replaced = before - self.members.len();
         if let Some(session) = self.members.get_mut(&session_id) {
             let prev_skin = session.info.as_mut().and_then(|i| i.skin.take());
             session.info = Some(MemberInfo {
@@ -116,6 +145,7 @@ impl Room {
             });
             self.broadcast();
         }
+        replaced
     }
 
     pub fn update_skin(&mut self, session_id: usize, skin: Option<SealedBlob>) {

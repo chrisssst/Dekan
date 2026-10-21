@@ -172,9 +172,6 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
     };
 
     let fetched = fetch_assets(champion_id).await;
-    if fetched.is_none() {
-        debug!(champion_id, "No client metadata; catalog falls back to ids");
-    }
 
     let assets = fetched.as_ref().map(|(assets, _)| assets);
     let mut catalog = build_catalog(&library, assets);
@@ -189,30 +186,46 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
         if let Some(game_dir) = dekan_platform::paths::discover_game_dir() {
             if catalog.alias.is_none() {
                 let installed = game_dir.clone();
-                catalog.alias = tokio::task::spawn_blocking(move || {
+                catalog.alias = match tokio::task::spawn_blocking(move || {
                     dekan_classic::client_data::champion_alias(&installed, champion_id)
                 })
                 .await
-                .ok()
-                .flatten();
+                {
+                    Ok(alias) => alias,
+                    Err(e) => {
+                        warn!(champion_id, error = %e, "The champion alias lookup task failed");
+                        None
+                    }
+                };
             }
             if let Some(alias) = catalog.alias.clone().filter(|_| catalog.skins.is_empty()) {
-                if let Ok(champ) =
-                    dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
-                {
-                    let numbers = champ.skin_numbers(1000);
-                    for n in numbers {
-                        let skin_id = champion_id * 1000 + n;
-                        catalog.skins.push(CatalogSkin {
-                            id: skin_id,
-                            name: format!("{alias} #{n}"),
-                            name_unknown: true,
-                            chromas: Vec::new(),
-                            tile: None,
-                        });
+                match dekan_classic::generator::StandardChampion::open(&game_dir, &alias) {
+                    Ok(champ) => {
+                        let numbers = champ.skin_numbers(1000);
+                        for n in numbers {
+                            let skin_id = champion_id * 1000 + n;
+                            catalog.skins.push(CatalogSkin {
+                                id: skin_id,
+                                name: format!("{alias} #{n}"),
+                                name_unknown: true,
+                                chromas: Vec::new(),
+                                tile: None,
+                            });
+                        }
                     }
+                    Err(e) => warn!(
+                        champion_id,
+                        alias = %alias,
+                        error = %e,
+                        "Champion WAD could not be opened; no skins can be listed from the installed game"
+                    ),
                 }
             }
+        } else {
+            debug!(
+                champion_id,
+                "The game folder is not known; skins are not listed from the installed game"
+            );
         }
     }
 
@@ -228,7 +241,10 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
 }
 
 async fn lcu_client() -> Option<dekan_lcu::client::LcuClient> {
-    dekan_lcu::client::LcuClient::discover().await.ok()
+    dekan_lcu::client::LcuClient::discover()
+        .await
+        .inspect_err(|e| debug!(error = %e, "The League client could not be reached"))
+        .ok()
 }
 
 pub async fn lobby_champions(ids: &[u32]) -> Vec<dekan_core::overlay::LobbyChampion> {
@@ -240,7 +256,7 @@ pub async fn lobby_champions(ids: &[u32]) -> Vec<dekan_core::overlay::LobbyChamp
                 Ok(assets) if !assets.name.is_empty() => assets.name,
                 Ok(_) => format!("#{id}"),
                 Err(e) => {
-                    debug!(champion_id = id, error = %e, "Lobby champion name unavailable");
+                    warn!(champion_id = id, error = %e, "Lobby champion name unavailable");
                     format!("#{id}")
                 }
             },
@@ -252,12 +268,18 @@ pub async fn lobby_champions(ids: &[u32]) -> Vec<dekan_core::overlay::LobbyChamp
 }
 
 async fn fetch_assets(champion_id: u32) -> Option<(ChampionAssets, dekan_lcu::client::LcuClient)> {
-    let client = lcu_client().await?;
+    let client = match dekan_lcu::client::LcuClient::discover().await {
+        Ok(client) => client,
+        Err(e) => {
+            warn!(error = %e, champion_id, "The League client could not be reached; names and tiles fall back to ids");
+            return None;
+        }
+    };
 
     match client.get_champion_assets(champion_id).await {
         Ok(assets) => Some((assets, client)),
         Err(e) => {
-            debug!(error = %e, champion_id, "Champion assets unavailable");
+            warn!(error = %e, champion_id, "Champion assets unavailable; names and tiles fall back to ids");
             None
         }
     }
@@ -290,11 +312,13 @@ async fn resolve_locale(client: &dekan_lcu::client::LcuClient) -> Option<String>
         }
         Ok(_) => None,
         Err(e) => {
-            debug!(error = %e, "Client locale unavailable; overlay keeps its default language");
+            warn!(error = %e, "Client locale unavailable; overlay keeps its default language");
             None
         }
     }
 }
+
+type TileResult = Result<(usize, Arc<[u8]>), String>;
 
 async fn attach_tiles(
     catalog: &mut Catalog,
@@ -316,27 +340,40 @@ async fn attach_tiles(
                 .map(|path| (index, path))
         })
         .collect();
-    let tiles: Vec<(usize, Arc<[u8]>)> = futures_util::stream::iter(wanted)
+    let results: Vec<TileResult> = futures_util::stream::iter(wanted)
         .map(|(index, path)| {
             let client = client.clone();
             async move {
                 match client.get_asset_bytes(&path).await {
-                    Ok(bytes) if !bytes.is_empty() => Some((index, Arc::from(bytes))),
-                    Ok(_) => None,
-                    Err(e) => {
-                        debug!(path, error = %e, "Skin tile unavailable");
-                        None
-                    }
+                    Ok(bytes) if !bytes.is_empty() => Ok((index, Arc::from(bytes))),
+                    Ok(_) => Err(format!("{path} answered with no bytes")),
+                    Err(e) => Err(format!("{path}: {e}")),
                 }
             }
         })
         .buffer_unordered(PREVIEW_FETCHES)
-        .filter_map(std::future::ready)
         .collect()
         .await;
-    let fetched = tiles.len();
-    for (index, tile) in tiles {
-        catalog.skins[index].tile = Some(tile);
+    let mut fetched = 0usize;
+    let mut failed = 0usize;
+    let mut first_error: Option<String> = None;
+    for result in results {
+        match result {
+            Ok((index, tile)) => {
+                catalog.skins[index].tile = Some(tile);
+                fetched += 1;
+            }
+            Err(e) => {
+                failed += 1;
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+    if let Some(first_error) = first_error {
+        warn!(
+            failed,
+            fetched, first_error, "Some skin tiles could not be fetched from the client"
+        );
     }
     fetched
 }

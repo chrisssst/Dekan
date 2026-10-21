@@ -125,7 +125,7 @@ impl StandardChampion {
             crate::form_marker::add_parts(&skn, &names, &copies)
         };
         let Some(mesh) = mesh else {
-            debug!(
+            warn!(
                 alias = %self.alias,
                 mesh = %mesh_path,
                 copies = ?copies,
@@ -195,10 +195,28 @@ impl StandardChampion {
             .chain(merged.iter().flat_map(|m| m.extra_parts()))
             .cloned()
             .collect();
-        let skin0 = crate::form_marker::hide_at_start(&skin0, &hidden)?.unwrap_or(skin0);
-        let skin0 = crate::form_state::persist_forms(&skin0, &swaps, &markers)?.unwrap_or(skin0);
-        let skin0 = crate::form_gear::apply_gears(&skin0, &gear_bodies, &markers, &materials)?
-            .unwrap_or(skin0);
+        let skin0 = match crate::form_marker::hide_at_start(&skin0, &hidden)? {
+            Some(bytes) => bytes,
+            None => {
+                warn!(alias = %self.alias, parts = hidden.len(), "Form parts not hidden at start; the skin bin cannot take the list");
+                skin0
+            }
+        };
+        let skin0 = match crate::form_state::persist_forms(&skin0, &swaps, &markers)? {
+            Some(bytes) => bytes,
+            None => {
+                warn!(alias = %self.alias, forms = swaps.len(), "Form state not persisted; the skin bin has no skin object for it");
+                skin0
+            }
+        };
+        let skin0 = match crate::form_gear::apply_gears(&skin0, &gear_bodies, &markers, &materials)?
+        {
+            Some(bytes) => bytes,
+            None => {
+                debug!(alias = %self.alias, "No gear field of the skin bin needed a per-form change");
+                skin0
+            }
+        };
         let mut effect_bins = vec![source.to_vec()];
         for link in parsed
             .links
@@ -216,17 +234,28 @@ impl StandardChampion {
             (None, None) => None,
         };
         let (skin0, effects) = match &bone {
-            Some(bone) => crate::form_vfx::gate_form_effects(
-                &skin0,
-                &crate::form_vfx::FormEffects {
-                    bins: &effect_bins,
-                    gear_bodies: &gear_bodies,
-                    markers: &markers,
-                    bone,
-                },
-            )?
-            .unwrap_or((skin0, 0)),
-            None => (skin0, 0),
+            Some(bone) => {
+                let gated = crate::form_vfx::gate_form_effects(
+                    &skin0,
+                    &crate::form_vfx::FormEffects {
+                        bins: &effect_bins,
+                        gear_bodies: &gear_bodies,
+                        markers: &markers,
+                        bone,
+                    },
+                )?;
+                match gated {
+                    Some(gated) => gated,
+                    None => {
+                        debug!(alias = %self.alias, "No form effect needed gating");
+                        (skin0, 0)
+                    }
+                }
+            }
+            None => {
+                warn!(alias = %self.alias, "No ground bone in the skeleton; effects are not gated per form and show in every form");
+                (skin0, 0)
+            }
         };
         let mut files = Vec::new();
         let skin0 = match self.form_audio(source, &graph_file.1, graph, swaps.len(), &skin0) {

@@ -1,7 +1,7 @@
 import { Theme, ExposeLayer, Field, Hairline, StatusDot } from "../theme.slint";
 import { ComboBox } from "std-widgets.slint";
 import { ChromaGem, LobbyChoice, SkinRow, ModLine, OverlayLabels, SelectionOrigin } from "parts/overlay_types.slint";
-import { Tab, HeaderButton, PinButton, Dice } from "parts/overlay_controls.slint";
+import { Tab, Track, HeaderButton, PinButton, Dice } from "parts/overlay_controls.slint";
 import { OverlayHeader } from "overlay_header.slint";
 import { SkinList } from "overlay_list.slint";
 import { ChromaPreview } from "overlay_preview.slint";
@@ -29,6 +29,7 @@ export component OverlayWindow inherits Window {
     in property <string> empty-big;
     in property <string> empty-sub;
     in property <string> footer-right;
+    in property <string> party-line;
     in property <bool> footer-quote;
     in property <int> selected-id: -1;
     in property <int> selected-skin: -1;
@@ -119,17 +120,22 @@ export component OverlayWindow inherits Window {
             padding-left: 14px;
             padding-right: 14px;
             padding-bottom: 8px;
-            spacing: 4px;
-            Tab {
-                text: root.labels.tab-skins;
-                active: !root.mods-tab;
-                clicked => { root.show-tab(false); }
-            }
-            Tab {
-                text: root.labels.tab-mods;
-                count: root.mods-count;
-                active: root.mods-tab;
-                clicked => { root.show-tab(true); }
+            Track {
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 2px;
+                    Tab {
+                        text: root.labels.tab-skins;
+                        active: !root.mods-tab;
+                        clicked => { root.show-tab(false); }
+                    }
+                    Tab {
+                        text: root.labels.tab-mods;
+                        count: root.mods-count;
+                        active: root.mods-tab;
+                        clicked => { root.show-tab(true); }
+                    }
+                }
             }
         }
         if !root.mods-tab: HorizontalLayout {
@@ -166,11 +172,16 @@ export component OverlayWindow inherits Window {
             padding-left: 14px;
             padding-right: 14px;
             padding-bottom: 8px;
-            spacing: 4px;
-            for choice in root.lobby-champions: Tab {
-                text: choice.name;
-                active: choice.active;
-                clicked => { root.focus-champion(choice.id); }
+            Track {
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 2px;
+                    for choice in root.lobby-champions: Tab {
+                        text: choice.name;
+                        active: choice.active;
+                        clicked => { root.focus-champion(choice.id); }
+                    }
+                }
             }
         }
         if root.notice != "": HorizontalLayout {
@@ -179,13 +190,14 @@ export component OverlayWindow inherits Window {
             padding-right: 12px;
             padding-bottom: 6px;
             Rectangle {
-                border-radius: 4px;
+                border-radius: 10px;
                 border-width: 1px;
                 border-color: Theme.gold-dim;
-                background: Theme.panel;
+                background: Theme.gold.with-alpha(0.12);
                 Rectangle {
                     x: 0;
                     width: 3px;
+                    border-radius: 1.5px;
                     background: Theme.gold;
                 }
                 HorizontalLayout {
@@ -240,6 +252,12 @@ export component OverlayWindow inherits Window {
                         Text {
                             text: root.labels.connected;
                             color: Theme.muted;
+                            font-size: Theme.text-sm;
+                            vertical-alignment: center;
+                        }
+                        if root.party-line != "": Text {
+                            text: root.party-line;
+                            color: Theme.gold;
                             font-size: Theme.text-sm;
                             vertical-alignment: center;
                         }

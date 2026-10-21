@@ -115,7 +115,7 @@ pub(super) fn decompress_entry(
     toc: Option<&SubchunkToc>,
 ) -> Result<Vec<u8>, WadError> {
     let failed = |e: std::io::Error| -> WadError {
-        warn!(
+        debug!(
             path_hash = entry.path_hash,
             offset = entry.offset,
             compressed = entry.compressed_size,
@@ -162,7 +162,7 @@ pub(super) fn decompress_entry(
     };
 
     if decoded.len() != entry.uncompressed_size {
-        warn!(
+        debug!(
             path_hash = entry.path_hash,
             compression = ?entry.compression,
             declared = entry.uncompressed_size,

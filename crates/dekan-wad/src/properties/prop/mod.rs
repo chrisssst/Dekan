@@ -1,3 +1,5 @@
+use tracing::debug;
+
 use crate::error::WadError;
 
 pub const PROP_SIGNATURE: &[u8; 4] = b"PROP";
@@ -46,10 +48,11 @@ pub fn parse_prop_header(data: &[u8]) -> Result<PropHeader, WadError> {
         );
     }
 
-    let entry_count = if data.len() - cursor.at >= 4 {
-        cursor.u32("entry count")?
-    } else {
+    let entry_count = if cursor.at == data.len() {
+        debug!("PROP header ends before the entry count");
         0
+    } else {
+        cursor.u32("entry count")?
     };
 
     Ok(PropHeader {
@@ -224,9 +227,13 @@ pub fn parse_prop_file(data: &[u8]) -> Result<PropFile, WadError> {
     let mut cursor = Cursor { data, at: 0 };
     if data.get(0..4) == Some(PTCH_SIGNATURE.as_slice()) {
         cursor.take(12, "PTCH header")?;
+        debug!("PTCH header dropped; serializing this file again writes a plain PROP");
     }
     if cursor.take(4, "signature")? != PROP_SIGNATURE.as_slice() {
-        return Err(WadError::InvalidProp("missing 'PROP' signature".into()));
+        return Err(WadError::InvalidProp(format!(
+            "missing 'PROP' signature at offset {}",
+            cursor.at.saturating_sub(4)
+        )));
     }
     let version = cursor.u32("version")?;
     if version < 2 {

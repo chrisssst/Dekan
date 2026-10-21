@@ -1,7 +1,7 @@
-import { Theme, ExposeLayer, GoldButton, Hairline, Wordmark, StatusDot } from "../theme.slint";
+import { Theme, ExposeLayer, GoldButton, Wordmark, StatusDot, Halo } from "../theme.slint";
 import { ScrollView } from "std-widgets.slint";
 import { PanelLabels, PanelCheckRow, PanelAction } from "panel_types.slint";
-import { Section, CheckRow, Toggle, Notice } from "panel_parts.slint";
+import { Section, PanelTab, CheckRow, Toggle, Notice, PowerCard } from "panel_parts.slint";
 
 export component ControlPanel inherits Window {
     in property <bool> expose-flip;
@@ -11,12 +11,15 @@ export component ControlPanel inherits Window {
     in property <bool> in-room;
     in property <bool> random-skin;
     in property <bool> light-loading;
+    in property <bool> injection;
     in property <bool> auto-accept;
     in property <bool> autostart;
     in property <string> update-line;
     in property <string> ltk-line;
     in property <string> ltk-download;
+    in property <int> attention;
     in property <[PanelCheckRow]> checks;
+    in-out property <int> tab;
     callback action(PanelAction);
     callback theme-changed(int);
     title: "Dekan";
@@ -31,229 +34,315 @@ export component ControlPanel inherits Window {
     VerticalLayout {
         Rectangle {
             vertical-stretch: 0;
-            VerticalLayout {
-                HorizontalLayout {
-                    padding-left: 20px;
-                    padding-right: 20px;
-                    padding-top: 16px;
-                    padding-bottom: 12px;
-                    spacing: 12px;
-                    Image {
-                        source: @image-url("../assets/logo.png");
-                        width: 34px;
-                        height: 34px;
+            min-height: 96px;
+            Halo {
+                x: -50px;
+                y: -54px;
+            }
+            HorizontalLayout {
+                padding-left: 22px;
+                padding-right: 22px;
+                padding-top: 22px;
+                padding-bottom: 18px;
+                spacing: 16px;
+                Image {
+                    source: @image-url("../assets/logo-56.png");
+                    width: 56px;
+                    height: 56px;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 5px;
+                    Wordmark {
+                        version: root.labels.version;
+                        size: 11px;
                     }
-                    VerticalLayout {
-                        alignment: center;
-                        spacing: 3px;
-                        Wordmark {
-                            version: root.labels.version;
-                            size: 18px;
-                        }
-                        HorizontalLayout {
-                            spacing: 8px;
+                    HorizontalLayout {
+                        spacing: 9px;
+                        alignment: start;
+                        VerticalLayout {
                             alignment: start;
-                            VerticalLayout {
-                                alignment: center;
-                                StatusDot { }
-                            }
-                            Text {
-                                text: root.status;
-                                color: Theme.muted;
-                                font-size: Theme.text-md;
-                                overflow: elide;
-                            }
+                            padding-top: 9px;
+                            StatusDot { }
+                        }
+                        Text {
+                            text: root.status;
+                            color: Theme.gold-bright;
+                            font-family: Theme.serif;
+                            font-size: 18px;
+                            font-weight: 700;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
                         }
                     }
                 }
-                Hairline { }
             }
         }
-        scroll := ScrollView {
-            vertical-stretch: 1;
-            VerticalLayout {
-                width: scroll.visible-width;
-                alignment: start;
-                padding-top: 14px;
-                padding-bottom: 18px;
-                padding-left: 20px;
-                padding-right: 20px;
-                spacing: 14px;
-                if root.update-line != "": Notice {
-                    line: root.update-line;
-                    action: root.labels.update-download;
-                    activated => { root.action(PanelAction.open-release); }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 20px;
+            padding-right: 20px;
+            track := Rectangle {
+                height: 42px;
+                border-radius: 11px;
+                border-width: 1px;
+                border-color: Theme.surface-line;
+                background: Theme.input;
+                Rectangle {
+                    y: 4px;
+                    height: parent.height - 8px;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.gold-dim;
+                    background: Theme.card-fill-selected;
+                    x: root.tab == 0 ? home.x : root.tab == 1 ? options.x : root.tab == 2 ? party.x : help.x;
+                    width: root.tab == 0 ? home.width : root.tab == 1 ? options.width : root.tab == 2 ? party.width : help.width;
+                    animate x, width { duration: 260ms; easing: ease-out-quart; }
                 }
-                if root.ltk-line != "": Notice {
-                    line: root.ltk-line;
-                    action: root.ltk-download;
-                    activated => { root.action(PanelAction.install-injector); }
-                }
-                Section {
-                    heading: root.labels.section-options;
-
-                    VerticalLayout {
-                        spacing: 7px;
-
-                        Text {
-                            text: root.labels.theme;
-                            color: Theme.text;
-                            font-size: Theme.text-base;
-                            font-weight: 600;
-                        }
-
-                        HorizontalLayout {
-                            spacing: 6px;
-
-                            GoldButton {
-                                text: root.labels.theme-classic;
-                                primary: Theme.mode == 0;
-                                clicked => { root.theme-changed(0); }
-                            }
-
-                            GoldButton {
-                                text: root.labels.theme-crimson;
-                                primary: Theme.mode == 1;
-                                clicked => { root.theme-changed(1); }
-                            }
-
-                            GoldButton {
-                                text: root.labels.theme-obsidian;
-                                primary: Theme.mode == 2;
-                                clicked => { root.theme-changed(2); }
-                            }
-                        }
-
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.surface-line;
-                        }
+                tabs := HorizontalLayout {
+                    padding: 4px;
+                    spacing: 2px;
+                    home := PanelTab {
+                        text: root.labels.tab-home;
+                        active: root.tab == 0;
+                        clicked => { root.tab = 0; }
                     }
-
-                    Toggle {
-                        divider: false;
-                        label: root.labels.random-skin;
-                        hint: root.labels.random-skin-hint;
-                        checked: root.random-skin;
-                        toggled => { root.action(PanelAction.toggle-random-skin); }
+                    options := PanelTab {
+                        text: root.labels.tab-options;
+                        active: root.tab == 1;
+                        clicked => { root.tab = 1; }
                     }
-                    Toggle {
-                        label: root.labels.light-loading;
-                        hint: root.labels.light-loading-hint;
-                        checked: root.light-loading;
-                        toggled => { root.action(PanelAction.toggle-light-loading); }
+                    party := PanelTab {
+                        text: root.labels.tab-party;
+                        active: root.tab == 2;
+                        clicked => { root.tab = 2; }
                     }
-                    Toggle {
-                        label: root.labels.auto-accept;
-                        checked: root.auto-accept;
-                        toggled => { root.action(PanelAction.toggle-auto-accept); }
-                    }
-                    Toggle {
-                        label: root.labels.autostart;
-                        checked: root.autostart;
-                        toggled => { root.action(PanelAction.toggle-autostart); }
-                    }
-                }
-                Section {
-                    heading: root.labels.section-party;
-                    if root.party-line != "": Text {
-                        text: root.party-line;
-                        color: Theme.muted;
-                        font-size: Theme.text-md;
-                        wrap: word-wrap;
-                    }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        GoldButton {
-                            text: root.labels.party-create;
-                            enabled: !root.in-room;
-                            clicked => { root.action(PanelAction.party-create); }
-                        }
-                        GoldButton {
-                            text: root.labels.party-join;
-                            enabled: !root.in-room;
-                            clicked => { root.action(PanelAction.party-join); }
-                        }
-                    }
-                    GoldButton {
-                        text: root.labels.party-leave;
-                        enabled: root.in-room;
-                        clicked => { root.action(PanelAction.party-leave); }
-                    }
-                }
-                Section {
-                    heading: root.labels.section-folders;
-                    HorizontalLayout {
-                        spacing: 8px;
-                        GoldButton {
-                            text: root.labels.open-mods;
-                            clicked => { root.action(PanelAction.open-mods); }
-                        }
-                        GoldButton {
-                            text: root.labels.open-tools;
-                            clicked => { root.action(PanelAction.open-tools); }
-                        }
-                        GoldButton {
-                            text: root.labels.open-logs;
-                            clicked => { root.action(PanelAction.open-logs); }
-                        }
-                        GoldButton {
-                            text: root.labels.restore-mods;
-                            clicked => { root.action(PanelAction.restore-mods); }
-                        }
-                    }
-                }
-                Section {
-                    heading: root.labels.section-diagnostics;
-                    VerticalLayout {
-                        spacing: 6px;
-                        for check in root.checks: CheckRow {
-                            check: check;
-                        }
-                    }
-                    Text {
-                        text: root.labels.mark-problem-hint;
-                        color: Theme.muted;
-                        font-size: Theme.text-sm;
-                        wrap: word-wrap;
-                    }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        GoldButton {
-                            text: root.labels.mark-problem;
-                            clicked => { root.action(PanelAction.mark-problem); }
-                        }
-                        GoldButton {
-                            text: root.labels.export-diagnostics;
-                            clicked => { root.action(PanelAction.export-diagnostics); }
-                        }
+                    help := PanelTab {
+                        text: root.labels.tab-help;
+                        active: root.tab == 3;
+                        clicked => { root.tab = 3; }
                     }
                 }
             }
         }
         Rectangle {
+            vertical-stretch: 1;
+            scroll := ScrollView {
+                width: parent.width;
+                height: parent.height;
+                VerticalLayout {
+                    width: scroll.visible-width;
+                    alignment: start;
+                    padding: 20px;
+                    padding-top: 16px;
+                    spacing: 12px;
+                    if root.tab == 0: VerticalLayout {
+                        spacing: 12px;
+                        if root.update-line != "": Notice {
+                            line: root.update-line;
+                            action: root.labels.update-download;
+                            activated => { root.action(PanelAction.open-release); }
+                        }
+                        if root.ltk-line != "": Notice {
+                            line: root.ltk-line;
+                            action: root.ltk-download;
+                            activated => { root.action(PanelAction.install-injector); }
+                        }
+                        if root.attention > 0: Notice {
+                            warning: true;
+                            line: root.labels.attention + " " + root.attention;
+                            action: root.labels.see-diagnostics;
+                            activated => { root.tab = 3; }
+                        }
+                        if root.update-line == "" && root.ltk-line == "" && root.attention == 0: Text {
+                            text: root.labels.all-clear;
+                            color: Theme.muted;
+                            font-size: Theme.text-base;
+                            wrap: word-wrap;
+                        }
+                        PowerCard {
+                            label: root.labels.injection;
+                            hint: root.labels.injection-hint;
+                            checked: root.injection;
+                            toggled => { root.action(PanelAction.toggle-injection); }
+                        }
+                    }
+                    if root.tab == 1: Section {
+                        VerticalLayout {
+                            spacing: 7px;
+                            Text {
+                                text: root.labels.theme;
+                                color: Theme.text;
+                                font-size: Theme.text-base;
+                                font-weight: 600;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GoldButton {
+                                    text: root.labels.theme-classic;
+                                    primary: Theme.mode == 0;
+                                    clicked => { root.theme-changed(0); }
+                                }
+                                GoldButton {
+                                    text: root.labels.theme-crimson;
+                                    primary: Theme.mode == 1;
+                                    clicked => { root.theme-changed(1); }
+                                }
+                                GoldButton {
+                                    text: root.labels.theme-obsidian;
+                                    primary: Theme.mode == 2;
+                                    clicked => { root.theme-changed(2); }
+                                }
+                            }
+                            Rectangle {
+                                height: 1px;
+                                background: Theme.surface-line;
+                            }
+                        }
+                        Toggle {
+                            divider: false;
+                            label: root.labels.random-skin;
+                            hint: root.labels.random-skin-hint;
+                            checked: root.random-skin;
+                            toggled => { root.action(PanelAction.toggle-random-skin); }
+                        }
+                        Toggle {
+                            label: root.labels.light-loading;
+                            hint: root.labels.light-loading-hint;
+                            checked: root.light-loading;
+                            toggled => { root.action(PanelAction.toggle-light-loading); }
+                        }
+                        Toggle {
+                            label: root.labels.auto-accept;
+                            checked: root.auto-accept;
+                            toggled => { root.action(PanelAction.toggle-auto-accept); }
+                        }
+                        Toggle {
+                            label: root.labels.autostart;
+                            checked: root.autostart;
+                            toggled => { root.action(PanelAction.toggle-autostart); }
+                        }
+                    }
+                    if root.tab == 2: Section {
+                        Text {
+                            text: root.party-line != "" ? root.party-line : root.labels.party-hint;
+                            color: root.party-line != "" ? Theme.gold-bright : Theme.muted;
+                            font-size: Theme.text-base;
+                            wrap: word-wrap;
+                        }
+                        if !root.in-room: HorizontalLayout {
+                            spacing: 8px;
+                            GoldButton {
+                                text: root.labels.party-create;
+                                hug: true;
+                                primary: true;
+                                clicked => { root.action(PanelAction.party-create); }
+                            }
+                            GoldButton {
+                                text: root.labels.party-join;
+                                hug: true;
+                                clicked => { root.action(PanelAction.party-join); }
+                            }
+                        }
+                        if root.in-room: GoldButton {
+                            text: root.labels.party-leave;
+                            danger: true;
+                            clicked => { root.action(PanelAction.party-leave); }
+                        }
+                    }
+                    if root.tab == 3: VerticalLayout {
+                        spacing: 12px;
+                        Section {
+                            heading: root.labels.section-diagnostics;
+                            VerticalLayout {
+                                spacing: 10px;
+                                for check in root.checks: CheckRow {
+                                    check: check;
+                                }
+                            }
+                            Rectangle {
+                                height: 1px;
+                                background: Theme.surface-line;
+                            }
+                            Text {
+                                text: root.labels.mark-problem-hint;
+                                color: Theme.muted;
+                                font-size: Theme.text-sm;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                GoldButton {
+                                    text: root.labels.mark-problem;
+                                    clicked => { root.action(PanelAction.mark-problem); }
+                                }
+                                GoldButton {
+                                    text: root.labels.export-diagnostics;
+                                    clicked => { root.action(PanelAction.export-diagnostics); }
+                                }
+                            }
+                        }
+                        Section {
+                            heading: root.labels.section-folders;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                GoldButton {
+                                    text: root.labels.open-mods;
+                                    clicked => { root.action(PanelAction.open-mods); }
+                                }
+                                GoldButton {
+                                    text: root.labels.open-logs;
+                                    clicked => { root.action(PanelAction.open-logs); }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                GoldButton {
+                                    text: root.labels.open-tools;
+                                    clicked => { root.action(PanelAction.open-tools); }
+                                }
+                                GoldButton {
+                                    text: root.labels.restore-mods;
+                                    clicked => { root.action(PanelAction.restore-mods); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if -scroll.content-y + scroll.visible-height < scroll.content-height - 2px: Rectangle {
+                y: parent.height - self.height;
+                height: 36px;
+                background: @linear-gradient(180deg, Theme.bg-0.with-alpha(0) 0%, Theme.bg-0.with-alpha(0.95) 100%);
+            }
+        }
+        Rectangle {
             vertical-stretch: 0;
-            VerticalLayout {
-                Rectangle {
-                    height: 1px;
-                    background: Theme.surface-line;
-                }
-                HorizontalLayout {
-                    padding-top: 12px;
-                    padding-bottom: 16px;
-                    padding-left: 20px;
-                    padding-right: 20px;
-                    spacing: 8px;
-                    GoldButton {
-                        text: root.labels.about;
-                        clicked => { root.action(PanelAction.about); }
-                    }
-                    GoldButton {
-                        text: root.labels.quit;
-                        danger: true;
-                        clicked => { root.action(PanelAction.quit); }
-                    }
-                }
+            height: 1px;
+            background: Theme.surface-line;
+        }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: 12px;
+            padding-bottom: 14px;
+            padding-left: 20px;
+            padding-right: 20px;
+            spacing: 8px;
+            GoldButton {
+                text: root.labels.about;
+                hug: true;
+                horizontal-stretch: 0;
+                clicked => { root.action(PanelAction.about); }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+            GoldButton {
+                text: root.labels.quit;
+                danger: true;
+                hug: true;
+                horizontal-stretch: 0;
+                clicked => { root.action(PanelAction.quit); }
             }
         }
     }

@@ -63,8 +63,12 @@ pub fn resolve_alias(
     archives.sort();
 
     for archive in archives {
-        let Ok(file) = std::fs::File::open(&archive) else {
-            continue;
+        let file = match std::fs::File::open(&archive) {
+            Ok(file) => file,
+            Err(e) => {
+                debug!(archive = %archive.display(), error = %e, "Archive unreadable");
+                continue;
+            }
         };
         match dekan_wad::fantome::wad_names_in_archive(std::io::BufReader::new(file)) {
             Ok(names) if names.len() == 1 => {

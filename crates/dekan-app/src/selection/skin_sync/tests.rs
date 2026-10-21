@@ -93,7 +93,7 @@ fn test_safe_extraction_strips_repo_prefix() {
     let _limits = ExtractLimits::default();
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).unwrap();
-        let raw_name = entry.name().to_string();
+        let raw_name = entry.name().unwrap().into_owned();
         if let Some(idx) = raw_name.find("/skins/") {
             let rel = &raw_name[idx + "/skins/".len()..];
             let validated = validate_archive_path(Path::new(rel)).unwrap();

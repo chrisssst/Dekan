@@ -20,6 +20,9 @@ impl StandardChampion {
                 return None;
             }
         };
+        if paths.is_empty() {
+            debug!(alias = %self.alias, "No sound bank to add form sounds to");
+        }
         for path in paths {
             let added = self
                 .wad

@@ -116,6 +116,26 @@ fn asset_url<'a>(offer: &'a Offer, name: &str) -> Result<&'a str, String> {
     Ok(&asset.browser_download_url)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum UpdateError {
+    Untrusted(String),
+    Failed(String),
+}
+
+impl std::fmt::Display for UpdateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Untrusted(why) | Self::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl From<String> for UpdateError {
+    fn from(why: String) -> Self {
+        Self::Failed(why)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StagedSetup {
     pub path: PathBuf,
@@ -166,15 +186,24 @@ pub fn open_verified(setup: &StagedSetup) -> Result<std::fs::File, String> {
 pub struct PendingUpdate(Arc<Mutex<Option<StagedSetup>>>);
 
 impl PendingUpdate {
-    pub fn set(&self, setup: StagedSetup) {
-        if let Ok(mut slot) = self.0.lock() {
-            *slot = Some(setup);
-        }
+    pub fn set(&self, setup: StagedSetup) -> Result<(), String> {
+        let mut slot = self
+            .0
+            .lock()
+            .map_err(|e| format!("the pending update lock is poisoned: {e}"))?;
+        *slot = Some(setup);
+        Ok(())
     }
 
     #[must_use]
     pub fn take(&self) -> Option<StagedSetup> {
-        self.0.lock().ok().and_then(|mut slot| slot.take())
+        match self.0.lock() {
+            Ok(mut slot) => slot.take(),
+            Err(e) => {
+                tracing::error!(error = %e, "The pending update lock is poisoned; the verified installer is not run");
+                None
+            }
+        }
     }
 }
 
@@ -182,7 +211,9 @@ pub fn clear_staging(state_dir: &Path) {
     match std::fs::remove_dir_all(state_dir.join(STAGING_DIR)) {
         Ok(()) => tracing::debug!("Previous update download removed"),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => tracing::debug!(error = %e, "Previous update download not removed"),
+        Err(e) => {
+            tracing::warn!(dir = %state_dir.join(STAGING_DIR).display(), error = %e, "Previous update download not removed")
+        }
     }
 }
 
@@ -242,15 +273,15 @@ async fn fetch_to_file(client: &reqwest::Client, url: &str, path: &Path) -> Resu
     Ok(encode_hex(&hasher.finalize()))
 }
 
-pub async fn download(offer: &Offer, state_dir: &Path) -> Result<StagedSetup, String> {
+pub async fn download(offer: &Offer, state_dir: &Path) -> Result<StagedSetup, UpdateError> {
     let client = client()?;
     let sums = fetch_small(&client, asset_url(offer, SUMS_FILE)?).await?;
     let signature = fetch_small(&client, asset_url(offer, SIGNATURE_FILE)?).await?;
-    verify_sums(&sums, &signature)?;
+    verify_sums(&sums, &signature).map_err(UpdateError::Untrusted)?;
     let name = setup_name(offer.version);
     let sums = String::from_utf8_lossy(&sums);
-    let expected =
-        expected_hash(&sums, &name).ok_or_else(|| format!("{SUMS_FILE} does not list {name}"))?;
+    let expected = expected_hash(&sums, &name)
+        .ok_or_else(|| UpdateError::Untrusted(format!("{SUMS_FILE} does not list {name}")))?;
     let url = asset_url(offer, &name)?;
 
     clear_staging(state_dir);
@@ -258,19 +289,15 @@ pub async fn download(offer: &Offer, state_dir: &Path) -> Result<StagedSetup, St
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let partial = dir.join(format!("{name}.partial"));
     let fetched = fetch_to_file(&client, url, &partial).await;
-    let verified = fetched.and_then(|hash| {
-        if hash == *expected {
-            Ok(())
-        } else {
-            Err(format!(
-                "{name} has SHA-256 {hash}, the signed list says {expected}"
-            ))
-        }
-    });
     let setup = dir.join(&name);
-    let placed = verified.and_then(|()| {
-        std::fs::rename(&partial, &setup).map_err(|e| format!("{}: {e}", setup.display()))
-    });
+    let placed = match fetched {
+        Ok(hash) if hash != expected => Err(UpdateError::Untrusted(format!(
+            "{name} has SHA-256 {hash}, the signed list says {expected}"
+        ))),
+        Ok(_) => std::fs::rename(&partial, &setup)
+            .map_err(|e| UpdateError::Failed(format!("{}: {e}", setup.display()))),
+        Err(e) => Err(UpdateError::Failed(e)),
+    };
     if let Err(e) = placed {
         clear_staging(state_dir);
         return Err(e);

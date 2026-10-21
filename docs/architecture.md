@@ -28,12 +28,12 @@ Slint, in Rust), never inside the client.
 | `dekan-core` | Domain types, shared state, game phases, task supervisor, configuration names | nothing |
 | `dekan-platform` | Windows: processes, discovery of the game and tools, windows, tray, translations | core |
 | `dekan-wad` | WAD archives, BIN/PROP data files, `.fantome` and `.modpkg` packages, hash index | nothing |
-| `dekan-lcu` | League client REST and WebSocket, champion select | core |
-| `dekan-classic` | Skins and Classic Rift models generated from the installed game | wad |
+| `dekan-lcu` | League client REST and WebSocket, champion select | core, platform |
+| `dekan-classic` | Skins and Classic Rift models generated from the installed game | core, wad |
 | `dekan-inject` | Mod checks, overlay builder, injector host | core, platform, wad |
 | `dekan-party` | Encrypted party rooms over a relay | core |
 | `dekan-relay` | Optional self-hosted relay server | none of the above |
-| `dekan-app` | The executable: composition, lifecycle, tray, catalog, injection trigger | all |
+| `dekan-app` | The executable: composition, lifecycle, tray, catalog, injection trigger | all but relay |
 
 Dependencies only point one way. The pure crates (`core`, `wad`) know nothing about Windows or the client,
 so most of the logic can be tested without either.
@@ -53,7 +53,7 @@ the 400-line limit per code file.
 | `dekan-wad` | `archive/` (WAD, writer, `.fantome`, `.modpkg`), `properties/` (BIN/PROP), `hashing/` |
 | `dekan-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (`pick/`: champion select, live selection, lobby; `skins/`: skin registration, assets) |
 | `dekan-classic` | `animation/` (`clips/`, `gear/`, `graph/`, `parts/`, `skin_forms/`, `transition/`, `vfx/`), `audio/`, `mesh/` (`formats/`, `merge/`), `generation/` (builder, client data, and `generator/`: `cycle/`, `forms/`, `rift/`, `slots/`, `store/`) |
-| `dekan-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, runner), `pipeline/` |
+| `dekan-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, publisher trust), `pipeline/` |
 | `dekan-party` | `transport/` (client, config, protocol), `security/` (crypto, token) |
 | `dekan-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `boot/` with `startup/` and `tray/`, `trigger/` with `arm/` and `prepare/`) stay at the root |
 | `xtask` | `build/`, `lint/`, `audit/`, `testing/`, `probes/`; `main.rs` only dispatches |
@@ -76,20 +76,31 @@ the 400-line limit per code file.
    by one thread: on a 5,400 rpm drive with a cold file cache this warm-up takes under a second instead of
    14-19 s.
 6. **Game build.** The game executable's build timestamp is read. After a patch, cached overlays and locale
-   data are discarded. If the injector DLL does not support this build, the user is told immediately.
-7. **Services.** The supervised tasks start: client observer, selection window session, party mode, the
-   Dekan and LTK Manager release checks, and the optional skin library sync. Companion characters are indexed
-   on a thread in Windows background mode, paused from the ready check until the match ends.
+   data are discarded. If the injector DLL does not support this build, the user is warned: the log records it and the control panel shows it.
+7. **Services.** The supervised tasks start (names as they appear in the log). Essential: `lcu-observer`,
+   `party-manager`, `overlay-session` (the selection window), `injection-trigger`, `auto-accept`,
+   `tray-events`, `tray-status-updater`, `activation-listener` and `log-drop-monitor`. Others: `live-game`,
+   `skin-sync` (optional skin library sync), `custom-mods-notice`, `injector-install`, and `update-check`
+   and `ltk-check` (Dekan and LTK Manager release checks, off when `DEKAN_UPDATE_CHECK` says so).
+   Companion characters are indexed on a thread in Windows background mode, paused from the ready check until
+   the match ends.
+8. **Shutdown.** Ctrl+C or the tray cancels the shared token; `Supervisor::shutdown` waits up to 5 s for each
+   task and aborts the ones that do not stop. A downloaded update, if the user accepted one, runs after the
+   tasks are down.
 
 ## Shared state
 
 `AppState` is published through a Tokio `watch` channel. Readers always see the latest complete value, never
 a partial update. It can only be changed through named transitions in `dekan_core::state`, so every change
-is easy to find and to log. The main fields are the game phase, the team roster (used to verify party
-announcements), the selected custom mods, the injection status and the party members.
+is easy to find and to log. The main fields are the game phase, the picked champion and skin, the overlay
+target, whether the client is connected, the team roster and local player (used to verify party
+announcements), the selected custom mods, the injection status, the party state (status, hosting, peers,
+sharing, the lobby party), the lobby picks and the queue.
 
 Every background task is started by the `Supervisor` with a cancellation token. None is spawned on its own,
-so shutdown is orderly and a task that dies is noticed.
+so shutdown is orderly and a task that dies is noticed: one that returns before shutdown is logged at `warn`,
+or at `error` when it was started as essential, and one that panics is logged at `error` with the panic
+message. A panic anywhere is also logged by the panic hook (see the observability notes).
 
 ## Runtime discovery
 
@@ -104,5 +115,6 @@ so shutdown is orderly and a task that dies is noticed.
 ## Configuration
 
 Every environment variable Dekan reads is listed in `dekan_core::env`. Domain constants stay with the
-code that owns them: audited tool hashes in `dekan_app::trigger`, the default relay in
-`dekan_party::config`, and the DLL's supported build limit in `dekan_inject::ltk_host`.
+code that owns them: the trusted injector publisher in `dekan_inject::trust` (which also reads the DLL's
+build limit from the DLL itself), the support window around that limit in `dekan_inject::ltk_host`, and the
+default relay in `dekan_party::config`.

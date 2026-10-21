@@ -291,8 +291,8 @@ pub(crate) fn run_smoke(args: &[String]) {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("dist").join("dekan.exe"));
     let Some(tools) = args.get(1).map(PathBuf::from) else {
-        println!("uso: smoke <dekan.exe> <pasta com o injetor auditado>");
-        return;
+        eprintln!("uso: smoke <dekan.exe> <pasta com o injetor auditado>");
+        std::process::exit(2);
     };
     if !exe.is_file() {
         println!("binario nao encontrado: {}", exe.display());

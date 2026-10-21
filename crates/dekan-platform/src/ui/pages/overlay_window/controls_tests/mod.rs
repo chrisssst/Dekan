@@ -112,7 +112,9 @@ fn hovering_a_gem_asks_for_its_preview_once_and_shows_it_when_delivered() {
         std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/ui/assets/logo.png")).expect("png");
     with_overlay(|overlay| overlay.deliver_preview(238_071, &png));
     assert!(!view.get_preview_loading());
-    assert!(view.get_preview_image().size().width > 0);
+    let width = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
+    assert_eq!(view.get_preview_image().size().width, width);
+
     view.invoke_gem_hovered(gem.clone(), 120.0, 200.0, false);
     assert!(!view.get_preview_visible());
     view.invoke_gem_hovered(gem, 120.0, 200.0, true);

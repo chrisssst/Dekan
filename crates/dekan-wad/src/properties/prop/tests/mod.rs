@@ -137,13 +137,10 @@ fn test_every_truncation_of_a_header_is_an_error_or_the_same_links() {
     let links_end = data.len() - 4;
     for cut in 0..data.len() {
         let result = parse_prop_header(&data[..cut]);
-        if cut >= links_end {
+        if cut == links_end {
             let header = result.unwrap_or_else(|e| panic!("cut {cut}: {e}"));
             assert_eq!(header.linked_files.len(), 2, "cut {cut}");
-            assert_eq!(
-                header.entry_count, 0,
-                "cut {cut}: a partial entry count is not read"
-            );
+            assert_eq!(header.entry_count, 0);
         } else {
             assert!(result.is_err(), "cut {cut} must be refused");
         }

@@ -6,7 +6,7 @@ use std::time::Duration;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::ComponentHandle;
 use slint::winit_030::{WinitWindowAccessor, winit};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use windows::Win32::Graphics::Gdi::GetUpdateRect;
 use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_PAINT};
 
@@ -66,9 +66,18 @@ fn start() -> Result<(), PlatformError> {
 }
 
 pub(crate) fn hwnd_of(window: &winit::window::Window) -> Option<isize> {
-    match window.window_handle().ok()?.as_raw() {
-        RawWindowHandle::Win32(handle) => Some(handle.hwnd.get()),
-        _ => None,
+    match window.window_handle() {
+        Ok(handle) => match handle.as_raw() {
+            RawWindowHandle::Win32(handle) => Some(handle.hwnd.get()),
+            _ => {
+                debug!("The window handle is not a Win32 handle");
+                None
+            }
+        },
+        Err(e) => {
+            debug!(error = %e, "The window handle is unavailable");
+            None
+        }
     }
 }
 
@@ -90,12 +99,11 @@ pub(crate) fn when_created<C: ComponentHandle + 'static>(
             return;
         };
         match component.window().winit_window().await {
-            Ok(window) => {
-                if let Some(hwnd) = hwnd_of(&window) {
-                    then(&component, hwnd);
-                }
-            }
-            Err(e) => debug!(error = %e, "A window closed before it was created"),
+            Ok(window) => match hwnd_of(&window) {
+                Some(hwnd) => then(&component, hwnd),
+                None => warn!("A window was created but its native handle could not be read"),
+            },
+            Err(e) => warn!(error = %e, "A window closed before it was created"),
         }
     });
     if let Err(e) = spawned {

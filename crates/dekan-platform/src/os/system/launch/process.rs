@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
-use windows::Win32::Foundation::{CloseHandle, FILETIME};
+use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES, FILETIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
     TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
@@ -12,7 +12,7 @@ use windows::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW, SetThreadPriority,
     THREAD_MODE_BACKGROUND_BEGIN, THREAD_MODE_BACKGROUND_END,
 };
-use windows::core::PWSTR;
+use windows::core::{HRESULT, PWSTR};
 
 use tracing::debug;
 
@@ -40,6 +40,10 @@ impl Drop for BackgroundThread {
         let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END) }; // ignore-ok: the thread is ending its background work; a failure only leaves it at low priority
     }
 }
+pub(crate) fn is_end_of_list(error: &windows::core::Error) -> bool {
+    error.code() == HRESULT::from_win32(ERROR_NO_MORE_FILES.0)
+}
+
 const FILETIME_TICKS_PER_SEC: u64 = 10_000_000;
 
 #[must_use]
@@ -77,10 +81,13 @@ impl ProcessFinder {
     pub fn get_process_path(pid: u32) -> Result<Option<PathBuf>, PlatformError> {
         let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
             Ok(h) => h,
-            Err(_) => return Ok(None),
+            Err(e) => {
+                debug!(pid, error = %e, "Process not openable for its image path");
+                return Ok(None);
+            }
         };
 
-        let mut buffer = [0u16; 1024];
+        let mut buffer = vec![0u16; 32_768];
         let mut size = buffer.len() as u32;
 
         let res = unsafe {
@@ -96,11 +103,19 @@ impl ProcessFinder {
             let _ = CloseHandle(handle); // ignore-ok: handle released at teardown; nothing to recover from
         };
 
-        if res.is_ok() && size > 0 {
-            let path_os = OsString::from_wide(&buffer[..size as usize]);
-            Ok(Some(PathBuf::from(path_os)))
-        } else {
-            Ok(None)
+        match res {
+            Ok(()) if size > 0 => {
+                let path_os = OsString::from_wide(&buffer[..size as usize]);
+                Ok(Some(PathBuf::from(path_os)))
+            }
+            Ok(()) => {
+                debug!(pid, "The process reported an empty image path");
+                Ok(None)
+            }
+            Err(e) => {
+                debug!(pid, error = %e, "Process image path unavailable");
+                Ok(None)
+            }
         }
     }
 
@@ -123,10 +138,17 @@ impl ProcessFinder {
             ..Default::default()
         };
 
-        let mut has_next = unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok();
+        let mut step = unsafe { Process32FirstW(snapshot, &mut entry) };
 
         let mut found_pid = None;
-        while has_next {
+        let mut failure = None;
+        loop {
+            if let Err(e) = step {
+                if !is_end_of_list(&e) {
+                    failure = Some(e);
+                }
+                break;
+            }
             let len = entry
                 .szExeFile
                 .iter()
@@ -144,14 +166,17 @@ impl ProcessFinder {
                 }
             }
 
-            has_next = unsafe { Process32NextW(snapshot, &mut entry) }.is_ok();
+            step = unsafe { Process32NextW(snapshot, &mut entry) };
         }
 
         unsafe {
             let _ = CloseHandle(snapshot); // ignore-ok: the snapshot is released either way
         };
 
-        Ok(found_pid)
+        match failure {
+            Some(e) => Err(e.into()),
+            None => Ok(found_pid),
+        }
     }
 
     pub fn find_first_thread_id(pid: u32) -> Result<Option<u32>, PlatformError> {
@@ -162,21 +187,32 @@ impl ProcessFinder {
             ..Default::default()
         };
 
-        let mut has_next = unsafe { Thread32First(snapshot, &mut entry) }.is_ok();
+        let mut step = unsafe { Thread32First(snapshot, &mut entry) };
 
         let mut found_tid = None;
-        while has_next {
+        let mut failure = None;
+        loop {
+            if let Err(e) = step {
+                if !is_end_of_list(&e) {
+                    failure = Some(e);
+                }
+                break;
+            }
             if entry.th32OwnerProcessID == pid {
                 found_tid = Some(entry.th32ThreadID);
                 break;
             }
 
-            has_next = unsafe { Thread32Next(snapshot, &mut entry) }.is_ok();
+            step = unsafe { Thread32Next(snapshot, &mut entry) };
         }
 
         unsafe {
             let _ = CloseHandle(snapshot); // ignore-ok: the snapshot is released either way
         };
+
+        if let Some(e) = failure {
+            return Err(e.into());
+        }
 
         if found_tid.is_none() {
             debug!(pid, "No thread found for this PID; the process is gone");

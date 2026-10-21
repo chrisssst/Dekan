@@ -18,9 +18,10 @@ pub(crate) fn run_classic_probe(args: &[String]) {
     let staging = std::env::temp_dir().join("dekan_classic_probe_mods");
     let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder may not exist
     if let Err(e) = std::fs::create_dir_all(&staging) {
-        println!("pasta temporaria indisponivel: {e}");
-        return;
+        eprintln!("[ERRO] pasta temporaria indisponivel: {e}");
+        std::process::exit(1);
     }
+    let mut any_failed = false;
 
     for alias in aliases {
         let alias = alias.as_str();
@@ -29,6 +30,7 @@ pub(crate) fn run_classic_probe(args: &[String]) {
             Ok(champion) => champion,
             Err(e) => {
                 println!("  nao abriu: {e}");
+                any_failed = true;
                 continue;
             }
         };
@@ -85,4 +87,7 @@ pub(crate) fn run_classic_probe(args: &[String]) {
         );
     }
     let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    if any_failed {
+        std::process::exit(1);
+    }
 }

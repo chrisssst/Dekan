@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,10 +15,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(8787);
+    let port: u16 = match std::env::var("PORT") {
+        Ok(raw) => raw.parse().unwrap_or_else(|e| {
+            warn!(value = %raw, error = %e, "PORT is not a valid port; using 8787");
+            8787
+        }),
+        Err(_) => 8787,
+    };
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let addr = format!("{host}:{port}");
@@ -31,7 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cancel_for_signal = cancel.clone();
     tokio::spawn(async move {
-        let _ = tokio::signal::ctrl_c().await; // ignore-ok: shutdown signal
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            warn!(error = %e, "Could not listen for the shutdown signal; stop the relay by killing it");
+            return;
+        }
         info!("Shutdown signal received, closing relay...");
         cancel_for_signal.cancel();
     });

@@ -86,17 +86,31 @@ export component ExposeLayer inherits Rectangle {
     background: root.flip ? #00000001 : #00000000;
 }
 
+export component Halo inherits Rectangle {
+    in property <length> size: 200px;
+    width: root.size;
+    height: root.size;
+    background: @radial-gradient(circle, Theme.gold.with-alpha(0.33) 0%, Theme.gold.with-alpha(0.11) 38%, Theme.gold.with-alpha(0) 70%);
+}
+
+export component Surface inherits Rectangle {
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.surface-line;
+    background: Theme.card-fill;
+    Rectangle {
+        x: 12px;
+        y: 0;
+        width: parent.width - 24px;
+        height: 1px;
+        background: #ffffff12;
+    }
+}
+
 export component Hairline inherits Rectangle {
     in property <bool> gold;
     height: 1px;
     background: root.gold ? Theme.gold-dim : Theme.line-gold;
-}
-
-export component Caps inherits Text {
-    color: Theme.gold;
-    font-size: Theme.text-xs;
-    font-weight: 700;
-    letter-spacing: 1.5px;
 }
 
 export component Wordmark inherits HorizontalLayout {
@@ -138,12 +152,12 @@ export component GoldButton inherits Rectangle {
     in property <bool> enabled: true;
     in property <bool> primary;
     in property <bool> danger;
-    in property <bool> caps;
+    in property <bool> hug;
     in property <length> font-size: Theme.text-md;
-    in property <length> tracking: 0px;
     callback clicked();
     property <bool> hot: touch.has-hover && root.enabled;
     property <bool> focused: keys.has-focus && root.enabled;
+    min-width: root.hug ? label.preferred-width + 28px : 0px;
     min-height: 32px;
     vertical-stretch: 0;
     horizontal-stretch: 1;
@@ -155,17 +169,16 @@ export component GoldButton inherits Rectangle {
     drop-shadow-color: Theme.gold.with-alpha(root.hot ? 0.45 : 0.25);
     opacity: root.enabled ? 1 : 0.45;
     animate border-color, drop-shadow-blur { duration: 150ms; }
-    Text {
+    label := Text {
         x: 12px;
         y: touch.pressed && root.enabled ? 1px : 0px;
         width: parent.width - 24px;
         height: parent.height;
-        text: root.caps ? root.text.to-uppercase() : root.text;
+        text: root.text;
         color: root.primary ? Theme.bg-0 : root.danger ? Theme.danger-text : Theme.gold-bright;
         font-family: Theme.sans;
         font-size: root.font-size;
-        font-weight: root.caps || root.primary ? 700 : 600;
-        letter-spacing: root.tracking;
+        font-weight: root.primary ? 700 : 600;
         horizontal-alignment: center;
         vertical-alignment: center;
         overflow: elide;
@@ -197,28 +210,42 @@ export component GoldButton inherits Rectangle {
 
 export component Switch inherits Rectangle {
     in property <bool> checked;
-    width: 36px;
-    height: 20px;
-    border-radius: 10px;
+    in property <bool> large;
+    width: root.large ? 46px : 36px;
+    height: root.large ? 26px : 20px;
+    border-radius: self.height / 2;
     border-width: 0;
     background: root.checked ? Theme.gold-dim : Theme.control-line;
     animate background { duration: 150ms; }
     Rectangle {
         y: 3px;
         x: root.checked ? root.width - self.width - 3px : 3px;
-        width: 14px;
-        height: 14px;
-        border-radius: 7px;
+        width: root.height - 6px;
+        height: self.width;
+        border-radius: self.width / 2;
         background: root.checked ? Theme.gold-bright : Theme.muted;
-        animate x { duration: 150ms; easing: ease-out; }
+        animate x { duration: 200ms; easing: ease-out-back; }
     }
 }
 
-export component Diamond inherits Text {
-    text: "◆";
-    color: Theme.gold;
-    font-size: 9px;
-    vertical-alignment: top;
+export component Diamond inherits Path {
+    width: 8px;
+    height: 8px;
+    viewbox-width: 8;
+    viewbox-height: 8;
+    fill: Theme.gold;
+    commands: "M 4 0 L 8 4 L 4 8 L 0 4 Z";
+}
+
+export component CheckGlyph inherits Path {
+    width: 10px;
+    height: 10px;
+    viewbox-width: 10;
+    viewbox-height: 10;
+    stroke: Theme.gold;
+    stroke-width: 1.6px;
+    fill: transparent;
+    commands: "M 1.5 5.2 L 4 7.6 L 8.5 2.4";
 }
 
 export component SearchGlyph inherits Path {
@@ -247,10 +274,10 @@ export component Field inherits Rectangle {
     min-height: 38px;
     vertical-stretch: 0;
     clip: true;
-    border-radius: 4px;
+    border-radius: 10px;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.gold : Theme.control-line;
-    background: root.monospace ? Theme.input : Theme.bg-0;
+    border-color: input.has-focus ? Theme.gold : Theme.surface-line;
+    background: Theme.input;
     drop-shadow-blur: input.has-focus ? 10px : 0px;
     drop-shadow-color: Theme.gold.with-alpha(0.25);
     animate border-color, drop-shadow-blur { duration: 200ms; }

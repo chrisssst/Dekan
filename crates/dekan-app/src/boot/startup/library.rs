@@ -82,6 +82,7 @@ pub fn spawn_prewarm(
         let gate_token = shutdown_token.clone();
         let game_dir = paths.game_dir.clone();
         let cache_dir = state_dir_path.to_path_buf();
+        let generated_dir = paths.mods_dir.clone();
         let mod_roots: Vec<std::path::PathBuf> = paths
             .mod_roots
             .iter()
@@ -90,11 +91,15 @@ pub fn spawn_prewarm(
         let spawned = std::thread::Builder::new()
             .name("dekan-prewarm".into())
             .spawn(move || {
+                let game_disk = dekan_platform::disk::disk_kind(&game_dir).as_str();
+                let state_disk = dekan_platform::disk::disk_kind(&cache_dir).as_str();
                 let started = std::time::Instant::now();
                 match dekan_inject::overlay_builder::get_or_index_game(&game_dir) {
                     Ok(index) => info!(
                         wads = index.len(),
                         elapsed_ms = started.elapsed().as_millis(),
+                        game_disk,
+                        state_disk,
                         "Game WAD index ready"
                     ),
                     Err(e) => warn!(error = %e, "Game WAD index not prewarmed; the first build indexes on demand"),
@@ -104,6 +109,9 @@ pub fn spawn_prewarm(
                 while !gate_token.is_cancelled() && busy() {
                     std::thread::sleep(std::time::Duration::from_secs(2));
                 }
+                dekan_classic::generator::remove_stale_generated(&game_dir, &generated_dir, || {
+                    gate_token.is_cancelled() || busy()
+                });
                 let report = dekan_app::mod_repair::repair_custom_mods(
                     &mod_roots,
                     &game_dir,
@@ -136,9 +144,15 @@ pub fn spawn_skin_sync(
     supervisor: &mut dekan_core::supervisor::Supervisor,
     library_root: &std::path::Path,
 ) {
-    if let Some(sync_config) = dekan_app::skin_sync::SkinSyncConfig::from_env_value(
-        std::env::var(dekan_core::env::SKIN_SYNC).ok().as_deref(),
-    ) {
+    let env_value = std::env::var(dekan_core::env::SKIN_SYNC).ok();
+    let sync_config = dekan_app::skin_sync::SkinSyncConfig::from_env_value(env_value.as_deref());
+    if sync_config.is_none() && env_value.is_some() {
+        warn!(
+            variable = dekan_core::env::SKIN_SYNC,
+            "The skin sync setting was rejected; the skin library is not downloaded"
+        );
+    }
+    if let Some(sync_config) = sync_config {
         info!(
             library = %library_root.display(),
             source = %sync_config.zip_url,
@@ -181,21 +195,54 @@ pub fn seed_directory(src: &std::path::Path, dst: &std::path::Path) {
     if !src.exists() {
         return;
     }
+    let mut failures = SeedFailures::default();
+    seed_into(src, dst, &mut failures);
+    if let Some(first) = failures.first {
+        warn!(
+            src = %src.display(),
+            dst = %dst.display(),
+            failed = failures.count,
+            first_error = first,
+            "Some seeded library files could not be created"
+        );
+    }
+}
 
-    // ignore-ok: best-effort creation of destination directory
-    let _ = std::fs::create_dir_all(dst);
-    if let Ok(entries) = std::fs::read_dir(src) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let target = dst.join(entry.file_name());
-            if path.is_dir() {
-                seed_directory(&path, &target);
-            } else if path.is_file()
-                && !target.exists()
-                && std::fs::hard_link(&path, &target).is_err()
-            {
-                // ignore-ok: fallback to file copy if hard link fails
-                let _ = std::fs::copy(&path, &target);
+#[derive(Default)]
+struct SeedFailures {
+    count: usize,
+    first: Option<String>,
+}
+
+impl SeedFailures {
+    fn record(&mut self, path: &std::path::Path, error: &std::io::Error) {
+        self.count += 1;
+        self.first
+            .get_or_insert_with(|| format!("{}: {error}", path.display()));
+    }
+}
+
+fn seed_into(src: &std::path::Path, dst: &std::path::Path, failures: &mut SeedFailures) {
+    if let Err(e) = std::fs::create_dir_all(dst) {
+        failures.record(dst, &e);
+        return;
+    }
+    let entries = match std::fs::read_dir(src) {
+        Ok(entries) => entries,
+        Err(e) => {
+            failures.record(src, &e);
+            return;
+        }
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            seed_into(&path, &target, failures);
+        } else if path.is_file() && !target.exists() && std::fs::hard_link(&path, &target).is_err()
+        {
+            if let Err(e) = std::fs::copy(&path, &target) {
+                failures.record(&target, &e);
             }
         }
     }

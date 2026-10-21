@@ -11,10 +11,18 @@ use crate::lockfile::Lockfile;
 
 pub const DEFAULT_LCU_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LcuClient {
     client: reqwest::Client,
     base_url: String,
+}
+
+impl std::fmt::Debug for LcuClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LcuClient")
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
 }
 
 impl LcuClient {
@@ -49,13 +57,14 @@ impl LcuClient {
         })
     }
 
-    async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, LcuError> {
+    pub(crate) async fn fetch(
+        &self,
+        path: &str,
+    ) -> Result<(reqwest::Response, std::time::Instant), LcuError> {
         let url = format!("{}{path}", self.base_url);
         let started = std::time::Instant::now();
-
-        let resp = match self.client.get(&url).send().await {
-            Ok(resp) => resp,
-
+        match self.client.get(&url).send().await {
+            Ok(resp) => Ok((resp, started)),
             Err(e) => {
                 warn!(
                     path = path,
@@ -64,18 +73,44 @@ impl LcuClient {
                     error = %e,
                     "LCU request failed before a response arrived"
                 );
-                return Err(e.into());
+                Err(e.into())
             }
-        };
+        }
+    }
 
-        let status = resp.status();
-        if !status.is_success() {
+    pub(crate) fn log_refusal(
+        path: &str,
+        status: reqwest::StatusCode,
+        started: std::time::Instant,
+    ) {
+        if status == reqwest::StatusCode::NOT_FOUND {
+            debug!(
+                path = path,
+                elapsed_ms = started.elapsed().as_millis(),
+                "LCU resource not found"
+            );
+        } else {
             warn!(
                 path = path,
                 status = status.as_u16(),
                 elapsed_ms = started.elapsed().as_millis(),
                 "LCU answered with a non-success status"
             );
+        }
+    }
+
+    pub(crate) async fn get_json_opt<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<Option<T>, LcuError> {
+        let (resp, started) = self.fetch(path).await?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            Self::log_refusal(path, status, started);
+            return Ok(None);
+        }
+        if !status.is_success() {
+            Self::log_refusal(path, status, started);
             return Err(LcuError::Parse(format!(
                 "{path} unavailable (HTTP {})",
                 status.as_u16()
@@ -90,7 +125,7 @@ impl LcuClient {
                     elapsed_ms = started.elapsed().as_millis(),
                     "LCU request succeeded"
                 );
-                Ok(value)
+                Ok(Some(value))
             }
 
             Err(e) => {
@@ -106,6 +141,15 @@ impl LcuClient {
         }
     }
 
+    pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, LcuError> {
+        self.get_json_opt(path)
+            .await?
+            .ok_or_else(|| LcuError::Parse(format!("{path} unavailable (HTTP 404)")))
+    }
+
     pub(crate) fn http(&self) -> &reqwest::Client {
         &self.client
     }
@@ -115,19 +159,9 @@ impl LcuClient {
     }
 
     pub async fn get_gameflow_phase(&self) -> Result<GamePhase, LcuError> {
-        let raw_phase: String = match self.get_json("/lol-gameflow/v1/gameflow-phase").await {
-            Ok(phase) => phase,
-
-            Err(e) => {
-                debug!(error = %e, "Gameflow phase unavailable; treating it as None");
-                return Ok(GamePhase::None);
-            }
-        };
-
-        Ok(GamePhase::from_lcu(&raw_phase).unwrap_or_else(|| {
-            warn!(raw = %raw_phase, "Unmapped LCU gameflow phase; treating it as None");
-            GamePhase::None
-        }))
+        let raw_phase: String = self.get_json("/lol-gameflow/v1/gameflow-phase").await?;
+        GamePhase::from_lcu(&raw_phase)
+            .ok_or_else(|| LcuError::Parse(format!("unmapped gameflow phase '{raw_phase}'")))
     }
 
     pub async fn get_champ_select_session(&self) -> Result<ChampSelectSession, LcuError> {
@@ -145,7 +179,6 @@ impl LcuClient {
     pub async fn get_region_locale(&self) -> Result<String, LcuError> {
         #[derive(serde::Deserialize)]
         struct RegionLocale {
-            #[serde(default)]
             locale: String,
         }
         let value: RegionLocale = self.get_json("/riotclient/region-locale").await?;
@@ -165,7 +198,11 @@ impl LcuClient {
         Ok(status.is_success())
     }
 
-    async fn patch_selected_skin(&self, path: &str, skin_id: u32) -> Result<bool, LcuError> {
+    async fn patch_selected_skin(
+        &self,
+        path: &str,
+        skin_id: u32,
+    ) -> Result<reqwest::StatusCode, LcuError> {
         let url = format!("{}{path}", self.base_url);
         let started = std::time::Instant::now();
         let payload = serde_json::json!({ "selectedSkinId": skin_id });
@@ -192,10 +229,14 @@ impl LcuClient {
             elapsed_ms = started.elapsed().as_millis(),
             "LCU skin PATCH answered"
         );
-        Ok(status.is_success())
+        Ok(status)
     }
 
-    pub async fn set_action_skin(&self, action_id: i64, skin_id: u32) -> Result<bool, LcuError> {
+    pub(crate) async fn action_skin_status(
+        &self,
+        action_id: i64,
+        skin_id: u32,
+    ) -> Result<reqwest::StatusCode, LcuError> {
         self.patch_selected_skin(
             &format!("/lol-champ-select/v1/session/actions/{action_id}"),
             skin_id,
@@ -203,9 +244,23 @@ impl LcuClient {
         .await
     }
 
-    pub async fn set_my_selection_skin(&self, skin_id: u32) -> Result<bool, LcuError> {
+    pub(crate) async fn my_selection_skin_status(
+        &self,
+        skin_id: u32,
+    ) -> Result<reqwest::StatusCode, LcuError> {
         self.patch_selected_skin("/lol-champ-select/v1/session/my-selection", skin_id)
             .await
+    }
+
+    pub async fn set_action_skin(&self, action_id: i64, skin_id: u32) -> Result<bool, LcuError> {
+        Ok(self
+            .action_skin_status(action_id, skin_id)
+            .await?
+            .is_success())
+    }
+
+    pub async fn set_my_selection_skin(&self, skin_id: u32) -> Result<bool, LcuError> {
+        Ok(self.my_selection_skin_status(skin_id).await?.is_success())
     }
 
     pub async fn get_owned_skin_ids(&self) -> Result<std::collections::HashSet<u32>, LcuError> {
@@ -226,7 +281,12 @@ impl LcuClient {
             .filter(|id| *id > 0)
             .collect();
 
-        if owned.len() != total {
+        if total > 0 && owned.is_empty() {
+            warn!(
+                total,
+                "The client inventory listed skins but none had a usable id; the skin schema may have changed"
+            );
+        } else if owned.len() != total {
             debug!(
                 total,
                 usable = owned.len(),

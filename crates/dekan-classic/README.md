@@ -38,12 +38,15 @@ find the characters.
 | --- | --- |
 | `generation/generator/mod.rs` | Shared names and paths (aliases, skin and animation bins, slot identity) and the re-exports of the segment folders below |
 | `generation/generator/reuse.rs` | One generation per mod folder at a time, and reuse of a generated folder whose manifest matches the champion archive, the Dekan build and the options |
+| `generation/generator/cleanup.rs` | Removal at startup, outside champion select and matches, of generated folders that can never be reused: standard skins built for another champion archive or another Dekan build, Rift Classic skins (always regenerated) and interrupted `.partial` builds. Folders Dekan did not write are never touched |
 | `generation/generator/slots/retarget.rs` | Relocates a skin's bin and animation graph to slot 0 (`retarget_skin_bin`, `retarget_animation_bin`, form cycles) |
+| `generation/generator/slots/record/mod.rs` | The generation record: facts about each generated skin bin (links, classification, animation graph, field-level differences from the source bin), logged and written to the mod's manifest |
 | `generation/generator/rift/characters.rs` | Finds companion and jade characters in a champion's bins, in on-disk order, with the per-WAD cache |
 | `generation/generator/rift/classic.rs` | `ClassicChampion`: builds a Classic Rift mod |
 | `generation/generator/store/standard.rs` | `StandardChampion`: builds a store skin's mod into slot 0 |
 | `generation/generator/store/prewarm.rs` | Lists the champion archives and prewarms the companion scan ahead of champion select |
-| `generation/generator/store/aliases.rs` | Resolves a champion id to its game alias from the installed game data |
+| `generation/generator/store/aliases.rs` | Resolves a champion id to a safe game alias, checked against the champion archive that is installed |
+| `generation/client_data.rs` | Reads the client's own game data archives (`ClientGameData`) and maps champion ids to aliases from its champion summary |
 | `generation/generator/store/missing_clips.rs` | Gives a skin's own graph the clips the default skin's animations ask for |
 | `generation/generator/cycle/form_cycle.rs`, `generation/generator/cycle/form_steps.rs`, `generation/generator/forms/form_bake.rs`, `generation/generator/cycle/form_audio.rs` | The skin's forms: the in-game `Ctrl+5` cycle, or one form baked into slot 0 |
 | `generation/builder.rs` | Classic id offsets: tells a classic champion id apart and converts classic champion and skin ids back to the regular ones |
@@ -114,7 +117,9 @@ find the characters.
   the stencil holds that form's reference (emitters identical in every form stay once, without stencil); an
   invisible ground effect per form, held by the form's persistent condition, writes that reference, and the first
   form's also starts as an idle effect a second after spawn, because one made on the loading screen does not
-  write the stencil. Idle effects move into a persistent condition per form. A part that a form draws with another
+  write the stencil. The form references are 42 to 48, 54, 55 and 57, values no effect of the game sets (a scan of
+  every game bin found 40, 41 and 49 in use, the old range of the forms). Idle effects move into a persistent
+  condition per form. A part that a form draws with another
   material gets a copy in the mesh (same vertices, its indices repeated) with that material, shown only in that
   form. Clips the game picks by equipped gear play, in each form's copy, that form's variant. What a cycle cannot
   carry is logged and listed by `cargo xtask skin-audit`: a form with another mesh or skeleton turns the cycle off

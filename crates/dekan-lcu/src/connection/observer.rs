@@ -72,6 +72,8 @@ fn make_lcu_tls_connector() -> Connector {
 
 const IDLE_REPORT_EVERY: u32 = 10;
 
+const STABLE_SESSION: std::time::Duration = std::time::Duration::from_secs(10);
+
 pub struct LcuObserver {
     explicit_lockfile: Option<PathBuf>,
     state_tx: StateSender,
@@ -121,6 +123,8 @@ impl LcuObserver {
 
                     let outcome = self.handle_connected_session(&lockfile, &token).await;
 
+                    let previous_phase = self.state_tx.borrow().phase;
+                    info!(previous_phase = ?previous_phase, "LCU session closed; match state reset");
                     set_lcu_connected(&self.state_tx, false);
                     clear_for_new_game(&self.state_tx);
                     set_phase(&self.state_tx, GamePhase::None);
@@ -171,20 +175,8 @@ impl LcuObserver {
         info!("LCU observer task finished cleanly");
     }
 
-    async fn handle_connected_session(
-        &self,
-        lockfile: &Lockfile,
-        token: &CancellationToken,
-    ) -> Result<bool, LcuError> {
-        let rest_client = LcuClient::new(lockfile, DEFAULT_LCU_TIMEOUT)?;
-        let initial_phase = tokio::select! {
-            () = token.cancelled() => {
-                info!("LCU observer cancelled during initial REST sync");
-                return Ok(false);
-            }
-            res = rest_client.get_gameflow_phase() => res,
-        };
-        match initial_phase {
+    async fn sync_initial_state(&self, rest_client: &LcuClient) {
+        match rest_client.get_gameflow_phase().await {
             Ok(initial_phase) => {
                 info!(phase = ?initial_phase, "Initial LCU gameflow phase synced");
                 set_phase(&self.state_tx, initial_phase);
@@ -202,24 +194,39 @@ impl LcuObserver {
                 }
 
                 if initial_phase == GamePhase::ChampSelect {
-                    if let Ok(session) = rest_client.get_champ_select_session().await {
-                        info!("Initial champ select session populated");
-                        apply_session_to_state(&self.state_tx, &session);
+                    match rest_client.get_champ_select_session().await {
+                        Ok(session) => {
+                            info!("Initial champ select session populated");
+                            apply_session_to_state(&self.state_tx, &session);
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Could not read the champ select session on connect")
+                        }
                     }
                 }
             }
             Err(e) => {
-                warn!(error = %e, "Could not fetch initial gameflow phase via REST");
+                warn!(error = %e, "Could not sync the initial gameflow phase; the state may be stale until the next client event");
             }
         }
 
-        if let Ok(summoner) = rest_client.get_current_summoner().await {
-            if !summoner.puuid.is_empty() {
-                debug!(puuid = %summoner.puuid, "Current summoner PUUID initialized on LCU connect");
+        match rest_client.get_current_summoner().await {
+            Ok(summoner) if !summoner.puuid.is_empty() => {
+                debug!("Current summoner identified on LCU connect");
                 let current_team = self.state_tx.borrow().team.clone();
                 dekan_core::state::set_team(&self.state_tx, Some(summoner.puuid), current_team);
             }
+            Ok(_) => warn!("The client returned the current summoner without an id"),
+            Err(e) => warn!(error = %e, "Could not read the current summoner on LCU connect"),
         }
+    }
+
+    async fn handle_connected_session(
+        &self,
+        lockfile: &Lockfile,
+        token: &CancellationToken,
+    ) -> Result<bool, LcuError> {
+        let rest_client = LcuClient::new(lockfile, DEFAULT_LCU_TIMEOUT)?;
 
         let mut req = lockfile
             .ws_url()
@@ -259,9 +266,19 @@ impl LcuObserver {
         }
 
         info!("Subscribed to gameflow, champ-select and lobby LCU event streams");
+
+        tokio::select! {
+            () = token.cancelled() => {
+                info!("LCU observer cancelled during initial REST sync");
+                return Ok(false);
+            }
+            () = self.sync_initial_state(&rest_client) => {}
+        }
         set_lcu_connected(&self.state_tx, true);
 
-        loop {
+        let started = std::time::Instant::now();
+        let mut undecodable_frames = 0u32;
+        let reason = loop {
             tokio::select! {
                 () = token.cancelled() => {
                     info!("LCU session received cancellation signal; closing stream");
@@ -270,33 +287,41 @@ impl LcuObserver {
                 }
                 msg_opt = ws_stream.next() => {
                     match msg_opt {
-                        Some(Ok(Message::Text(text))) => {
-                            if let Ok(Some(event)) = LcuEvent::parse(&text) {
-                                dispatch_event_to_state(&self.state_tx, &event);
+                        Some(Ok(Message::Text(text))) => match LcuEvent::parse(&text) {
+                            Ok(Some(event)) => dispatch_event_to_state(&self.state_tx, &event),
+                            Ok(None) => {}
+                            Err(e) => {
+                                undecodable_frames += 1;
+                                if undecodable_frames == 1 {
+                                    warn!(error = %e, bytes = text.len(), "LCU event frame could not be decoded; the client protocol may have changed");
+                                } else {
+                                    debug!(error = %e, bytes = text.len(), "LCU event frame could not be decoded");
+                                }
                             }
-                        }
+                        },
                         Some(Ok(Message::Ping(payload))) => {
                             let _ = ws_stream.send(Message::Pong(payload)).await; // ignore-ok: a pong that cannot be sent means the socket is gone; the read loop reports it
                         }
-                        Some(Ok(Message::Close(_))) => {
-                            info!("LCU WebSocket received close frame from client");
-                            break;
-                        }
+                        Some(Ok(Message::Close(_))) => break "close frame from the client",
                         Some(Err(e)) => {
                             warn!(error = %e, "LCU WebSocket read error");
-                            break;
+                            break "read error";
                         }
-                        None => {
-                            info!("LCU WebSocket stream reached EOF (client terminated)");
-                            break;
-                        }
+                        None => break "stream ended",
                         _ => {}
                     }
                 }
             }
-        }
+        };
 
-        Ok(true)
+        let lasted = started.elapsed();
+        info!(
+            reason,
+            duration_s = lasted.as_secs(),
+            undecodable_frames,
+            "LCU WebSocket session ended"
+        );
+        Ok(lasted >= STABLE_SESSION)
     }
 }
 

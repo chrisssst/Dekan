@@ -19,7 +19,15 @@ static PREWARM_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub fn get_or_index_game(game_dir: &Path) -> Result<Arc<GameIndexMap>, InjectError> {
     let mut files = Vec::new();
-    collect_game_wads(&game_dir.join("DATA").join("FINAL"), &mut files);
+    let unlisted = collect_game_wads(&game_dir.join("DATA").join("FINAL"), &mut files);
+    if let Some(first) = unlisted.first() {
+        warn!(
+            game = %game_dir.display(),
+            unlisted = unlisted.len(),
+            first_error = %first,
+            "Game folders could not be listed; their WADs are left out of the overlay index"
+        );
+    }
     files.sort();
     let fingerprint = files_fingerprint(&files);
     let key = game_dir
@@ -35,16 +43,19 @@ pub fn get_or_index_game(game_dir: &Path) -> Result<Arc<GameIndexMap>, InjectErr
         }
         info!(game = %game_dir.display(), "Game WAD files changed since they were indexed; indexing again");
     }
-    let index = match INDEX_CACHE_FILE.get() {
-        Some(file) => match load_index(file, fingerprint, game_dir) {
-            Some(index) => Arc::new(index),
-            None => {
-                let index = index_game(game_dir, files)?;
-                store_index(file, fingerprint, &index);
-                Arc::new(index)
+    let saved = INDEX_CACHE_FILE.get();
+    let index = match saved.and_then(|file| load_index(file, fingerprint, game_dir)) {
+        Some(index) => Arc::new(index),
+        None => {
+            let (index, unreadable) = index_game(game_dir, files)?;
+            if unreadable > 0 || !unlisted.is_empty() {
+                return Ok(Arc::new(index));
             }
-        },
-        None => Arc::new(index_game(game_dir, files)?),
+            if let Some(file) = saved {
+                store_index(file, fingerprint, &index);
+            }
+            Arc::new(index)
+        }
     };
     cache.insert(
         key,
@@ -94,7 +105,7 @@ pub(super) fn store_index(file: &Path, fingerprint: u64, index: &GameIndexMap) {
             debug!(file = %file.display(), bytes = out.len(), "Game WAD index saved for the next start")
         }
         Err(e) => {
-            debug!(file = %file.display(), error = %e, "Game WAD index not saved; the next start indexes again")
+            warn!(file = %file.display(), error = %e, "Game WAD index not saved; the next start indexes again")
         }
     }
 }
@@ -166,10 +177,17 @@ pub fn prewarm_game_index(game_dir: &Path) {
     if PREWARM_RUNNING.swap(true, Ordering::AcqRel) {
         return;
     }
+    struct PrewarmDone;
+    impl Drop for PrewarmDone {
+        fn drop(&mut self) {
+            PREWARM_RUNNING.store(false, Ordering::Release);
+        }
+    }
     let dir = game_dir.to_path_buf();
     let spawned = std::thread::Builder::new()
         .name("dekan-index-prewarm".into())
         .spawn(move || {
+            let _done = PrewarmDone;
             let started = Instant::now();
             match get_or_index_game(&dir) {
                 Ok(index) => debug!(
@@ -181,7 +199,6 @@ pub fn prewarm_game_index(game_dir: &Path) {
                     debug!(error = %e, "Game WAD index not prewarmed; the build will index on demand")
                 }
             }
-            PREWARM_RUNNING.store(false, Ordering::Release);
         });
     if let Err(e) = spawned {
         PREWARM_RUNNING.store(false, Ordering::Release);
@@ -192,9 +209,11 @@ pub fn prewarm_game_index(game_dir: &Path) {
 pub(super) fn index_game(
     game_dir: &Path,
     files: Vec<PathBuf>,
-) -> Result<GameIndexMap, InjectError> {
+) -> Result<(GameIndexMap, usize), InjectError> {
     let mut index = BTreeMap::new();
     let mut skipped = 0usize;
+    let mut unreadable = 0usize;
+    let mut first_error: Option<String> = None;
     for path in files {
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
@@ -208,7 +227,8 @@ pub(super) fn index_game(
             }
             Err(e) => {
                 debug!(path = %path.display(), error = %e, "Game WAD unreadable; left out");
-                skipped += 1;
+                unreadable += 1;
+                first_error.get_or_insert_with(|| format!("{}: {e}", path.display()));
                 continue;
             }
         };
@@ -227,32 +247,49 @@ pub(super) fn index_game(
     for tft in TFT_MOUNTS {
         index.remove(tft);
     }
-    if skipped > 0 {
+    if skipped > 0 || unreadable > 0 {
         warn!(
             skipped,
-            "Game WADs left out of the overlay index (unreadable or not v3.4)"
+            unreadable,
+            first_error = first_error.as_deref().unwrap_or_default(),
+            "Game WADs left out of the overlay index (unreadable or not v3.4); an index with unreadable WADs is not kept"
         );
     }
-    Ok(index)
+    Ok((index, unreadable))
 }
 
-pub(super) fn collect_game_wads(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+pub(super) fn collect_game_wads(dir: &Path, out: &mut Vec<PathBuf>) -> Vec<String> {
+    let mut unlisted = Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return unlisted,
+        Err(e) => {
+            unlisted.push(format!("{}: {e}", dir.display()));
+            return unlisted;
+        }
     };
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                unlisted.push(format!("{}: {e}", dir.display()));
+                continue;
+            }
+        };
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
         match entry.file_type() {
             Ok(kind) if kind.is_dir() => {
                 if !(name.ends_with(".wad") || name.ends_with(".wad.client")) {
-                    collect_game_wads(&path, out);
+                    unlisted.extend(collect_game_wads(&path, out));
                 }
             }
             Ok(kind) if kind.is_file() && name.ends_with(".wad.client") => out.push(path),
-            _ => {}
+            Ok(_) => {}
+            Err(e) => unlisted.push(format!("{}: {e}", path.display())),
         }
     }
+    unlisted
 }
 
 pub(super) fn subchunk_toc_hash(relpath: &Path) -> u64 {

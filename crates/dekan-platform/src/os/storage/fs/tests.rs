@@ -212,3 +212,60 @@ fn names_windows_treats_specially_are_refused_and_accepted_paths_stay_inside() {
         }
     }
 }
+
+#[test]
+fn a_symlink_entry_is_refused() {
+    let mut zip_bytes = Vec::new();
+    {
+        let mut writer = ZipWriter::new(Cursor::new(&mut zip_bytes));
+        writer
+            .add_symlink("data/link", r"C:\Windows", SimpleFileOptions::default())
+            .expect("symlink entry");
+        writer.finish().expect("finish zip");
+    }
+    let dest = std::env::temp_dir().join(format!("dekan_test_zip_symlink_{}", std::process::id()));
+
+    let err = safe_extract_zip(Cursor::new(&zip_bytes), &dest, &ExtractLimits::default())
+        .expect_err("a symlink entry must be refused");
+
+    assert!(matches!(err, PlatformError::Security(_)));
+    assert!(!dest.join("data/link").exists());
+    let _ = std::fs::remove_dir_all(&dest); // ignore-ok: cleanup test directory
+}
+
+#[test]
+fn an_entry_is_never_written_through_a_junction_in_the_destination() {
+    let root = std::env::temp_dir().join(format!("dekan_test_zip_junction_{}", std::process::id()));
+    let outside = root.join("outside");
+    let dest = root.join("dest");
+    std::fs::create_dir_all(&outside).expect("outside dir");
+    std::fs::create_dir_all(&dest).expect("dest dir");
+    let linked = dest.join("linked");
+    let made = std::process::Command::new("cmd")
+        .arg("/C")
+        .arg("mklink")
+        .arg("/J")
+        .arg(&linked)
+        .arg(&outside)
+        .output()
+        .expect("run mklink");
+    assert!(made.status.success(), "junction not created");
+
+    let mut zip_bytes = Vec::new();
+    {
+        let mut writer = ZipWriter::new(Cursor::new(&mut zip_bytes));
+        writer
+            .start_file("linked/escaped.txt", SimpleFileOptions::default())
+            .expect("entry");
+        writer.write_all(b"outside").expect("entry bytes");
+        writer.finish().expect("finish zip");
+    }
+
+    let err = safe_extract_zip(Cursor::new(&zip_bytes), &dest, &ExtractLimits::default())
+        .expect_err("a junction on the way must be refused");
+
+    assert!(matches!(err, PlatformError::Security(_)));
+    assert!(!outside.join("escaped.txt").exists());
+    let _ = std::fs::remove_dir(&linked); // ignore-ok: removes only the junction, never its target
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: cleanup test directory
+}

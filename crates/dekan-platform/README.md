@@ -34,8 +34,13 @@ injector needs.
 | `league/client_window.rs` | Locates the League client window so the overlay can follow it |
 | `ui/desktop/tray/mod.rs`, `ui/desktop/tray/window.rs` | The system tray icon (`tray/window.rs` is its Win32 window and message loop); a click opens the control panel, the right-click menu only shows the status, "Open Dekan" and "Quit". Shows the new-version notification; clicking it opens the release page |
 | `ui/pages/panel/mod.rs`, `ui/panel/panel.slint`, `ui/panel/panel_types.slint`, `ui/panel/panel_parts.slint` | The control panel: status, options, party, folders and diagnostics in one window |
-| `os/storage/preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
-| `ui/pages/welcome/mod.rs`, `ui/pages/party_dialog/mod.rs`, `ui/welcome.slint`, `ui/party.slint`, `ui/desktop/dialog.rs` | The first-run and About window, the party dialog and message boxes |
+| `os/storage/preferences.rs` | Persisted on/off preferences: skin injection (on by default), accept matches automatically (off by default), roll a random skin when none is chosen (on by default) and light match loading (on by default) |
+| `os/storage/disk.rs` | Whether the disk under a path is solid-state or rotational (seek-penalty query on its volume), logged at startup so performance reports show what the game is read from |
+| `ui/pages/welcome/mod.rs`, `ui/welcome.slint` | The first-run and About window |
+| `ui/pages/party_dialog/mod.rs`, `ui/party.slint` | The party windows: the created-code and join dialogs (`PartyDialog`) and the lobby invite (`PartyInvite`), a Join / Later question shown when friends in the same League lobby run Dekan and closed again if the lobby changes before it is answered |
+| `ui/desktop/dialog.rs` | The native file picker |
+| `ui/desktop/hotkey.rs` | The `Ctrl+Shift+B` shortcut that sends the tray's "mark a problem" event; it is registered only while a match is being played |
+| `os/system/identity/version.rs` | The version shown to the user, with two numbers (`1.2`) |
 | `ui/pages/runtime.rs`, `ui/pages/views.rs`, `ui/theme.slint`, `ui/app.slint`, `build.rs` | The `dekan-ui` thread that owns the Slint event loop, the generated window types, the shared design tokens and controls, and the build step that compiles the `.slint` files |
 | `ui/locale/i18n/mod.rs`, `ui/locale/i18n/tr.rs`, `ui/locale/i18n/en.rs` | Translations (Turkish and English, one table per file) for everything shown outside the League client; falls back to Turkish |
 | `os/instance/single_instance.rs`, `os/instance/activation.rs` | Only one Dekan runs at a time; starting it again brings the first one to the front |
@@ -67,9 +72,9 @@ injector needs.
   drive the real windows through it, so the `.slint` files are compiled with resources embedded as files (the
   embedding mode for the software renderer drops the accessible properties) and with debug info in debug
   builds.
-- **Language fallback**: the client's exact locale when a dictionary exists, else the same language
-  (`es_MX` → `es_ES`, `pt_PT` → `pt_BR`), else English. Champion quotes exist in Turkish/English only, so other
-  languages show none rather than one untranslated line.
+- **Language fallback**: Turkish is the default. Turkish and English client locales select the matching
+  dictionary; unsupported language families fall back to Turkish. Champion quote text follows those two
+  supported dictionaries.
 - **The overlay window draws no frame and never takes focus on its own.** It is created without activation,
   kept out of the taskbar, and shown or hidden through its window handle with `SW_SHOWNOACTIVATE`/`SW_HIDE`, so
   champion select keeps the keyboard. Clicking the search box takes the foreground (thread-input attach);

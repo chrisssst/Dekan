@@ -287,6 +287,8 @@ pub fn repair_custom_mods(
     let started = std::time::Instant::now();
     let mut seen = Vec::new();
     let mut interrupted = false;
+    let mut unstamped = 0usize;
+    let mut first_unstamped: Option<String> = None;
     let mut repairer = Repairer::new(&game, &hashes);
     for root in roots {
         let mut mods = Vec::new();
@@ -306,6 +308,8 @@ pub fn repair_custom_mods(
             let key = path.display().to_string();
             seen.push(key.clone());
             let Some(before) = package_stamp(&path, package) else {
+                unstamped += 1;
+                first_unstamped.get_or_insert_with(|| key.clone());
                 continue;
             };
             if verdicts.kept_original.get(&key) == Some(&before) {
@@ -343,6 +347,13 @@ pub fn repair_custom_mods(
         verdicts.kept_original.retain(|k, _| seen.contains(k));
     }
 
+    if let Some(first) = first_unstamped {
+        warn!(
+            unstamped,
+            first_mod = first,
+            "Custom mods whose files could not be read were not checked against the installed patch"
+        );
+    }
     save_verdicts(&verdicts_path, &verdicts);
     report.ran = true;
     report.totals = Some(totals(&verdicts));

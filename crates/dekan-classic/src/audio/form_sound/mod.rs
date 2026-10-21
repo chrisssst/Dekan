@@ -3,6 +3,7 @@ use std::path::Path;
 
 use dekan_wad::prop::tree::{self, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
+use tracing::warn;
 
 use super::sound_bank::{self, Object, wwise_id};
 use crate::binary::u32_le;
@@ -202,6 +203,8 @@ pub fn fire_on_entry(
         })
         .collect();
     let sound_key = hash_value(h(SOUND_EVENT));
+    let expected = entry_clips.len();
+    let mut fired = 0usize;
     for (key, clip) in clips.iter_mut() {
         let Some(event) = key.as_u32().and_then(|k| entry_clips.get(&k)) else {
             continue;
@@ -209,6 +212,7 @@ pub fn fire_on_entry(
         let Some(clip_fields) = clip.fields_mut() else {
             continue;
         };
+        fired += 1;
         let sound = (sound_key.clone(), sound_event(event));
         match tree::field_mut(clip_fields, h("mEventDataMap")) {
             Some(Value::Map { entries, .. }) => entries.push(sound),
@@ -222,6 +226,13 @@ pub fn fire_on_entry(
                 },
             ),
         }
+    }
+    if fired < expected {
+        warn!(
+            expected,
+            fired,
+            "Form sound events missing on some form clips; those forms keep the first form's sounds"
+        );
     }
     entry.body = tree::write_fields(&fields).map_err(bin_error)?;
     serialize_prop_file(&file).map_err(bin_error)

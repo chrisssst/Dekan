@@ -50,7 +50,9 @@ pub const WAD_SIGNATURE_SIZE: usize = 256;
 
 impl WadFile {
     pub fn open(path: &std::path::Path) -> Result<Self, WadError> {
-        let mut wad = Self::open_toc_only(path)?;
+        let mut wad = Self::open_toc_only(path).inspect_err(
+            |e| warn!(path = %path.display(), error = %e, "WAD could not be opened"),
+        )?;
         if let Some(name) = subchunk_toc_name(path) {
             match wad
                 .read(crate::hash::wad_path_hash(&name))
@@ -128,13 +130,25 @@ impl WadFile {
                 WAD_HEADER_SIZE + i * WAD_ENTRY_SIZE,
                 file_len,
                 header[3],
-            )?;
+            )
+            .inspect_err(|e| {
+                debug!(path = %path.display(), index = i, error = %e, "WAD table of contents entry is invalid");
+            })?;
             entries.insert(entry.path_hash, entry);
+        }
+        if entries.len() != entry_count {
+            warn!(
+                path = %path.display(),
+                declared = entry_count,
+                unique = entries.len(),
+                "WAD table of contents repeats path hashes; the last entry of each wins"
+            );
         }
 
         debug!(
             path = %path.display(),
             entries = entries.len(),
+            minor = header[3],
             "WAD table of contents read from disk"
         );
         let mut signature = [0u8; WAD_SIGNATURE_SIZE];
@@ -247,6 +261,21 @@ impl WadFile {
             }
         };
         read.map_err(WadError::Decompression)?;
+        let expected = match entry.compression {
+            CompressionType::Redirection | CompressionType::Raw => {
+                wanted.min(entry.compressed_size as u64)
+            }
+            _ => wanted,
+        };
+        if (prefix.len() as u64) < expected {
+            return Err(WadError::Decompression(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!(
+                    "entry {path_hash:#018x} yielded {} of {expected} bytes; the file may be truncated",
+                    prefix.len()
+                ),
+            )));
+        }
         Ok(Some(prefix))
     }
 
@@ -255,6 +284,10 @@ impl WadFile {
             return Ok(None);
         };
         let raw = self.read_raw(entry)?;
-        decompress_entry(entry, &raw, self.subchunk_toc.as_ref()).map(Some)
+        decompress_entry(entry, &raw, self.subchunk_toc.as_ref())
+            .map(Some)
+            .inspect_err(|e| {
+                warn!(path = %self.path.display(), path_hash = format!("{path_hash:016x}"), error = %e, "WAD entry could not be read");
+            })
     }
 }

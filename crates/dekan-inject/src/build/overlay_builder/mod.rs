@@ -34,6 +34,8 @@ pub struct NativeBuild {
     pub bytes: u64,
 
     pub removed: usize,
+
+    pub stuck: usize,
     pub elapsed: Duration,
 }
 
@@ -108,19 +110,23 @@ pub fn build(
     }
 
     let mut queue: Vec<ModIndex> = Vec::with_capacity(mods.len());
+    let mut no_op: Vec<&str> = Vec::new();
+    let (mut blocked_entries, mut conflicts) = (0usize, 0usize);
     for name in mods {
         let mut index = index_mod(&mods_dir.join(name), name)?;
         for mount in index.mounts.values_mut() {
+            let before = mount.entries.len();
             mount.entries.retain(|hash, _| !blocked.contains(hash));
+            blocked_entries += before - mount.entries.len();
         }
         index.mounts.retain(|_, mount| !mount.entries.is_empty());
         if index.mounts.is_empty() {
-            warn!(mod_name = %name, "Mod has nothing to merge; skipped");
+            no_op.push(name);
             continue;
         }
-        resolve_inside(&mut index);
+        conflicts += resolve_inside(&mut index);
         for older in &mut queue {
-            resolve_against(older, &index);
+            conflicts += resolve_against(older, &index);
         }
         queue.push(index);
         if cancelled() {
@@ -135,10 +141,31 @@ pub fn build(
     let mut overlay: BTreeMap<String, OverlayWad> = BTreeMap::new();
     let mut mounts = MountRoles::default();
     for index in &queue {
-        add_overlay_mod(&game, index, &mut overlay, &mut mounts)?;
+        if !add_overlay_mod(&game, index, &mut overlay, &mut mounts)? {
+            no_op.push(&index.name);
+        }
         if cancelled() {
             return Err(stop());
         }
+    }
+    if !no_op.is_empty() {
+        warn!(
+            mods = ?no_op,
+            "Mods with nothing that differs from the game were skipped; they change nothing this match"
+        );
+    }
+    if blocked_entries > 0 {
+        debug!(
+            blocked_entries,
+            "Mod entries that would replace a game SubChunkTOC were left out"
+        );
+    }
+    if conflicts > 0 {
+        info!(
+            mods = ?mods,
+            conflicts,
+            "Mods replace the same entries; the mod later in the list wins"
+        );
     }
     log_shared_copies(&game, &mounts, mods);
     if mounts.identical > 0 {
@@ -158,6 +185,7 @@ pub fn build(
     BUILDS_WAITING_FOR_COPIES.fetch_sub(1, Ordering::AcqRel);
     let (mut written, mut bytes) = (0usize, 0u64);
     let mut manifest = Vec::with_capacity(overlay.len());
+    let mut header_mismatch = 0usize;
     for (name, wad) in &overlay {
         let out = overlay_dir.join(&wad.relpath);
         let failed = |e: dekan_wad::error::WadError| match e {
@@ -182,25 +210,22 @@ pub fn build(
             written += 1;
         }
         bytes += outcome.bytes();
-        manifest.push(log_overlay_wad(
-            game.get(name),
-            name,
-            wad,
-            outcome,
-            mode,
-            &out,
-        ));
+        let (record, header_matches) =
+            log_overlay_wad(game.get(name), name, wad, outcome, mode, &out);
+        header_mismatch += usize::from(!header_matches);
+        manifest.push(record);
     }
     write_overlay_manifest(overlay_dir, mods, &manifest);
 
     let keep: HashSet<&str> = overlay.keys().map(String::as_str).collect();
-    let removed = remove_strays(overlay_dir, &keep, base_store.as_deref());
+    let strays = remove_strays(overlay_dir, &keep, base_store.as_deref());
 
     let build = NativeBuild {
         wad_files: overlay.len(),
         written,
         bytes,
-        removed,
+        removed: strays.removed,
+        stuck: strays.stuck + strays.unlisted,
         elapsed: started.elapsed(),
     };
     info!(
@@ -209,6 +234,8 @@ pub fn build(
         written = build.written,
         overlay_bytes = build.bytes,
         removed = build.removed,
+        stuck = build.stuck,
+        header_mismatch,
         game_index_ms = indexed_ms,
         elapsed_ms = build.elapsed.as_millis(),
         "Native overlay built"
@@ -235,7 +262,8 @@ fn add_overlay_mod(
     index: &ModIndex,
     overlay: &mut BTreeMap<String, OverlayWad>,
     mounts: &mut MountRoles,
-) -> Result<(), InjectError> {
+) -> Result<bool, InjectError> {
+    let mut merged = false;
     for (mount, content) in &index.mounts {
         let base_name = match game.get(mount) {
             Some(_) => mount.clone(),
@@ -269,6 +297,7 @@ fn add_overlay_mod(
             continue;
         }
 
+        merged = true;
         let base = clone_into(overlay, game, &base_name)?;
         for (hash, entry) in &entries {
             base.writer.insert(*hash, entry.clone());
@@ -299,7 +328,7 @@ fn add_overlay_mod(
             mounts.shared.insert(other_name.clone());
         }
     }
-    Ok(())
+    Ok(merged)
 }
 
 fn find_by_overlap(

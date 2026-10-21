@@ -9,6 +9,21 @@ use dekan_core::selection::ChampionId;
 use dekan_platform::fs::{ExtractLimits, atomic_write, mirror_tree, safe_extract_zip};
 use tracing::{debug, error, info, warn};
 
+static UNREADABLE_REPORTED: std::sync::Mutex<BTreeSet<PathBuf>> =
+    std::sync::Mutex::new(BTreeSet::new());
+
+fn report_unreadable(path: &Path, what: &str, error: &dyn std::fmt::Display) {
+    let first = UNREADABLE_REPORTED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(path.to_path_buf());
+    if first {
+        warn!(mod_path = %path.display(), error = %error, "{what}; it is not offered");
+    } else {
+        debug!(mod_path = %path.display(), error = %error, "{what}; it is not offered");
+    }
+}
+
 const SELECTION_FILE: &str = "mods_selection.json";
 
 const SELECTION_VERSION: u32 = 1;
@@ -44,8 +59,12 @@ pub fn mod_roots(app_data_dir: &Path) -> Vec<ModRoot> {
 }
 
 fn report_misplaced(own: &Path) {
-    let Ok(entries) = std::fs::read_dir(own) else {
-        return;
+    let entries = match std::fs::read_dir(own) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!(root = %own.display(), error = %e, "The custom mods folder could not be read");
+            return;
+        }
     };
     let misplaced: Vec<String> = entries
         .flatten()
@@ -79,7 +98,7 @@ pub fn targeted_aliases(entry: &ModEntry) -> BTreeSet<String> {
         ModPackage::Archive if is_modpkg_file(&entry.path) => match read_modpkg(&entry.path) {
             Ok(package) => package.wad_names(),
             Err(e) => {
-                debug!(mod_path = %entry.path.display(), error = %e, "Mod package could not be listed");
+                report_unreadable(&entry.path, "Mod package could not be listed", &e);
                 BTreeSet::new()
             }
         },
@@ -87,12 +106,12 @@ pub fn targeted_aliases(entry: &ModEntry) -> BTreeSet<String> {
             Ok(file) => match wad_names_in_archive(std::io::BufReader::new(file)) {
                 Ok(names) => names,
                 Err(e) => {
-                    debug!(mod_path = %entry.path.display(), error = %e, "Mod archive could not be listed");
+                    report_unreadable(&entry.path, "Mod archive could not be listed", &e);
                     BTreeSet::new()
                 }
             },
             Err(e) => {
-                debug!(mod_path = %entry.path.display(), error = %e, "Mod archive could not be opened");
+                report_unreadable(&entry.path, "Mod archive could not be opened", &e);
                 BTreeSet::new()
             }
         },
@@ -119,8 +138,12 @@ fn collect_wad_names(
     if depth > MAX_DEPTH {
         return;
     }
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            report_unreadable(dir, "Mod folder could not be read", &e);
+            return;
+        }
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -206,7 +229,7 @@ pub fn load_selection(state_dir: &Path) -> ModSelection {
             warn!(
                 file = %path.display(),
                 moved_to = %aside.display(),
-                moved = moved.is_ok(),
+                moved_error = ?moved.err(),
                 error = %e,
                 "Mod selection file is not valid; it was set aside and the selection starts empty"
             );

@@ -12,7 +12,9 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 
 1. **Compatibility check.** Every custom mod is checked against the current game. A mod whose data files
    point to files that no longer exist after a patch would crash the loading screen. Such a mod is dropped,
-   and the user is warned.
+   and the user is warned. Files that cannot be read or parsed are reported in `ModCompat.unreadable`, so the
+   mod no longer counts as checked. The app logs them and keeps the mod; only links that are proven missing
+   drop it.
 2. **Overlay build.** The builder indexes the installed game's archives. The index is cached and refreshed
    when a file's size or modification time changes. For every archive a mod touches, the builder writes a copy
    that holds the mod's files and the original bytes of everything else. Entries that turn out identical to the
@@ -31,16 +33,16 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `build/mod_compat/assets.rs` | Reads asset formats from their headers and finds the game's new name for a renamed asset path |
 | `build/mod_compat/repair.rs` | `Repairer`: rewrites a mod's bins and assets against the installed game, for packed WADs and folders |
 | `build/overlay_builder/mod.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
-| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes |
+| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes; an index built while some WADs were unreadable is used for that run and never kept |
 | `build/overlay_builder/mods.rs` | Index of a mod's WADs and loose files, stale bins retyped against the game, entries identical to the game dropped |
 | `build/overlay_builder/report.rs` | Logs each overlay WAD and writes the overlay manifest |
-| `build/overlay_builder/store.rs` | Shared game WAD copies prepared ahead of a match, and the stored base WADs moved in and out of the overlay |
-| `build/overlay_cache/mod.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
+| `build/overlay_builder/store.rs` | Shared game WAD copies prepared ahead of a match, the stored base WADs moved in and out of the overlay, and removal of stray WADs left by an earlier build (counted when they cannot be removed or listed) |
+| `build/overlay_cache/mod.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed; recording fails on a game WAD that exists but cannot be read |
 | `build/overlay.rs` | Overlay configuration and locations |
 | `injector/ltk_host/mod.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
-| `injector/overlay_process/mod.rs` | Starts the host, reads its output without blocking, and kills it if Dekan drops it |
+| `injector/overlay_process/mod.rs` | Starts the host, reads its output without blocking (host lines are decoded as lossy UTF-8), and kills it if Dekan drops it; a `Hooked` signal that arrives while waiting for `Armed` satisfies the wait |
 | `pipeline/mod.rs` | Orchestrates build → arm → confirm |
-| `pipeline/overlay.rs` | Builds the overlay for a pipeline run and records it in the overlay cache |
+| `pipeline/overlay.rs` | Builds the overlay for a pipeline run and records it in the overlay cache, unless stray WADs from an earlier build could not be removed |
 | `injector/trust/mod.rs` | Accepts an injector file only when its Authenticode signature is valid and from League Toolkit's publisher; reads the game-build limit compiled into the DLL |
 | `injector/dll_validator.rs` | SHA-256 helpers used to tell installed and published DLLs apart |
 
@@ -61,6 +63,9 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 - **A cached overlay is reused only for the same inputs and the same builder.** Its fingerprint records every
   mod file, base game archive and output archive, plus the builder and its revision; an unknown builder or
   another revision rebuilds it.
+- **A cache is never recorded over doubt.** A stray overlay WAD that cannot be removed, or a game WAD that
+  exists but cannot be read, leaves the overlay without a fingerprint so the next match rebuilds it; an index
+  of the game's WADs that skipped unreadable files is not saved.
 - **Every third-party binary is verified first.** If the injector is not signed by League Toolkit's publisher, it is refused. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 

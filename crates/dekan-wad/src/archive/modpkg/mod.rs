@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 
+use tracing::warn;
+
 use crate::error::WadError;
 use crate::hash::content_checksum;
 use crate::wad::CompressionType;
@@ -80,7 +82,7 @@ fn counted_string(reader: &mut impl Read) -> Result<String, WadError> {
     }
     let mut bytes = vec![0u8; len as usize];
     reader.read_exact(&mut bytes).map_err(io)?;
-    String::from_utf8(bytes).map_err(|_| invalid("a name that is not UTF-8"))
+    String::from_utf8(bytes).map_err(|_| invalid(format!("a {len}-byte name that is not UTF-8")))
 }
 
 fn nul_string(reader: &mut impl Read) -> Result<String, WadError> {
@@ -92,7 +94,8 @@ fn nul_string(reader: &mut impl Read) -> Result<String, WadError> {
             _ => return Err(invalid("a name longer than allowed")),
         }
     }
-    String::from_utf8(bytes).map_err(|_| invalid("a name that is not UTF-8"))
+    let len = bytes.len();
+    String::from_utf8(bytes).map_err(|_| invalid(format!("a {len}-byte name that is not UTF-8")))
 }
 
 fn wad_stem(name: &str) -> Option<&str> {
@@ -181,6 +184,19 @@ impl ModPkg {
                 wad,
             });
         }
+        let other_layers = records.iter().filter(|r| r.layer != base).count();
+        let loose = records
+            .iter()
+            .filter(|r| r.layer == base && r.wad == NONE)
+            .count();
+        if other_layers > 0 || loose > 0 {
+            warn!(
+                other_layers,
+                loose,
+                chunks = records.len(),
+                "Mod package chunks outside the base layer's WADs are ignored"
+            );
+        }
         Ok(Self {
             wads,
             base,
@@ -214,12 +230,19 @@ impl ModPkg {
     ) -> Result<BTreeMap<String, BTreeMap<u64, WriterEntry>>, WadError> {
         let file_len = reader.seek(SeekFrom::End(0)).map_err(io)?;
         let mut wads: BTreeMap<String, BTreeMap<u64, WriterEntry>> = BTreeMap::new();
+        let mut duplicates = 0usize;
+        let mut first_duplicate = None;
         for record in self.base_records() {
             let end = record
                 .data_offset
                 .checked_add(record.compressed_size)
                 .filter(|end| *end <= file_len)
-                .ok_or_else(|| invalid("a chunk runs past the end of the file"))?;
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "chunk {:016x} at offset {} with {} bytes runs past the end of the {file_len}-byte file",
+                        record.path_hash, record.data_offset, record.compressed_size
+                    ))
+                })?;
             if record.compressed_size > MAX_CHUNK_BYTES
                 || record.uncompressed_size > MAX_CHUNK_BYTES
             {
@@ -242,9 +265,7 @@ impl ModPkg {
             let kind = match record.compression {
                 0 if record.compressed_size == record.uncompressed_size => CompressionType::Raw,
                 1 if zstd::zstd_safe::get_frame_content_size(&stored)
-                    .ok()
-                    .flatten()
-                    .is_none_or(|size| size == record.uncompressed_size) =>
+                    .is_ok_and(|size| size.is_none_or(|size| size == record.uncompressed_size)) =>
                 {
                     CompressionType::Zstd
                 }
@@ -255,7 +276,8 @@ impl ModPkg {
                     )));
                 }
             };
-            wads.entry(self.wads[record.wad as usize].clone())
+            let replaced = wads
+                .entry(self.wads[record.wad as usize].clone())
                 .or_default()
                 .insert(
                     record.path_hash,
@@ -268,6 +290,17 @@ impl ModPkg {
                         payload: Payload::Memory(Arc::from(stored)),
                     },
                 );
+            if replaced.is_some() {
+                duplicates += 1;
+                first_duplicate.get_or_insert(record.path_hash);
+            }
+        }
+        if let Some(path_hash) = first_duplicate {
+            warn!(
+                duplicates,
+                first = format!("{path_hash:016x}"),
+                "Mod package holds several chunks for the same path; the last one wins"
+            );
         }
         Ok(wads)
     }

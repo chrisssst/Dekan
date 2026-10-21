@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use tracing::{debug, warn};
 
 use crate::client::LcuClient;
 use crate::error::LcuError;
@@ -129,30 +130,33 @@ const MAX_ASSET_BYTES: usize = 1024 * 1024;
 
 impl LcuClient {
     pub async fn get_champion_assets(&self, champion_id: u32) -> Result<ChampionAssets, LcuError> {
-        let url = format!(
-            "{}/lol-game-data/assets/v1/champions/{champion_id}.json",
-            self.base_url()
-        );
-        let resp = self.http().get(&url).send().await?;
-
-        if !resp.status().is_success() {
-            return Err(LcuError::Parse(format!(
-                "champion assets unavailable for {champion_id} (HTTP {})",
-                resp.status().as_u16()
-            )));
+        let assets: ChampionAssets = self
+            .get_json(&format!(
+                "/lol-game-data/assets/v1/champions/{champion_id}.json"
+            ))
+            .await?;
+        if assets.skins.is_empty() {
+            warn!(
+                champion_id,
+                "Champion assets arrived without skins; the client schema may have changed"
+            );
         }
-
-        Ok(resp.json::<ChampionAssets>().await?)
+        Ok(assets)
     }
 
     pub async fn get_asset_bytes(&self, path: &str) -> Result<Vec<u8>, LcuError> {
-        let url = format!("{}{path}", self.base_url());
-        let resp = self.http().get(&url).send().await?;
-
-        if !resp.status().is_success() {
+        let (resp, started) = self.fetch(path).await?;
+        let status = resp.status();
+        if !status.is_success() {
+            debug!(
+                path,
+                status = status.as_u16(),
+                elapsed_ms = started.elapsed().as_millis(),
+                "LCU refused an asset"
+            );
             return Err(LcuError::Parse(format!(
                 "asset unavailable at {path} (HTTP {})",
-                resp.status().as_u16()
+                status.as_u16()
             )));
         }
 

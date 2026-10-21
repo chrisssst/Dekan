@@ -2,7 +2,7 @@ use std::sync::mpsc::channel;
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -88,7 +88,18 @@ pub fn spawn_mark_problem_hotkey(events: UnboundedSender<TrayEvent>) -> Option<M
             }
             let _ = ready_tx.send(unsafe { GetCurrentThreadId() }); // ignore-ok: the spawner gave up waiting; the thread idles until the process ends
             let mut armed = false;
-            while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
+            loop {
+                let got = unsafe { GetMessageW(&mut msg, None, 0, 0) };
+                if got.0 == 0 {
+                    break;
+                }
+                if got.0 < 0 {
+                    error!(
+                        error = %windows::core::Error::from_thread(),
+                        "The mark-a-problem shortcut message loop failed; the shortcut stops working"
+                    );
+                    break;
+                }
                 match msg.message {
                     WM_ARM if !armed => armed = register(),
                     WM_DISARM if armed => {
@@ -100,6 +111,7 @@ pub fn spawn_mark_problem_hotkey(events: UnboundedSender<TrayEvent>) -> Option<M
                         if msg.wParam.0 == MARK_PROBLEM_ID as usize
                             && events.send(TrayEvent::MarkProblem).is_err() =>
                     {
+                        debug!("Nobody is listening for the shortcut any more; the shortcut thread ends");
                         break;
                     }
                     _ => {}

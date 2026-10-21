@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use tracing::warn;
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use windows::core::{HSTRING, w};
@@ -76,15 +77,27 @@ pub fn message_box(title: &str, text: &str) {
         MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
     };
 
-    unsafe {
-        // ignore-ok: an informational box has one button; which one came back carries nothing
-        let _ = MessageBoxW(
+    let answer = unsafe {
+        MessageBoxW(
             None,
             &HSTRING::from(text),
             &HSTRING::from(title),
             MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
+        )
+    };
+    note_if_not_shown(answer.0, title);
+}
+
+pub(crate) fn note_if_not_shown(answer: i32, title: &str) -> bool {
+    if answer == 0 {
+        warn!(
+            title,
+            error = %windows::core::Error::from_thread(),
+            "Windows could not show a message box"
         );
+        return false;
     }
+    true
 }
 
 pub fn message_box_warning(title: &str, text: &str) {
@@ -92,15 +105,15 @@ pub fn message_box_warning(title: &str, text: &str) {
         MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
     };
 
-    unsafe {
-        // ignore-ok: an informational box has one button; which one came back carries nothing
-        let _ = MessageBoxW(
+    let answer = unsafe {
+        MessageBoxW(
             None,
             &HSTRING::from(text),
             &HSTRING::from(title),
             MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND,
-        );
-    }
+        )
+    };
+    note_if_not_shown(answer.0, title);
 }
 
 #[must_use]
@@ -117,7 +130,7 @@ pub fn message_box_question(title: &str, text: &str) -> bool {
             MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND,
         )
     };
-    answer == IDYES
+    note_if_not_shown(answer.0, title) && answer == IDYES
 }
 
 pub fn dismiss_question(title: &str) -> bool {
@@ -134,7 +147,7 @@ pub fn dismiss_question(title: &str) -> bool {
         let mut owner = 0u32;
         GetWindowThreadProcessId(dialog, Some(&mut owner));
         owner == GetCurrentProcessId()
-            && PostMessageW(dialog, WM_COMMAND, WPARAM(IDNO.0 as usize), LPARAM(0)).is_ok()
+            && PostMessageW(Some(dialog), WM_COMMAND, WPARAM(IDNO.0 as usize), LPARAM(0)).is_ok()
     }
 }
 

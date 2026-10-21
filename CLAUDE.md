@@ -104,7 +104,8 @@ Enforced by `cargo xtask check`: 6, 10 and the clippy lints; by a permission pro
 An approved PR into `main` gets squash auto-merge once "CI OK" and "Security OK" pass. `release.yml` picks the next
 version (last tag + 1 minor, next major with the `breaking` label; docs-only merges skip), builds, attests and
 publishes a pre-release; after a match test `promote.yml` marks it latest. Protected paths (workflows, installer,
-xtask, toolchain, lockfile, trigger, injector trust and code, party cipher) never auto-merge.
+xtask, toolchain, lockfile, trigger, injector trust and code, self-update, `install.ps1`, party cipher) never
+auto-merge.
 
 ## Where to look
 

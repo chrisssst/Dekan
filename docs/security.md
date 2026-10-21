@@ -30,7 +30,7 @@ build is refused; the byte-patched "2040" DLL that failed in a real match is uns
 Revocation is not fetched online (`WTD_REVOKE_NONE`), so the check works offline and never stalls champion
 select.
 
-The signature replaced a list of audited SHA-256 hashes (ADR-036). League Toolkit now publishes a DLL per game
+The signature replaced a list of audited SHA-256 hashes. League Toolkit now publishes a DLL per game
 patch; with fixed hashes every patch needed a Dekan release before users could inject again, while the
 publisher's signature accepts each new official build the day it ships. The game-build limit is not a
 constant either: it is read from the DLL's own build comparison (`dekan_inject::trust::dll_build_limit`) and
@@ -55,12 +55,13 @@ to the workflow and the commit that produced it.
 ## Invariants in the code
 
 - Nothing is written to the game folder (`Game/`).
-- Extracting a `.fantome` or zip checks every entry path component by component, refuses symlinks, and
+- Extracting a `.fantome` or zip checks every entry path component by component, refuses symlink entries and any
+  entry that would be written through a symlink or junction already in the destination, and
   limits total size and entry count to stop zip bombs.
 - Dekan runs unelevated. The one exception is the injector copy: when Windows denies writing to the
   `tools` folder, Dekan starts itself elevated with `--install-injector <staging> <tools>`. That instance
   writes the staged files next to their targets as `.partial`, verifies the publisher's signature on exactly
-  those files, accepts only Dekan's own `tools` folders as the target, renames them into place and exits; a
+  those files, accepts only Dekan's own `tools` folders as the target, renames them into place (restoring the previous files if a rename fails) and exits; a
   refused file leaves the old ones untouched. It never starts
   the app. External resources are released by owning guards.
 - The only file Dekan changes in the League install is one key of `Config/LeagueClientSettings.yaml`
@@ -82,7 +83,12 @@ to the workflow and the commit that produced it.
   installer is started unelevated and asks for elevation itself, so it reopens Dekan as the original user;
   Dekan itself never elevates for an update. Copies not installed by the setup only get the notice.
 - Party mode never sends account ids or names. The relay sees a room id derived from the invite key and
-  encrypted blobs, nothing else.
+  encrypted blobs, nothing else. A lobby room's key is a SHA-256 of the lobby's party id with a fixed label: only
+  players in that lobby know the id, the relay sees just the derived room id, and nothing is announced until the
+  player accepts the invite. The party id is never logged. It is not a strong secret: a player who was invited to
+  that party or left it also knows it, and could join the room, see that members use Dekan and read what they
+  announce after accepting, or fill the room. The roster check still keeps such a player from changing anyone's
+  skin.
 
 ## Supply chain
 
@@ -96,8 +102,9 @@ to the workflow and the commit that produced it.
 ## Antivirus and SmartScreen
 
 The techniques Dekan depends on (`SetWindowsHookEx`, hooking `CreateFileA`, patching in memory) are exactly
-what antivirus heuristics flag. Combined with an unsigned installer, many users will see a SmartScreen
-warning. The real fix is code signing, which is a prerequisite for wide distribution.
+what antivirus heuristics flag. The release pipeline signs `dekan.exe` and the installer with Authenticode when
+its signing credentials are configured and fails the release if a signature is not valid; a release built without
+them is unsigned, and many users will then see a SmartScreen warning.
 
 ## Reporting a vulnerability
 

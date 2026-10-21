@@ -6,8 +6,8 @@ mod ui;
 
 pub use league::{client_settings, client_window, game_version, paths};
 pub use os::{
-    activation, authenticode, autostart, elevation, fs, preferences, process, single_instance,
-    user_profile, version,
+    activation, authenticode, autostart, disk, elevation, fs, preferences, process,
+    single_instance, user_profile, version,
 };
 pub use ui::{
     clipboard, dialog, hotkey, i18n, overlay_window, panel, party_dialog, shell, tray, welcome,

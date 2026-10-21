@@ -281,7 +281,8 @@ fn a_saved_game_index_comes_back_whole_and_anything_stale_or_damaged_is_refused(
     collect_game_wads(&game.join("DATA").join("FINAL"), &mut files);
     files.sort();
     let fingerprint = files_fingerprint(&files);
-    let index = index_game(&game, files.clone()).expect("index");
+    let (index, unreadable) = index_game(&game, files.clone()).expect("index");
+    assert_eq!(unreadable, 0);
     let file = root.0.join("game_index.bin");
 
     store_index(&file, fingerprint, &index);

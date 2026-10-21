@@ -14,6 +14,9 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   promote:
     name: Promote to latest
@@ -42,6 +45,22 @@ jobs:
             gh attestation verify "$exe" --repo "$REPO" \
               --signer-workflow "$REPO/.github/workflows/release.yml"
           done
+
+      - name: Verify the checksum signature
+        working-directory: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ -f SHA256SUMS.sig ]] || { echo "::error::$TAG has no SHA256SUMS.sig"; exit 1; }
+          key=$(gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/crates/dekan-app/src/updates/self_update/mod.rs?ref=$TAG" \
+            | sed -n '/^const RELEASE_PUBLIC_KEY/,/^];/p' | grep -oE '0x[0-9a-f]{2}' | sed 's/^0x//' | tr -d '\n')
+          [[ ${#key} -eq 64 ]] || { echo "::error::release public key not found in $TAG"; exit 1; }
+          printf '302a300506032b6570032100%s' "$key" | xxd -r -p > release.pub.der
+          tr -d '[:space:]' < SHA256SUMS.sig | xxd -r -p > SHA256SUMS.sig.bin
+          openssl pkeyutl -verify -pubin -inkey release.pub.der -keyform DER -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig.bin
 
       - name: Mark as latest release
         env:

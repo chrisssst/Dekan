@@ -52,12 +52,18 @@ fn assets_of(data: &ClientGameData, id: u32) -> Option<ChampionAssets> {
 pub fn sample(data: &ClientGameData, game: &Path) -> Result<Vec<Case>, String> {
     let aliases = data.champion_aliases().map_err(|e| e.to_string())?;
     let mut cases = Vec::new();
+    let mut skipped = Vec::new();
     for (id, alias) in aliases.iter().filter(|(id, _)| **id < 60_000) {
         let Some(assets) = assets_of(data, *id) else {
+            skipped.push(format!("{alias}: no champion data in the client"));
             continue;
         };
-        let Ok(champion) = StandardChampion::open(game, alias) else {
-            continue;
+        let champion = match StandardChampion::open(game, alias) {
+            Ok(champion) => champion,
+            Err(e) => {
+                skipped.push(format!("{alias}: {e}"));
+                continue;
+            }
         };
         let offered: Vec<_> = assets
             .skins
@@ -85,6 +91,13 @@ pub fn sample(data: &ClientGameData, game: &Path) -> Result<Vec<Case>, String> {
                 label: format!("{alias} {} {}", chroma.id, chroma.name),
             });
         }
+    }
+    if !skipped.is_empty() {
+        println!(
+            "campeoes sem caso (dados ausentes ou jogo ilegivel): {} | primeiro: {}",
+            skipped.len(),
+            skipped[0]
+        );
     }
     for (alias, skin, base, label) in [
         ("Orianna", 1, None, "reported: Orianna ball"),
@@ -207,22 +220,26 @@ pub(crate) fn run_harness(args: &[String]) {
     let data = match dekan_classic::client_data::ClientGameData::for_game(&game) {
         Ok(data) => data,
         Err(e) => {
-            println!("dados do cliente indisponiveis: {e}");
-            return;
+            eprintln!("[ERRO] dados do cliente indisponiveis: {e}");
+            std::process::exit(1);
         }
     };
     let cases = match sample(&data, &game) {
         Ok(cases) => cases,
         Err(e) => {
-            println!("{e}");
-            return;
+            eprintln!("[ERRO] {e}");
+            std::process::exit(1);
         }
     };
+    if cases.is_empty() {
+        eprintln!("[ERRO] nenhum caso de teste foi montado a partir dos dados do cliente");
+        std::process::exit(1);
+    }
     let scratch = std::env::temp_dir().join("dekan_harness_run");
     let cache = std::env::temp_dir().join("dekan_harness_cache");
     if let Err(e) = std::fs::create_dir_all(&cache) {
-        println!("pasta temporaria indisponivel: {e}");
-        return;
+        eprintln!("[ERRO] pasta temporaria indisponivel: {e}");
+        std::process::exit(1);
     }
     println!("jogo: {} | casos: {}", game.display(), cases.len());
     let mut outcomes = Vec::with_capacity(cases.len());
@@ -244,7 +261,10 @@ pub(crate) fn run_harness(args: &[String]) {
     }
     match std::fs::write(&out, render(&outcomes)) {
         Ok(()) => println!("relatorio: {}", out.display()),
-        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+        Err(e) => {
+            eprintln!("[ERRO] relatorio nao gravado em {}: {e}", out.display());
+            std::process::exit(1);
+        }
     }
     if outcomes.iter().any(|o| !o.failures.is_empty()) {
         std::process::exit(1);

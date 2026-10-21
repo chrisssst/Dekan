@@ -34,6 +34,8 @@ pub const OVERLAY_MIN_WIDTH: i32 = 320;
 
 pub const OVERLAY_MIN_HEIGHT: i32 = 380;
 
+static REPOSITION_FAILED: AtomicBool = AtomicBool::new(false);
+
 static OVERLAY_SIZE: (AtomicI32, AtomicI32) = (
     AtomicI32::new(OVERLAY_WIDTH),
     AtomicI32::new(OVERLAY_HEIGHT),
@@ -63,6 +65,7 @@ struct Overlay {
     previews: HashMap<u32, slint::Image>,
     preview_for: Option<u32>,
     presets: PresetsView,
+    party: Option<dekan_core::party::PartySummary>,
     expanded: Option<slint::LogicalSize>,
 }
 
@@ -77,7 +80,7 @@ fn with_overlay(work: impl FnOnce(&mut Overlay)) {
                 work(overlay);
             }
         }
-        Err(_) => debug!("Overlay update skipped: the overlay is already being updated"),
+        Err(_) => warn!("Overlay update dropped: the overlay is already being updated; the window may show stale data"),
     });
 }
 
@@ -127,6 +130,13 @@ impl OverlayController {
             overlay.presets = presets;
             overlay.render_presets();
             overlay.render_selection();
+        });
+    }
+
+    pub fn set_party(&self, party: Option<dekan_core::party::PartySummary>) {
+        self.post(move |overlay| {
+            overlay.party = party;
+            overlay.render_party();
         });
     }
 

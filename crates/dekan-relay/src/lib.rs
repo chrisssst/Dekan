@@ -3,18 +3,22 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{Sender, channel};
 use tokio::sync::{RwLock, Semaphore};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 pub const MAX_MEMBERS: usize = 5;
 
@@ -26,6 +30,10 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 const MEMBER_QUEUE: usize = 8;
 
+pub const CLOSE_REPLACED: u16 = 4000;
+
+pub const CLOSE_ROOM_FULL: u16 = 4009;
+
 mod room;
 
 pub use room::{ClientInbound, MemberInfo, Room, RoomsMap, SealedBlob, is_valid_room_key};
@@ -35,6 +43,7 @@ const HEALTH_RESPONSE: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Type: application/js
 const BAD_REQUEST_RESPONSE: &[u8] =
     b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\nInvalid room key";
 
+const ROOM_FULL_WARN_EVERY_SECS: u64 = 60;
 const ROOM_FULL_RESPONSE: &[u8] = b"HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\nRoom is full";
 
 const UPGRADE_REQUIRED_RESPONSE: &[u8] = b"HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\nDekan party relay: WebSocket upgrade required at /room?key=";
@@ -59,42 +68,57 @@ impl RelayServer {
 
     pub async fn run(self: Arc<Self>, listener: TcpListener, cancel: CancellationToken) {
         let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
+        let mut accept_failing = false;
+        let mut saturated = false;
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,
                 res = listener.accept() => {
-                    let (stream, peer_addr) = match res {
-                        Ok(pair) => pair,
+                    let stream = match res {
+                        Ok((stream, _)) => {
+                            accept_failing = false;
+                            stream
+                        }
                         Err(e) => {
-                            warn!(error = %e, "Accept error");
+                            if !accept_failing {
+                                warn!(error = %e, "Accept error; retrying until it clears");
+                                accept_failing = true;
+                            }
                             tokio::time::sleep(Duration::from_millis(50)).await;
                             continue;
                         }
                     };
                     let Ok(slot) = slots.clone().try_acquire_owned() else {
-                        debug!(peer = %peer_addr, "Connection refused: the relay is at its connection limit");
+                        if !saturated {
+                            warn!(limit = MAX_CONNECTIONS, "Connection refused: the relay is at its connection limit");
+                            saturated = true;
+                        }
                         continue;
                     };
+                    saturated = false;
                     let server = self.clone();
                     tokio::spawn(async move {
                         let _slot = slot;
-                        if tokio::time::timeout(HANDSHAKE_TIMEOUT * 6, server.handle_connection(stream, peer_addr))
-                            .await
-                            .is_err()
-                        {
-                            debug!(peer = %peer_addr, "Connection closed: no complete session in time");
-                        }
+                        server.handle_connection(stream).await;
                     });
                 }
             }
         }
     }
 
-    async fn handle_connection(&self, mut stream: TcpStream, peer: std::net::SocketAddr) {
+    async fn handle_connection(&self, mut stream: TcpStream) {
         let mut peek_buf = [0u8; 1024];
         let n = match tokio::time::timeout(HANDSHAKE_TIMEOUT, stream.peek(&mut peek_buf)).await {
             Ok(Ok(n)) if n > 0 => n,
-            _ => return,
+            Ok(Ok(_)) => return,
+            Ok(Err(e)) => {
+                debug!(error = %e, "Connection dropped before sending a request");
+                return;
+            }
+            Err(_) => {
+                debug!("Connection sent no request in time");
+                return;
+            }
         };
 
         let request_str = String::from_utf8_lossy(&peek_buf[..n]);
@@ -112,6 +136,7 @@ impl RelayServer {
             .to_ascii_lowercase()
             .contains("upgrade: websocket");
         if !is_websocket {
+            debug!("Request refused: WebSocket upgrade required");
             let mut discard = [0u8; 1024];
             let _ = stream.read(&mut discard).await; // ignore-ok: consume request before response
             let _ = stream.write_all(UPGRADE_REQUIRED_RESPONSE).await; // ignore-ok: client disconnect
@@ -122,6 +147,7 @@ impl RelayServer {
 
         let room_key = Self::extract_room_key(&request_str);
         let Some(key) = room_key else {
+            debug!("Request refused: invalid room key");
             let mut discard = [0u8; 1024];
             let _ = stream.read(&mut discard).await; // ignore-ok: consume request before response
             let _ = stream.write_all(BAD_REQUEST_RESPONSE).await; // ignore-ok: client disconnect
@@ -133,6 +159,7 @@ impl RelayServer {
         let existing = self.rooms.read().await.get(&key).cloned();
         if let Some(room) = existing {
             if room.read().await.is_full() {
+                note_room_full("before the handshake");
                 let mut discard = [0u8; 1024];
                 let _ = stream.read(&mut discard).await; // ignore-ok: consume request before response
                 let _ = stream.write_all(ROOM_FULL_RESPONSE).await; // ignore-ok: client disconnect
@@ -149,24 +176,29 @@ impl RelayServer {
         let ws_stream = match tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake).await {
             Ok(Ok(ws)) => ws,
             Ok(Err(e)) => {
-                debug!(peer = %peer, error = %e, "WebSocket handshake failed");
+                debug!(error = %e, "WebSocket handshake failed");
                 return;
             }
             Err(_) => {
-                debug!(peer = %peer, "WebSocket handshake timed out");
+                debug!("WebSocket handshake timed out");
                 return;
             }
         };
 
         let room_arc = {
             let mut rooms = self.rooms.write().await;
-            rooms
+            let opened = !rooms.contains_key(&key);
+            let room = rooms
                 .entry(key.clone())
                 .or_insert_with(|| Arc::new(RwLock::new(Room::new())))
-                .clone()
+                .clone();
+            if opened {
+                info!(rooms = rooms.len(), "Relay: room opened");
+            }
+            room
         };
 
-        debug!(peer = %peer, room = %key, "Client joined room");
+        debug!(room = %key, "Client joined room");
 
         self.run_client_session(ws_stream, room_arc, key).await;
     }
@@ -198,7 +230,12 @@ impl RelayServer {
             let mut room = room_arc.write().await;
             if room.is_full() {
                 drop(room);
-                let _ = write.close().await; // ignore-ok: the room filled up during the handshake
+                note_room_full("during the handshake");
+                let frame = CloseFrame {
+                    code: CloseCode::Library(CLOSE_ROOM_FULL),
+                    reason: "room is full".into(),
+                };
+                let _ = write.send(Message::Close(Some(frame))).await; // ignore-ok: the client is told best effort and retries on its own otherwise
                 return;
             }
             room.add_member(tx)
@@ -207,7 +244,14 @@ impl RelayServer {
         loop {
             tokio::select! {
                 outgoing = rx.recv() => {
-                    let Some(payload) = outgoing else { break };
+                    let Some(payload) = outgoing else {
+                        let frame = CloseFrame {
+                            code: CloseCode::Library(CLOSE_REPLACED),
+                            reason: "replaced by a newer connection".into(),
+                        };
+                        let _ = write.send(Message::Close(Some(frame))).await; // ignore-ok: the member was already dropped from the room
+                        break;
+                    };
                     if write.send(Message::Text(payload.into())).await.is_err() {
                         break;
                     }
@@ -216,27 +260,38 @@ impl RelayServer {
                     let Some(msg_res) = incoming else { break };
                     let msg = match msg_res {
                         Ok(m) => m,
-                        Err(_) => break,
+                        Err(e) => {
+                            if matches!(e, tokio_tungstenite::tungstenite::Error::Capacity(_)) {
+                                warn!(room = %room_key, error = %e, "Session closed: message over the size limit");
+                            } else {
+                                debug!(room = %room_key, error = %e, "Session ended with a read error");
+                            }
+                            break;
+                        }
                     };
 
                     match msg {
                         Message::Text(text) => {
-                            if text.len() > MAX_MESSAGE_BYTES {
-                                warn!(room = %room_key, "Oversized message dropped");
-                                continue;
-                            }
                             if text == "ping" {
                                 let _ = write.send(Message::Text("pong".into())).await; // ignore-ok: pong response
                                 continue;
                             }
-                            let Ok(inbound) = serde_json::from_str::<ClientInbound>(&text) else {
-                                continue;
+                            let inbound = match serde_json::from_str::<ClientInbound>(&text) {
+                                Ok(inbound) => inbound,
+                                Err(e) => {
+                                    debug!(room = %room_key, error = %e, "Message not understood; ignored");
+                                    continue;
+                                }
                             };
                             match inbound {
                                 ClientInbound::Join { summoner_id, .. } => {
-                                    if summoner_id > 0 {
-                                        let mut room = room_arc.write().await;
-                                        room.update_join(session_id, summoner_id);
+                                    if summoner_id == 0 {
+                                        debug!(room = %room_key, "Join ignored: member id is zero");
+                                        continue;
+                                    }
+                                    let replaced = room_arc.write().await.update_join(session_id, summoner_id);
+                                    if replaced > 0 {
+                                        info!(replaced, "Relay: an older connection of the same member was replaced");
                                     }
                                 }
                                 ClientInbound::Skin { skin } => {
@@ -270,10 +325,33 @@ impl RelayServer {
             if let Some(r) = rooms.get(&room_key) {
                 if r.read().await.is_empty() {
                     rooms.remove(&room_key);
-                    debug!(room = %room_key, "Cleaned up empty room");
+                    info!(rooms = rooms.len(), "Relay: room closed");
                 }
             }
         }
+    }
+}
+
+fn note_room_full(stage: &'static str) {
+    static LAST_WARN_SECS: AtomicU64 = AtomicU64::new(0);
+    static SUPPRESSED: AtomicU64 = AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let last = LAST_WARN_SECS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) >= ROOM_FULL_WARN_EVERY_SECS
+        && LAST_WARN_SECS
+            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    {
+        let suppressed = SUPPRESSED.swap(0, Ordering::Relaxed);
+        warn!(
+            max_members = MAX_MEMBERS,
+            stage, suppressed, "Join refused: the room is full"
+        );
+    } else {
+        SUPPRESSED.fetch_add(1, Ordering::Relaxed);
+        debug!(stage, "Join refused: the room is full");
     }
 }
 

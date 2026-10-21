@@ -24,6 +24,33 @@ impl fmt::Display for InstallError {
     }
 }
 
+pub const EXIT_DENIED: i32 = 4;
+pub const EXIT_NOT_TRUSTED: i32 = 5;
+pub const EXIT_FAILED: i32 = 6;
+
+impl InstallError {
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::Denied => EXIT_DENIED,
+            Self::NotTrusted(..) => EXIT_NOT_TRUSTED,
+            Self::Failed(_) => EXIT_FAILED,
+        }
+    }
+}
+
+#[must_use]
+pub fn exit_reason(code: i32) -> &'static str {
+    match code {
+        2 => "the elevated copy received the wrong arguments",
+        3 => "the target is not Dekan's own tools folder",
+        EXIT_DENIED => "Windows denied writing to the tools folder even when elevated",
+        EXIT_NOT_TRUSTED => "a staged injector file is not signed by its publisher",
+        EXIT_FAILED => "reading, writing or replacing the injector files failed",
+        _ => "unknown",
+    }
+}
+
 fn io_error(context: &str, e: &std::io::Error) -> InstallError {
     if e.kind() == std::io::ErrorKind::PermissionDenied {
         InstallError::Denied
@@ -66,17 +93,71 @@ pub fn install(staging: &Path, tools: &Path) -> Result<(), InstallError> {
         partials.push((name, partial.clone()));
         verify(name, &partial)
     });
-    let placed = staged.and_then(|()| {
-        partials.iter().try_for_each(|(name, partial)| {
-            std::fs::rename(partial, tools.join(name)).map_err(|e| io_error("replacing a tool", &e))
-        })
-    });
+    let placed = staged.and_then(|()| replace_all(tools, &partials));
     if placed.is_err() {
         for (_, partial) in &partials {
             let _ = std::fs::remove_file(partial); // ignore-ok: the install error is what gets reported
         }
     }
     placed
+}
+
+fn replace_all(tools: &Path, partials: &[(&str, PathBuf)]) -> Result<(), InstallError> {
+    let mut done: Vec<(PathBuf, Option<PathBuf>)> = Vec::with_capacity(partials.len());
+    for (name, partial) in partials {
+        let target = tools.join(name);
+        let previous = target
+            .is_file()
+            .then(|| tools.join(format!("{name}.previous")));
+        let step = match &previous {
+            Some(previous) => std::fs::rename(&target, previous),
+            None => Ok(()),
+        }
+        .and_then(|()| std::fs::rename(partial, &target));
+        match step {
+            Ok(()) => done.push((target, previous)),
+            Err(e) => {
+                done.push((target, previous));
+                let failed = io_error("replacing a tool", &e);
+                return Err(match roll_back(&done) {
+                    Some(why) => InstallError::Failed(format!(
+                        "{failed}; the previous files could not be restored: {why}"
+                    )),
+                    None => failed,
+                });
+            }
+        }
+    }
+    for (_, previous) in &done {
+        if let Some(previous) = previous {
+            let _ = std::fs::remove_file(previous); // ignore-ok: a leftover .previous copy is harmless and the install succeeded
+        }
+    }
+    Ok(())
+}
+
+fn roll_back(done: &[(PathBuf, Option<PathBuf>)]) -> Option<String> {
+    let mut first_error = None;
+    for (target, previous) in done.iter().rev() {
+        let restored = match previous {
+            Some(previous) if previous.is_file() => {
+                let _ = std::fs::remove_file(target); // ignore-ok: the target may not have been replaced yet; the restore below reports a real failure
+                std::fs::rename(previous, target)
+            }
+            Some(_) => Ok(()),
+            None => std::fs::remove_file(target).or_else(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            }),
+        };
+        if let Err(e) = restored {
+            first_error.get_or_insert_with(|| format!("{}: {e}", target.display()));
+        }
+    }
+    first_error
 }
 
 #[must_use]
@@ -164,6 +245,17 @@ mod tests {
         assert!(accepts(r"D:\Portable\Dekan\tools"));
         assert!(!accepts(r"C:\Windows\System32"));
         assert!(!accepts(r"C:\Program Files\Dekan"));
+    }
+
+    #[test]
+    fn every_install_error_has_its_own_exit_code_and_reason() {
+        let codes = [
+            InstallError::Denied.exit_code(),
+            InstallError::NotTrusted("x", String::new()).exit_code(),
+            InstallError::Failed(String::new()).exit_code(),
+        ];
+        assert_eq!(codes, [EXIT_DENIED, EXIT_NOT_TRUSTED, EXIT_FAILED]);
+        assert!(codes.iter().all(|c| exit_reason(*c) != "unknown"));
     }
 
     #[test]

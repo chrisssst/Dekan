@@ -1,4 +1,7 @@
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use tracing::debug;
 
 use crate::error::PlatformError;
 
@@ -41,37 +44,64 @@ pub fn tools_dir_candidates(data_dir: &Path) -> Vec<PathBuf> {
 
 #[must_use]
 pub fn riot_league_installs() -> Vec<PathBuf> {
+    riot_installs(&mut Vec::new())
+}
+
+fn riot_installs(notes: &mut Vec<String>) -> Vec<PathBuf> {
     let Ok(program_data) = std::env::var("ProgramData") else {
+        notes.push("ProgramData is not set".into());
         return Vec::new();
     };
     let metadata = PathBuf::from(program_data)
         .join("Riot Games")
         .join("Metadata");
-    let Ok(entries) = std::fs::read_dir(&metadata) else {
-        return Vec::new();
+    let entries = match std::fs::read_dir(&metadata) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            notes.push(format!("no Riot metadata folder at {}", metadata.display()));
+            return Vec::new();
+        }
+        Err(e) => {
+            notes.push(format!(
+                "Riot metadata folder {} unreadable: {e}",
+                metadata.display()
+            ));
+            return Vec::new();
+        }
     };
-    let mut patchlines: Vec<String> = entries
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
-        .filter(|name| {
-            name.strip_prefix("league_of_legends.")
-                .is_some_and(|rest| !rest.is_empty() && !rest.contains('.'))
-        })
-        .collect();
+    let mut patchlines: Vec<String> = Vec::new();
+    for entry in entries {
+        match entry {
+            Ok(entry) if entry.path().is_dir() => {
+                if let Some(name) = entry.file_name().to_str().map(str::to_owned) {
+                    patchlines.push(name);
+                }
+            }
+            Ok(_) => {}
+            Err(e) => notes.push(format!("Riot metadata entry unreadable: {e}")),
+        }
+    }
+    patchlines.retain(|name| {
+        name.strip_prefix("league_of_legends.")
+            .is_some_and(|rest| !rest.is_empty() && !rest.contains('.'))
+    });
 
     patchlines.sort_by_key(|name| (name != "league_of_legends.live", name.clone()));
 
-    patchlines
-        .iter()
-        .filter_map(|name| {
-            let settings = metadata
-                .join(name)
-                .join(format!("{name}.product_settings.yaml"));
-            let text = std::fs::read_to_string(settings).ok()?;
-            install_path_from_settings(&text)
-        })
-        .collect()
+    let mut installs = Vec::new();
+    for name in &patchlines {
+        let settings = metadata
+            .join(name)
+            .join(format!("{name}.product_settings.yaml"));
+        match std::fs::read_to_string(&settings) {
+            Ok(text) => match install_path_from_settings(&text) {
+                Some(path) => installs.push(path),
+                None => notes.push(format!("{name} registers no install path")),
+            },
+            Err(e) => notes.push(format!("{} unreadable: {e}", settings.display())),
+        }
+    }
+    installs
 }
 
 fn install_path_from_settings(text: &str) -> Option<PathBuf> {
@@ -84,19 +114,59 @@ fn install_path_from_settings(text: &str) -> Option<PathBuf> {
 
 #[must_use]
 pub fn discover_game_dir() -> Option<PathBuf> {
+    discover_game_dir_with_source().map(|(dir, _)| dir)
+}
+
+static LAST_MISS: Mutex<String> = Mutex::new(String::new());
+
+fn remember_miss(summary: &str) {
+    let mut last = LAST_MISS.lock().unwrap_or_else(|e| e.into_inner());
+    if *last != summary {
+        debug!(reasons = summary, "League install not found");
+        *last = summary.to_owned();
+    }
+}
+
+fn clear_miss() {
+    LAST_MISS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+#[must_use]
+pub fn discover_game_dir_with_source() -> Option<(PathBuf, &'static str)> {
+    let mut notes = Vec::new();
     for exe in crate::game_version::GAME_EXES
         .into_iter()
         .chain(crate::game_version::CLIENT_EXES)
     {
-        if let Ok(Some(path)) = crate::process::ProcessFinder::find_process_path(exe) {
-            if let Some(valid) = path.parent().and_then(normalize_game_dir) {
-                return Some(valid);
-            }
+        match crate::process::ProcessFinder::find_process_path(exe) {
+            Ok(Some(path)) => match path.parent().and_then(normalize_game_dir) {
+                Some(valid) => {
+                    clear_miss();
+                    return Some((valid, exe));
+                }
+                None => notes.push(format!(
+                    "{exe} runs from {}, which is not a game install",
+                    path.display()
+                )),
+            },
+            Ok(None) => {}
+            Err(e) => notes.push(format!("{exe} lookup failed: {e}")),
         }
     }
-    riot_league_installs()
-        .iter()
-        .find_map(|install| normalize_game_dir(install))
+    for install in riot_installs(&mut notes) {
+        match normalize_game_dir(&install) {
+            Some(dir) => {
+                clear_miss();
+                return Some((dir, "riot_client_installs"));
+            }
+            None => notes.push(format!(
+                "registered install {} is not a game install",
+                install.display()
+            )),
+        }
+    }
+    remember_miss(&notes.join("; "));
+    None
 }
 
 pub fn is_valid_game_dir(path: &Path) -> bool {
@@ -195,5 +265,30 @@ mod tests {
         assert_eq!(normalize_game_dir(&game_dir), Some(game_dir));
 
         let _ = std::fs::remove_dir_all(&temp); // ignore-ok: cleanup fixture after test
+    }
+
+    #[test]
+    fn test_the_discovered_install_names_where_it_was_found_and_is_a_real_game_folder() {
+        let found = discover_game_dir_with_source();
+        assert_eq!(
+            found.as_ref().map(|(dir, _)| dir.clone()),
+            discover_game_dir()
+        );
+        let Some((dir, found_by)) = found else {
+            return;
+        };
+        assert!(is_valid_game_dir(&dir), "{}", dir.display());
+        let from_process = crate::game_version::GAME_EXES
+            .into_iter()
+            .chain(crate::game_version::CLIENT_EXES)
+            .any(|exe| exe == found_by);
+        if !from_process {
+            assert_eq!(found_by, "riot_client_installs");
+            assert!(
+                riot_league_installs()
+                    .iter()
+                    .any(|install| normalize_game_dir(install).as_ref() == Some(&dir))
+            );
+        }
     }
 }

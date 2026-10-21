@@ -7,6 +7,7 @@ fn picking_103() -> AppState {
         phase: GamePhase::ChampSelect,
         champion_id: Some(103),
         local_puuid: Some("me-1".into()),
+        party_share: true,
         overlay_target: Some(OverlayTarget {
             champion_id: 103,
             skin_id: 103_015,
@@ -60,6 +61,7 @@ fn test_we_announce_only_a_valid_pick_for_our_own_champion() {
         phase: GamePhase::ChampSelect,
         champion_id: Some(103),
         local_puuid: Some("me-1".into()),
+        party_share: true,
         overlay_target: Some(OverlayTarget {
             champion_id: 103,
             skin_id: 103_015,
@@ -101,6 +103,15 @@ fn test_we_announce_only_a_valid_pick_for_our_own_champion() {
         None,
         "without our PUUID nobody could verify us"
     );
+}
+
+#[test]
+fn test_nothing_is_announced_before_the_player_agrees_to_share() {
+    let state = AppState {
+        party_share: false,
+        ..picking_103()
+    };
+    assert_eq!(announcement(&state, 7), None);
 }
 
 #[test]

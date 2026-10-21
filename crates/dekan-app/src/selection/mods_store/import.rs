@@ -86,6 +86,9 @@ pub fn import_archive(
         let names_a_champion = modpkg
             || dekan_wad::fantome::wad_names_in_archive(std::io::BufReader::new(open()?))
                 .map(|names| !names.is_empty())
+                .inspect_err(|e| {
+                    warn!(source = %source.display(), error = %e, "The archive's WAD names could not be listed; the import asks for the champion");
+                })
                 .unwrap_or(false);
         if !names_a_champion {
             let champion = champion_id.ok_or(ImportRefusal::NoChampion)?;

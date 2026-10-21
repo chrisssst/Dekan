@@ -1,13 +1,21 @@
 export struct PanelLabels {
     version: string,
-    section-options: string,
+    tab-home: string,
+    tab-options: string,
+    tab-party: string,
+    tab-help: string,
     theme: string,
     theme-classic: string,
     theme-crimson: string,
     theme-obsidian: string,
-    section-party: string,
     section-folders: string,
     section-diagnostics: string,
+    all-clear: string,
+    attention: string,
+    see-diagnostics: string,
+    party-hint: string,
+    injection: string,
+    injection-hint: string,
     random-skin: string,
     random-skin-hint: string,
     light-loading: string,
@@ -36,6 +44,7 @@ export struct PanelCheckRow {
 }
 
 export enum PanelAction {
+    toggle-injection,
     toggle-random-skin,
     toggle-light-loading,
     toggle-auto-accept,

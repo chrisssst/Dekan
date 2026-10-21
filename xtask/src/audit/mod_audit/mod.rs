@@ -113,6 +113,7 @@ pub(crate) fn run_mod_audit(args: &[String]) {
     let format_hashes = game.hashes.clone();
     let format_index = game.index.clone();
     let mut formats = Repairer::new(&format_index, &format_hashes);
+    let mut per_mod: Vec<BTreeSet<&'static str>> = Vec::new();
     for (original, copy) in &copies {
         let before_dir = work.join("before");
         let after_dir = work.join("after");
@@ -151,6 +152,7 @@ pub(crate) fn run_mod_audit(args: &[String]) {
                 .map(|w| w.source.clone())
                 .collect::<Vec<_>>(),
         );
+        let mut hits: BTreeSet<&'static str> = BTreeSet::new();
         for (name, after) in &after_wads {
             let Some(before) = before_wads.get(name) else {
                 println!("   {name}: nao existe no original");
@@ -168,14 +170,17 @@ pub(crate) fn run_mod_audit(args: &[String]) {
             println!("   {name}");
             match formats.unknown_formats(&after.source) {
                 Ok(found) if found.is_empty() => {}
-                Ok(found) => println!(
-                    "     formatos de asset que o jogo nao usa mais: {}",
-                    found
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
+                Ok(found) => {
+                    hits.insert(UNKNOWN_FORMAT);
+                    println!(
+                        "     formatos de asset que o jogo nao usa mais: {}",
+                        found
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
                 Err(e) => println!("     formatos nao verificados: {e}"),
             }
             println!(
@@ -230,10 +235,20 @@ pub(crate) fn run_mod_audit(args: &[String]) {
             for f in report.files_missing.values().take(15) {
                 println!("       arquivo {f}");
             }
+            hits.extend(break_classes(&report));
             failed |= !report.dangling_after.is_empty()
                 || !report.other_entries_identical
                 || report.linked_bins_missing > 0;
         }
+        per_mod.push(hits);
+    }
+    println!(
+        "
+== corpus: {} mods",
+        copies.len()
+    );
+    for (class, mods) in rank(&per_mod) {
+        println!("   {mods:>4} mods  {class}");
     }
     println!("\ncopias de trabalho em {}", work.display());
     if failed {
@@ -243,8 +258,10 @@ pub(crate) fn run_mod_audit(args: &[String]) {
 
 mod game;
 mod props;
+mod tally;
 mod wad;
 
 use game::{Game, ModWad, extract, wads};
 use props::{closure_keys, prop_files, same_but_asset_paths, unresolved_refs};
+use tally::{UNKNOWN_FORMAT, break_classes, rank};
 use wad::audit_wad;

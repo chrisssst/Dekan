@@ -37,7 +37,7 @@ logic that decides **what** to inject and **when**.
 | `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and patcher DLL reports |
 | `boot/startup/update.rs` | The update question (Yes/No, once per version), the fallback to the download page, and running the verified installer after shutdown |
 | `boot/startup/injector.rs` | The startup injector check and the automatic or panel-requested injector install |
-| `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions, and the supervised tasks the tray starts (notices, update and LTK checks, activation) |
+| `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions (including the "mark a problem" log marker and the diagnostics export), and the supervised tasks the tray starts (notices, update and LTK checks, activation) |
 | `trigger/mod.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
 | `trigger/arm/arm_key.rs`, `trigger/arm/arming.rs`, `trigger/arm/game_start.rs` | What to arm (keys, wanted skin, decision), arming and registering the patcher, and the game-start confirmation and late injection |
 | `trigger/prepare/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
@@ -55,15 +55,24 @@ logic that decides **what** to inject and **when**.
 | `selection/preset_store.rs` | Saves the skin presets and profiles |
 | `selection/book_store.rs` | Reads and writes those saved books, setting an unreadable file aside instead of overwriting it |
 | `party/party_manager/mod.rs` | Connects party mode to the app state and the tray |
+| `party/party_manager/lobby.rs` | Follows the League lobby: opens the room of a lobby with two or more players, asks the player before sharing picks (in the lobby or after a match), closes the room when the invite is declined or the lobby changes, and dismisses an invite left open once the queue starts |
+| `party/party_manager/rooms.rs` | Remembers the codes this machine created so it refuses to join its own room, and sorts the party clicks queued while the join window was open (only Leave is honored) |
 | `selection/skin_sync/mod.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
 | `game/live_game/mod.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
 | `game/live_game/data.rs`, `game/live_game/logs.rs` | Parsing the live data API, and the game log, screenshots and diagnostics exports after a match |
 | `updates/injector_install.rs` | Installs the injector on request (startup refusal or the panel's **Install injector**): downloads both files from the newest signed LTK Manager tag, verifies the publisher's signature, stages them under the state folder and copies them into `tools` as `.partial` files that are verified again before the rename; when Windows denies the copy, `main.rs` reruns `dekan.exe --install-injector <staging> <tools>` elevated, which does the same and accepts only Dekan's own `tools` folders |
 | `updates/ltk_release/mod.rs` | Lists the published LTK Manager releases every six hours and checks the publisher's signature on the injector files of each release it has not seen yet, newest first, until one is trusted. That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is announced once and the panel offers **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the trusted publisher changes. Off with `DEKAN_UPDATE_CHECK=0` |
+| `updates/ltk_release/watch.rs` | The supervised task behind that check: first run after a minute, then every six hours, publishing the latest verdict (`LtkNotice`) that the panel and the tray read |
 | `updates/ltk_release/fetch.rs` | The GitHub requests: release list, injector download and signature inspection |
 | `updates/update_check.rs` | Reads the latest published release from GitHub 15 s after launch and every six hours, and hands a newer one to the update question once; the control panel shows it too. Off with `DEKAN_UPDATE_CHECK=0` |
 | `updates/self_update/mod.rs` | Verifies and stages an update: the release assets, the Ed25519 signature of `SHA256SUMS` against the embedded release key, the installer's SHA-256, staging under `state/update` |
-| `logging.rs` | Log setup and level handling (`DEKAN_LOG`, `RUST_LOG`) |
+| `game/auto_accept.rs` | Accepts the ready check after a short delay when the option is on, only if the player has not answered meanwhile |
+| `game/game_log_trace/mod.rs` | Picks the animation, mesh and skin lines out of the game log for the debug trace after a match |
+| `diagnostics/startup.rs` | The startup injector check: a missing or unsigned tool file refuses the start and names the files |
+| `diagnostics/control_panel/mod.rs` | Turns the app state into the control panel's snapshot: status lines, party line, game and tools found |
+| `diagnostics/control_panel/export.rs`, `diagnostics/control_panel/redact.rs` | The diagnostics export: a zip of the last three days of logs, the overlay and generated-skin manifests and any screenshots, written as `.partial` then renamed; `redact.rs` masks the user's profile path, every `Users\<name>` folder and UUIDs in the text files before they are zipped |
+| `trigger/support.rs` | Helpers for the trigger: turns the League client's crash reporting off so the injector checks archives lazily, waits for the match to end, and logs a changed wanted skin once |
+| `logging.rs` | Log setup and level handling (`DEKAN_LOG`, `RUST_LOG`), the dropped-line counter and the panic hook that writes a panic's thread, location and message to the log |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Dekan running without administrator rights |
 
 ## Design notes
@@ -79,6 +88,7 @@ logic that decides **what** to inject and **when**.
   is fetched from the client with one connection, four at a time, and pushed to the page as it arrives.
   The session loop only polls that stream, so a `Select` is handled at once even while previews are still
   coming; hovering a chroma whose preview is not there yet waits for the stream instead of fetching it again.
+- **A supervised task that is essential and ends logs an error**, not a warning (`Supervisor::spawn_essential`): the observer, tray, auto-accept, party and the injection trigger are started that way.
 - **Auto-accept waits a moment** after the ready check appears: the client refuses an accept sent on the very
   first phase event about as often as it takes it. If the user accepted, declined or dodged meanwhile, nothing
   is sent.

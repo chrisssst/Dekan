@@ -1,6 +1,6 @@
 # Dekan 1.4 rebrand notes
 
-This package is based on the upstream Bullet 1.5 source tree.
+Dekan maintains its own product identity and release configuration.
 
 Customized for Dekan:
 
@@ -15,6 +15,6 @@ Customized for Dekan:
 - Discord community links point to `https://discord.gg/dekan`
 - existing Dekan release/promote/star-notification workflow customizations are retained
 
-The original MIT license and upstream attribution are preserved in `LICENSE`, `THIRD-PARTY-NOTICES.md` and `UPSTREAM-NOTICE.md`.
+Dekan uses the MIT license in `LICENSE`; third-party dependency terms remain in `THIRD-PARTY-NOTICES.md`.
 
 The package intentionally omits `assets/urgot-select.png` and `assets/urgot-ingame.png`; when overlaying it onto the existing Dekan repository, keep the current Dekan README screenshots already in `main`.

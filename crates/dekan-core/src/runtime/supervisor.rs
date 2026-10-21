@@ -1,11 +1,20 @@
 use std::future::Future;
-use tokio::task::{JoinError, JoinHandle};
+use std::time::Duration;
+use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
+
+struct Supervised {
+    name: &'static str,
+    watcher: JoinHandle<()>,
+    task: AbortHandle,
+}
+
 pub struct Supervisor {
     token: CancellationToken,
-    handles: Vec<(&'static str, JoinHandle<()>)>,
+    handles: Vec<Supervised>,
 }
 
 impl Supervisor {
@@ -27,15 +36,37 @@ impl Supervisor {
         F: FnOnce(CancellationToken) -> Fut,
         Fut: Future<Output = ()> + Send + 'static,
     {
+        self.spawn_with(name, false, f);
+    }
+
+    pub fn spawn_essential<F, Fut>(&mut self, name: &'static str, f: F)
+    where
+        F: FnOnce(CancellationToken) -> Fut,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.spawn_with(name, true, f);
+    }
+
+    fn spawn_with<F, Fut>(&mut self, name: &'static str, essential: bool, f: F)
+    where
+        F: FnOnce(CancellationToken) -> Fut,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
         let child_token = self.token.child_token();
         let task = tokio::spawn(f(child_token.clone()));
-        let handle = tokio::spawn(async move {
+        let abort = task.abort_handle();
+        let watcher = tokio::spawn(async move {
             match task.await {
                 Ok(()) if child_token.is_cancelled() => {}
+                Ok(()) if essential => error!(
+                    task = name,
+                    "Essential supervised task ended before shutdown; its work has stopped"
+                ),
                 Ok(()) => warn!(
                     task = name,
                     "Supervised task ended before shutdown; its work has stopped"
                 ),
+                Err(e) if e.is_cancelled() => {}
                 Err(e) => error!(
                     task = name,
                     panic = %panic_message(e),
@@ -43,17 +74,38 @@ impl Supervisor {
                 ),
             }
         });
-        self.handles.push((name, handle));
-        info!(task = name, "Spawned supervised task");
+        self.handles.push(Supervised {
+            name,
+            watcher,
+            task: abort,
+        });
+        info!(task = name, essential, "Spawned supervised task");
     }
 
     pub async fn shutdown(self) {
+        self.shutdown_within(SHUTDOWN_GRACE).await;
+    }
+
+    async fn shutdown_within(self, grace: Duration) {
         info!("Supervisor: initiating shutdown");
         self.token.cancel();
 
-        for (name, handle) in self.handles {
-            if let Err(e) = handle.await {
-                error!(task = name, error = %e, "Supervisor watch failed during shutdown");
+        for supervised in self.handles {
+            let abort = supervised.watcher.abort_handle();
+            match tokio::time::timeout(grace, supervised.watcher).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    error!(task = supervised.name, error = %e, "Supervisor watch failed during shutdown");
+                }
+                Err(_) => {
+                    supervised.task.abort();
+                    abort.abort();
+                    warn!(
+                        task = supervised.name,
+                        grace_ms = grace.as_millis(),
+                        "Supervised task did not stop when cancelled; aborted"
+                    );
+                }
             }
         }
 
@@ -108,6 +160,19 @@ mod tests {
         });
         supervisor.shutdown().await;
         assert_eq!(finished.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_a_task_that_ignores_cancellation_is_aborted_after_the_grace() {
+        let mut supervisor = Supervisor::new(CancellationToken::new());
+        let finished = Arc::new(AtomicUsize::new(0));
+        let after = Arc::clone(&finished);
+        supervisor.spawn("stuck", move |_token| async move {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            after.fetch_add(1, Ordering::SeqCst);
+        });
+        supervisor.shutdown_within(Duration::from_millis(50)).await;
+        assert_eq!(finished.load(Ordering::SeqCst), 0);
     }
 
     #[test]

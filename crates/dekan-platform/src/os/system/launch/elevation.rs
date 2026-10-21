@@ -1,15 +1,20 @@
 use std::path::Path;
 
-use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, HANDLE};
+use tracing::debug;
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_CANCELLED, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
 use windows::Win32::System::Threading::{
-    GetCurrentProcess, GetExitCodeProcess, INFINITE, OpenProcessToken, WaitForSingleObject,
+    GetCurrentProcess, GetExitCodeProcess, OpenProcessToken, WaitForSingleObject,
 };
 use windows::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 use windows::core::{HRESULT, HSTRING, PCWSTR, w};
 
 use crate::error::PlatformError;
+
+const ELEVATED_WAIT_MS: u32 = 120_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ElevatedRun {
@@ -35,20 +40,32 @@ pub fn run_elevated(exe: &Path, parameters: &str) -> Result<ElevatedRun, Platfor
         }
         return Err(e.into());
     }
-    let mut code = 0u32;
-    let waited = unsafe {
-        WaitForSingleObject(info.hProcess, INFINITE);
-        GetExitCodeProcess(info.hProcess, &mut code)
+    let waited = unsafe { WaitForSingleObject(info.hProcess, ELEVATED_WAIT_MS) };
+    let result = if waited == WAIT_OBJECT_0 {
+        let mut code = 0u32;
+        unsafe { GetExitCodeProcess(info.hProcess, &mut code) }
+            .map(|()| code)
+            .map_err(PlatformError::from)
+    } else if waited == WAIT_TIMEOUT {
+        Err(PlatformError::Io {
+            context: format!(
+                "the elevated process did not finish within {} s",
+                ELEVATED_WAIT_MS / 1000
+            ),
+            source: std::io::ErrorKind::TimedOut.into(),
+        })
+    } else {
+        Err(PlatformError::Win32(windows::core::Error::from_thread()))
     };
-    let _ = unsafe { CloseHandle(info.hProcess) }; // ignore-ok: the elevated process already exited; its handle is released either way
-    waited?;
-    Ok(ElevatedRun::Finished(code))
+    let _ = unsafe { CloseHandle(info.hProcess) }; // ignore-ok: the handle is released whether the elevated process finished or not
+    result.map(ElevatedRun::Finished)
 }
 
 pub fn is_elevated() -> bool {
     unsafe {
         let mut token = HANDLE::default();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+        if let Err(e) = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) {
+            debug!(error = %e, "Own process token unavailable; assuming not elevated");
             return false;
         }
 
@@ -64,6 +81,9 @@ pub fn is_elevated() -> bool {
 
         let _ = CloseHandle(token); // ignore-ok: token handle released
 
+        if let Err(e) = &success {
+            debug!(error = %e, "Token elevation unreadable; assuming not elevated");
+        }
         success.is_ok() && elevation.TokenIsElevated != 0
     }
 }

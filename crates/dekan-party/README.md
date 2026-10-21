@@ -8,12 +8,15 @@ each other directly. They exchange encrypted messages through a relay, and the r
 1. **Create a room.** The host generates an invite token that holds a random 32-byte key, the time it was
    issued and a random member id. The token is shared as text. It expires, so an old invite cannot be reused
    indefinitely.
+   Friends in the same League lobby need no code: `PartyToken::for_lobby` derives the key from the lobby's party
+   id, so everyone in that lobby lands in the same room.
 2. **Join.** Every member derives two values from the key:
    - the **room id** (a SHA-256 of the key with a fixed label), which is the only thing the relay sees, and
    - the **encryption key** (a SHA-256 of the key with a different label).
    The relay never learns the key, so it cannot decrypt anything.
-3. **Announce.** When you pick a skin, Dekan encrypts your champion and skin with XChaCha20-Poly1305 and sends
-   the result to the room. On the wire, a member is identified by a random number that is new every session,
+3. **Announce.** Only after the player agrees to share (`party_share`; a code room shares at once, a lobby room
+   after the invite is accepted): when you pick a skin, Dekan encrypts your champion and skin with
+   XChaCha20-Poly1305 and sends the result to the room. On the wire, a member is identified by a random number that is new every session,
    never by an account id or summoner name.
 4. **Receive and verify.** Teammates' announcements are decrypted and passed to the app. Only announcements
    whose champion matches the real team roster reported by the League client are used. The skins then go into

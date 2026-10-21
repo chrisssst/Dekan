@@ -19,6 +19,7 @@ pub(crate) fn run_prop_roundtrip(args: &[String]) {
         .collect();
     wads.sort();
     let (mut bins, mut objects, mut differs, mut unreadable) = (0usize, 0usize, 0usize, 0usize);
+    let mut unparsed = 0usize;
     let mut examples = Vec::new();
     for path in &wads {
         let Ok(wad) = dekan_wad::wad::WadFile::open(path) else {
@@ -27,13 +28,19 @@ pub(crate) fn run_prop_roundtrip(args: &[String]) {
         };
         let hashes: Vec<u64> = wad.entries().map(|(hash, _)| hash).collect();
         for hash in hashes {
-            let Ok(Some(bytes)) = wad.read(hash) else {
-                continue;
+            let bytes = match wad.read(hash) {
+                Ok(Some(bytes)) => bytes,
+                Ok(None) => continue,
+                Err(_) => {
+                    unparsed += 1;
+                    continue;
+                }
             };
             if !(bytes.starts_with(b"PROP") || bytes.starts_with(b"PTCH")) {
                 continue;
             }
             let Ok(bin) = dekan_wad::prop::parse_prop_file(&bytes) else {
+                unparsed += 1;
                 continue;
             };
             bins += 1;
@@ -58,13 +65,13 @@ pub(crate) fn run_prop_roundtrip(args: &[String]) {
         }
     }
     println!(
-        "wads: {} ({unreadable} unreadable) | bins: {bins} | objects: {objects} | not identical: {differs}",
+        "wads: {} ({unreadable} unreadable) | bins: {bins} ({unparsed} not read) | objects: {objects} | not identical: {differs}",
         wads.len()
     );
     for example in &examples {
         println!("  {example}");
     }
-    if differs > 0 {
+    if differs + unreadable + unparsed > 0 || wads.is_empty() || bins == 0 {
         std::process::exit(1);
     }
 }
@@ -105,7 +112,7 @@ pub(crate) fn run_wad_probe(args: &[String]) {
         println!(
             "uso: cargo xtask wad-probe [--root <pasta>] <trecho do caminho...>   (ex.: Champions/Annie. Maps/Shipping; '.' = todos)"
         );
-        return;
+        std::process::exit(2);
     }
     let final_dir = match root {
         Some(root) => root,
@@ -136,11 +143,13 @@ pub(crate) fn run_wad_probe(args: &[String]) {
 
     let mut stats: BTreeMap<u8, WadTypeStats> = BTreeMap::new();
     let mut reported = Vec::new();
+    let mut failures = 0usize;
     for file in &files {
         let data = match std::fs::read(file) {
             Ok(data) => data,
             Err(e) => {
                 println!("  {} nao leu: {e}", file.display());
+                failures += 1;
                 continue;
             }
         };
@@ -148,6 +157,7 @@ pub(crate) fn run_wad_probe(args: &[String]) {
             Ok(archive) => archive,
             Err(e) => {
                 println!("  {} nao abriu: {e}", file.display());
+                failures += 1;
                 continue;
             }
         };
@@ -197,6 +207,7 @@ pub(crate) fn run_wad_probe(args: &[String]) {
             }
         }
 
+        failures += file_problems;
         println!(
             "  {:>6} entradas  {:>4} problemas  {}",
             archive.entries().len(),
@@ -227,6 +238,9 @@ pub(crate) fn run_wad_probe(args: &[String]) {
             println!("  {line}");
         }
     }
+    if failures > 0 || files.is_empty() {
+        std::process::exit(1);
+    }
 }
 
 pub(crate) fn run_wad_types(args: &[String]) {
@@ -237,7 +251,7 @@ pub(crate) fn run_wad_types(args: &[String]) {
             Some(root) => PathBuf::from(root),
             None => {
                 println!("uso: cargo xtask wad-types [--root <pasta>]");
-                return;
+                std::process::exit(2);
             }
         },
         None => match game_dir() {
@@ -298,6 +312,9 @@ pub(crate) fn run_wad_types(args: &[String]) {
     }
     if unreadable > 0 {
         println!("\nWADs ilegiveis: {unreadable}");
+    }
+    if unreadable > 0 || files.is_empty() {
+        std::process::exit(1);
     }
 }
 
