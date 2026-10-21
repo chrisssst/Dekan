@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use sha2::{Digest, Sha256};
+
 use crate::error::PartyError;
 
 pub const RELAY_ENV: &str = dekan_core::env::RELAY_URL;
@@ -8,7 +10,10 @@ pub const RELAY_FILE: &str = "party.json";
 
 pub const DEFAULT_RELAY_URL: &str = "wss://dekan-party-relay.heeazk.workers.dev";
 
-const LEGACY_DEFAULT_RELAY_URL: &str = "wss://bullet-party-relay.longhaired-angora.workers.dev";
+const LEGACY_RELAY_FINGERPRINT: [u8; 32] = [
+    0x49, 0x8d, 0xf7, 0xc4, 0x63, 0x90, 0xca, 0xd4, 0x07, 0x9f, 0x64, 0x5f, 0xf9, 0x87, 0x8a, 0x5f,
+    0xbd, 0xe0, 0xd2, 0xdb, 0x5e, 0x15, 0x22, 0x22, 0xcd, 0x8d, 0xcd, 0x0a, 0xbe, 0x79, 0x3f, 0x87,
+];
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct PartyFile {
@@ -55,11 +60,19 @@ pub fn relay_url(state_dir: &Path) -> Result<String, PartyError> {
 }
 
 fn read_relay_file(path: &Path) -> Result<String, PartyError> {
+    read_relay_file_with_fingerprint(path, &LEGACY_RELAY_FINGERPRINT)
+}
+
+fn relay_fingerprint(url: &str) -> [u8; 32] {
+    Sha256::digest(url.trim().trim_end_matches('/').as_bytes()).into()
+}
+
+fn read_relay_file_with_fingerprint(path: &Path, legacy: &[u8; 32]) -> Result<String, PartyError> {
     let bytes = std::fs::read(path)
         .map_err(|e| PartyError::NoRelay(format!("failed to read {}: {e}", path.display())))?;
     let mut file: PartyFile = serde_json::from_slice(&bytes)
         .map_err(|e| PartyError::NoRelay(format!("{} is not valid: {e}", path.display())))?;
-    if file.relay_url.trim().trim_end_matches('/') == LEGACY_DEFAULT_RELAY_URL {
+    if relay_fingerprint(&file.relay_url) == *legacy {
         file.relay_url = DEFAULT_RELAY_URL.to_owned();
         let serialized = serde_json::to_vec_pretty(&file)
             .map_err(|e| PartyError::NoRelay(format!("relay preference: {e}")))?;
@@ -137,18 +150,20 @@ mod tests {
     #[test]
     fn saved_legacy_default_migrates_and_preserves_other_settings() {
         let path = fixture("legacy");
+        let previous = "wss://previous.example.com";
+        let fingerprint = relay_fingerprint(previous);
         for suffix in ["", "/", "/  "] {
             std::fs::write(
                 &path,
                 serde_json::to_vec(&serde_json::json!({
-                    "relay_url": format!("  {LEGACY_DEFAULT_RELAY_URL}{suffix}"),
+                    "relay_url": format!("  {previous}{suffix}"),
                     "other_setting": {"keep": true}
                 }))
                 .expect("serialize fixture"),
             )
             .expect("write fixture");
             assert_eq!(
-                read_relay_file(&path).expect("migrate default"),
+                read_relay_file_with_fingerprint(&path, &fingerprint).expect("migrate default"),
                 DEFAULT_RELAY_URL
             );
             let saved: serde_json::Value =

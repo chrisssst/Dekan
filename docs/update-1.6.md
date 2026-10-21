@@ -19,8 +19,8 @@ The update imports source v1.6 (`3cfa3d76646837a8ac797402afeca42c147f9ec1`) into
 
 The default party relay is `wss://dekan-party-relay.heeazk.workers.dev`. Existing `party.json` files using the
 previous built-in default migrate to this address without losing additional fields. Custom relay URLs and
-explicit environment overrides stay unchanged. The legacy hostname exists only as a migration match, never
-as the new default or a product label.
+explicit environment overrides stay unchanged. The previous default is identified only by a SHA-256 fingerprint for migration; its obsolete product
+label and hostname are not embedded in the application.
 
 ## Validation
 
