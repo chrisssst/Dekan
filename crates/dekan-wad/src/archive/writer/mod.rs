@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use flate2::read::GzDecoder;
-use tracing::debug;
+use tracing::{debug, warn};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::error::WadError;
@@ -153,8 +153,8 @@ impl WadWriter {
         self.sources.len() - 1
     }
 
-    pub fn insert(&mut self, path_hash: u64, entry: WriterEntry) {
-        self.entries.insert(path_hash, entry);
+    pub fn insert(&mut self, path_hash: u64, entry: WriterEntry) -> Option<WriterEntry> {
+        self.entries.insert(path_hash, entry)
     }
 
     #[must_use]
@@ -280,12 +280,30 @@ fn toc_entry(
         what: "entry offset",
         value: offset,
     })?;
+    if entry.subchunk_count > 0x0F {
+        return Err(WadError::TooLarge {
+            what: "subchunk count",
+            value: u64::from(entry.subchunk_count),
+        });
+    }
+    if entry.kind > 0x0F {
+        return Err(WadError::TooLarge {
+            what: "compression type",
+            value: u64::from(entry.kind),
+        });
+    }
+    if entry.first_subchunk > 0x00FF_FFFF {
+        return Err(WadError::TooLarge {
+            what: "first subchunk",
+            value: u64::from(entry.first_subchunk),
+        });
+    }
     let mut raw = [0u8; WAD_ENTRY_SIZE];
     raw[0..8].copy_from_slice(&name.to_le_bytes());
     raw[8..12].copy_from_slice(&offset.to_le_bytes());
     raw[12..16].copy_from_slice(&stored.to_le_bytes());
     raw[16..20].copy_from_slice(&decoded.to_le_bytes());
-    raw[20] = ((entry.subchunk_count & 0x0F) << 4) | (entry.kind & 0x0F);
+    raw[20] = (entry.subchunk_count << 4) | entry.kind;
     let index = entry.first_subchunk;
     raw[21] = (index >> 16) as u8;
     raw[22] = index as u8;

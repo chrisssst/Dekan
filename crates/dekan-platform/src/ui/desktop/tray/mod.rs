@@ -1,4 +1,4 @@
-use tracing::warn;
+use tracing::{debug, error, warn};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,6 +36,8 @@ pub enum TrayEvent {
     ToggleAutostart,
 
     ToggleAutoAccept,
+
+    ToggleInjection,
 
     ToggleRandomSkin,
     ToggleLightLoading,
@@ -83,28 +85,27 @@ struct PartyMenu {
 impl TrayController {
     pub fn update_status(&self, status: &str) {
         if self.alive.load(Ordering::Relaxed) {
-            if let Ok(mut current) = self.status.lock() {
-                *current = status.to_string();
-            }
+            *self.status.lock().unwrap_or_else(|e| e.into_inner()) = status.to_string();
             let hwnd = HWND(self.hwnd_raw as *mut _);
 
             unsafe {
-                let _ = PostMessageW(hwnd, WM_UPDATE_STATUS, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+                let _ = PostMessageW(Some(hwnd), WM_UPDATE_STATUS, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
             }
         }
     }
 
     #[must_use]
     pub fn status(&self) -> String {
-        self.status.lock().map(|s| s.clone()).unwrap_or_default()
+        self.status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     #[must_use]
     pub fn party(&self) -> (String, bool) {
-        self.party
-            .lock()
-            .map(|p| (p.line.clone(), p.in_room))
-            .unwrap_or_default()
+        let party = self.party.lock().unwrap_or_else(|e| e.into_inner());
+        (party.line.clone(), party.in_room)
     }
 
     #[must_use]
@@ -113,25 +114,22 @@ impl TrayController {
     }
 
     pub fn update_party(&self, line: &str, in_room: bool) {
-        if let Ok(mut party) = self.party.lock() {
-            party.line = line.to_string();
-            party.in_room = in_room;
-        }
+        let mut party = self.party.lock().unwrap_or_else(|e| e.into_inner());
+        party.line = line.to_string();
+        party.in_room = in_room;
     }
 
     pub fn notify(&self, title: &str, body: &str) {
         if !self.alive.load(Ordering::Relaxed) {
             return;
         }
-        if let Ok(mut pending) = self.balloon.lock() {
-            *pending = Some(Balloon {
-                title: title.to_string(),
-                body: body.to_string(),
-            });
-        }
+        *self.balloon.lock().unwrap_or_else(|e| e.into_inner()) = Some(Balloon {
+            title: title.to_string(),
+            body: body.to_string(),
+        });
         let hwnd = HWND(self.hwnd_raw as *mut _);
         unsafe {
-            let _ = PostMessageW(hwnd, WM_TRAY_BALLOON, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+            let _ = PostMessageW(Some(hwnd), WM_TRAY_BALLOON, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
         }
     }
 
@@ -139,7 +137,7 @@ impl TrayController {
         if self.alive.swap(false, Ordering::SeqCst) {
             let hwnd = HWND(self.hwnd_raw as *mut _);
             unsafe {
-                let _ = PostMessageW(hwnd, WM_TRAY_QUIT, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+                let _ = PostMessageW(Some(hwnd), WM_TRAY_QUIT, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
             }
         }
     }

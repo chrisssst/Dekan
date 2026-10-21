@@ -176,3 +176,10 @@ fn test_a_late_dll_join_is_told_apart_from_other_lines() {
     ));
     assert!(!joined_too_late("init done"));
 }
+
+#[test]
+fn test_only_the_terminated_externally_code_blames_another_program() {
+    assert!(closed_by_another_program(0x4001_0004));
+    assert!(!closed_by_another_program(0));
+    assert!(!closed_by_another_program(-1_073_741_819));
+}

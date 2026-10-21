@@ -1,3 +1,4 @@
+use tracing::debug;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
@@ -105,11 +106,15 @@ fn switch_foreground(target: HWND) {
         let foreground_thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
         let current_thread = GetCurrentThreadId();
         let attach = foreground_thread != 0 && foreground_thread != current_thread;
-        if attach {
-            let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: without the attachment Windows may refuse the foreground, which leaves focus where it was
+        if attach && !AttachThreadInput(foreground_thread, current_thread, true).as_bool() {
+            debug!("Thread input could not be attached; the foreground request may be refused");
         }
-        let _ = BringWindowToTop(target); // ignore-ok: a refused raise leaves the z-order as it was
-        let _ = SetForegroundWindow(target); // ignore-ok: Windows may refuse the foreground; the window stays usable by click
+        if let Err(e) = BringWindowToTop(target) {
+            debug!(error = %e, "Windows refused to raise the window");
+        }
+        if !SetForegroundWindow(target).as_bool() {
+            debug!("Windows refused the foreground; the window stays usable by click");
+        }
         if attach {
             let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: the attachment ends with the thread anyway
         }

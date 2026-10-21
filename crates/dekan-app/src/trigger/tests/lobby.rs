@@ -99,3 +99,31 @@ fn a_lobby_key_knows_each_champions_skin_and_the_other_champions_mods() {
     assert_eq!((key.entry_id, key.lobby), (None, true));
     assert_ne!(key.mods, 0);
 }
+
+#[test]
+fn turning_injection_off_disarms_every_pick_and_schedules_nothing() {
+    use dekan_core::phase::GamePhase;
+    let champ_select = champ_select_state(Some(81), Some(target(81, 81065)));
+    let lobby = swiftplay_state(
+        GamePhase::Matchmaking,
+        vec![target(103, 103_015), target(238, 238_012)],
+    );
+    for state in [&champ_select, &lobby] {
+        let WantedSkin::Skin(armed) = wanted_skin_when(state, true) else {
+            panic!("with injection on the pick must be wanted");
+        };
+        assert_eq!(wanted_skin_when(state, true), wanted_skin(state));
+
+        let off = wanted_skin_when(state, false);
+        assert_eq!(off, WantedSkin::Nothing);
+        assert!(
+            should_disarm(off, armed),
+            "an armed patcher must be stopped"
+        );
+        assert!(matches!(arm_decision(off, None), ArmDecision::Settled));
+        assert!(matches!(
+            arm_decision(off, Some(armed)),
+            ArmDecision::Settled
+        ));
+    }
+}

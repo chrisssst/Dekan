@@ -1,33 +1,68 @@
 use super::*;
 
 pub(super) fn measure_overlay(overlay_dir: &std::path::Path) -> (usize, u64) {
-    fn walk(dir: &std::path::Path, files: &mut usize, bytes: &mut u64) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            match entry.file_type() {
-                Ok(ft) if ft.is_dir() => walk(&path, files, bytes),
-                Ok(ft) if ft.is_file() => {
-                    let is_wad = path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.to_ascii_lowercase().ends_with(".wad.client"));
-                    if is_wad {
-                        *files += 1;
-                        *bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+    #[derive(Default)]
+    struct Walk {
+        files: usize,
+        bytes: u64,
+        failed: usize,
+        first_error: Option<String>,
+    }
+
+    impl Walk {
+        fn fail(&mut self, path: &std::path::Path, e: &std::io::Error) {
+            self.failed += 1;
+            self.first_error
+                .get_or_insert_with(|| format!("{}: {e}", path.display()));
+        }
+
+        fn walk(&mut self, dir: &std::path::Path) {
+            let entries = match std::fs::read_dir(dir) {
+                Ok(entries) => entries,
+                Err(e) => return self.fail(dir, &e),
+            };
+            for entry in entries {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        self.fail(dir, &e);
+                        continue;
                     }
+                };
+                let path = entry.path();
+                match entry.file_type() {
+                    Ok(ft) if ft.is_dir() => self.walk(&path),
+                    Ok(ft) if ft.is_file() => {
+                        let is_wad = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .is_some_and(|n| n.to_ascii_lowercase().ends_with(".wad.client"));
+                        if is_wad {
+                            self.files += 1;
+                            match entry.metadata() {
+                                Ok(meta) => self.bytes += meta.len(),
+                                Err(e) => self.fail(&path, &e),
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => self.fail(&path, &e),
                 }
-                _ => {}
             }
         }
     }
 
-    let mut files = 0usize;
-    let mut bytes = 0u64;
-    walk(overlay_dir, &mut files, &mut bytes);
-    (files, bytes)
+    let mut walk = Walk::default();
+    walk.walk(overlay_dir);
+    if walk.failed > 0 {
+        warn!(
+            overlay_dir = %overlay_dir.display(),
+            failed = walk.failed,
+            first_error = walk.first_error.as_deref().unwrap_or_default(),
+            "Overlay entries could not be measured"
+        );
+    }
+    (walk.files, walk.bytes)
 }
 
 impl InjectionPipeline {
@@ -62,8 +97,18 @@ impl InjectionPipeline {
         }
 
         match self.build_overlay_native(mods, timeout).await {
-            Ok(build) => {
+            Ok((build, 0)) => {
                 self.record_overlay_cache(&effective_game_dir, mods);
+                Ok(build)
+            }
+            Ok((build, stuck)) => {
+                crate::overlay_cache::OverlayCache::invalidate(
+                    &self.config.overlay_config.overlay_dir,
+                );
+                warn!(
+                    stuck,
+                    "Overlay cache not recorded: stray WADs from an earlier build are still in the overlay; the next match rebuilds it"
+                );
                 Ok(build)
             }
             Err(e) => {
@@ -85,6 +130,7 @@ impl InjectionPipeline {
             &self.config.overlay_config.overlay_dir,
             mods,
         ) {
+            crate::overlay_cache::OverlayCache::invalidate(&self.config.overlay_config.overlay_dir);
             warn!(
                 error = %e,
                 "Overlay cache fingerprint not recorded; the next match rebuilds this overlay"
@@ -96,7 +142,7 @@ impl InjectionPipeline {
         &self,
         mods: &[String],
         timeout: Duration,
-    ) -> Result<OverlayBuild, InjectError> {
+    ) -> Result<(OverlayBuild, usize), InjectError> {
         let config = &self.config.overlay_config;
         let game_dir = dekan_platform::paths::normalize_game_dir(&config.game_dir)
             .unwrap_or_else(|| config.game_dir.clone());
@@ -138,10 +184,13 @@ impl InjectionPipeline {
             elapsed_ms = native.elapsed.as_millis(),
             "Overlay built natively"
         );
-        Ok(OverlayBuild {
-            wad_files,
-            bytes,
-            elapsed: native.elapsed,
-        })
+        Ok((
+            OverlayBuild {
+                wad_files,
+                bytes,
+                elapsed: native.elapsed,
+            },
+            native.stuck,
+        ))
     }
 }

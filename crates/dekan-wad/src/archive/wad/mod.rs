@@ -145,7 +145,11 @@ impl<'a> WadArchive<'a> {
         for i in 0..entry_count {
             let entry_offset = WAD_HEADER_SIZE + (i * WAD_ENTRY_SIZE);
             let chunk = &data[entry_offset..entry_offset + WAD_ENTRY_SIZE];
-            entries.push(parse_toc_entry(chunk, entry_offset, data.len(), minor)?);
+            entries.push(
+                parse_toc_entry(chunk, entry_offset, data.len(), minor).inspect_err(
+                    |e| warn!(index = i, error = %e, "WAD table of contents entry is invalid"),
+                )?,
+            );
         }
 
         debug!(

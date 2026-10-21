@@ -14,11 +14,18 @@ fn source_stamp(source: &Path, revision: &str) -> Result<String, WadError> {
         path: source.display().to_string(),
         source: e,
     })?;
-    let modified = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_nanos());
+    let modified = match meta.modified().map_err(|e| e.to_string()).and_then(|t| {
+        t.duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(since_epoch) => since_epoch.as_nanos(),
+        Err(e) => {
+            debug!(path = %source.display(), error = %e, "Game WAD has no usable modification time; its copy is refreshed");
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(u128::MAX, |d| d.as_nanos())
+        }
+    };
     Ok(format!("{}:{modified}:{revision}", meta.len()))
 }
 

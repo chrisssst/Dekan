@@ -19,6 +19,8 @@ pub static AUTO_ACCEPT: Preference =
 pub static RANDOM_SKIN: Preference =
     Preference::new("random_skin.json", "random skin when none is chosen", true);
 
+pub static INJECTION: Preference = Preference::new("injection.json", "skin injection", true);
+
 pub static LIGHT_LOADING: Preference =
     Preference::new("light_loading.json", "light game loading", true);
 

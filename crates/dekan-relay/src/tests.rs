@@ -72,3 +72,49 @@ fn test_extract_room_key() {
     let bad_req = "GET /room?key=badkey HTTP/1.1\r\n";
     assert_eq!(RelayServer::extract_room_key(bad_req), None);
 }
+
+#[test]
+fn test_a_member_joining_again_replaces_its_older_connection() {
+    let mut room = Room::new();
+    let (old_tx, _old_rx) = tokio::sync::mpsc::channel(8);
+    let (new_tx, _new_rx) = tokio::sync::mpsc::channel(8);
+    let old = room.add_member(old_tx);
+    let new = room.add_member(new_tx);
+
+    room.update_join(old, 42);
+    room.update_join(new, 42);
+
+    let snapshot: serde_json::Value = serde_json::from_str(&room.snapshot()).expect("json");
+    assert_eq!(snapshot["members"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn test_dropped_sessions_do_not_hold_a_seat() {
+    let mut room = Room::new();
+    let mut receivers = Vec::new();
+    for _ in 0..MAX_MEMBERS {
+        let (tx, rx) = channel::<String>(MEMBER_QUEUE);
+        room.add_member(tx);
+        receivers.push(rx);
+    }
+    assert!(room.is_full());
+    receivers.clear();
+    assert!(!room.is_full());
+    assert!(room.is_empty());
+}
+
+#[test]
+fn test_a_second_join_of_the_same_member_replaces_the_first() {
+    let mut room = Room::new();
+    let (first_tx, mut first_rx) = channel::<String>(MEMBER_QUEUE);
+    let (second_tx, _second_rx) = channel::<String>(MEMBER_QUEUE);
+    let first = room.add_member(first_tx);
+    let second = room.add_member(second_tx);
+    assert_eq!(room.update_join(first, 7), 0);
+    assert_eq!(room.update_join(second, 7), 1);
+    while first_rx.try_recv().is_ok() {}
+    assert!(matches!(
+        first_rx.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    ));
+}

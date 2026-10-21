@@ -1,1 +1,22 @@
-* @chrisssst
+# Every change needs a maintainer's review. The paths below decide trust, permissions or what ships,
+# and the auto-merge workflow never merges them on its own.
+*                                   @chrisssst
+
+/.github/                           @chrisssst
+/installer/                         @chrisssst
+/xtask/                             @chrisssst
+/.cargo/                            @chrisssst
+/rust-toolchain.toml                @chrisssst
+/deny.toml                          @chrisssst
+/.gitleaks.toml                     @chrisssst
+/Cargo.lock                         @chrisssst
+/crates/dekan-app/build.rs         @chrisssst
+/crates/dekan-app/src/trigger/    @chrisssst
+/crates/dekan-app/src/updates/injector_install.rs @chrisssst
+/crates/dekan-app/src/updates/update_check.rs @chrisssst
+/crates/dekan-app/src/updates/self_update/ @chrisssst
+/install.ps1                        @chrisssst
+/crates/dekan-inject/src/injector/ @chrisssst
+/crates/dekan-party/src/security/  @chrisssst
+/crates/dekan-platform/src/os/system/authenticode/ @chrisssst
+/relay-worker/wrangler.toml         @chrisssst

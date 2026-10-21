@@ -11,8 +11,16 @@ const VERIFY_ATTEMPTS: u32 = 5;
 const VERIFY_INTERVAL: Duration = Duration::from_millis(100);
 
 #[must_use]
-pub fn skin_to_register(champion_id: ChampionId, entry_id: SkinId, owned: &HashSet<u32>) -> SkinId {
-    if owned.contains(&entry_id) {
+pub fn skin_to_register(
+    champion_id: ChampionId,
+    entry_id: SkinId,
+    parent: Option<SkinId>,
+    owned: &HashSet<u32>,
+) -> SkinId {
+    let parent_selectable = parent.is_none_or(|parent| {
+        owned.contains(&parent) || dekan_core::selection::is_base_skin(parent, champion_id)
+    });
+    if owned.contains(&entry_id) && parent_selectable {
         entry_id
     } else {
         champion_id * 1000
@@ -66,13 +74,20 @@ pub async fn register_skin(client: &LcuClient, skin_id: SkinId) -> RegistrationO
     }
 
     let mut via = None;
+    let mut action_status = None;
+    let mut selection_status = None;
     if let Some(action) = session.local_pick_action().filter(|a| !a.completed) {
-        match client.set_action_skin(action.id, skin_id).await {
-            Ok(true) => via = Some(RegistrationVia::PickAction),
-            Ok(false) => debug!(
-                action_id = action.id,
-                skin_id, "Pick action refused the skin; trying my-selection"
-            ),
+        match client.action_skin_status(action.id, skin_id).await {
+            Ok(status) if status.is_success() => via = Some(RegistrationVia::PickAction),
+            Ok(status) => {
+                action_status = Some(status.as_u16());
+                debug!(
+                    action_id = action.id,
+                    skin_id,
+                    status = status.as_u16(),
+                    "Pick action refused the skin; trying my-selection"
+                );
+            }
             Err(e) => debug!(
                 action_id = action.id,
                 skin_id,
@@ -82,9 +97,9 @@ pub async fn register_skin(client: &LcuClient, skin_id: SkinId) -> RegistrationO
         }
     }
     if via.is_none() {
-        match client.set_my_selection_skin(skin_id).await {
-            Ok(true) => via = Some(RegistrationVia::MySelection),
-            Ok(false) => {}
+        match client.my_selection_skin_status(skin_id).await {
+            Ok(status) if status.is_success() => via = Some(RegistrationVia::MySelection),
+            Ok(status) => selection_status = Some(status.as_u16()),
             Err(e) => debug!(skin_id, error = %e, "my-selection PATCH failed"),
         }
     }
@@ -93,17 +108,23 @@ pub async fn register_skin(client: &LcuClient, skin_id: SkinId) -> RegistrationO
         warn!(
             skin_id,
             previous = ?current,
+            action_status = ?action_status,
+            selection_status = ?selection_status,
             "The client refused the skin on both endpoints; the loading screen will not show it"
         );
         return RegistrationOutcome::Refused;
     };
 
     let mut actual = None;
+    let mut read_error = None;
     for _ in 0..VERIFY_ATTEMPTS {
         tokio::time::sleep(VERIFY_INTERVAL).await;
         actual = match client.get_champ_select_session().await {
             Ok(session) => session.local_player().map(|p| p.selected_skin_id),
-            Err(_) => None,
+            Err(e) => {
+                read_error = Some(e.to_string());
+                None
+            }
         };
         if actual == Some(skin_id) {
             info!(
@@ -120,6 +141,7 @@ pub async fn register_skin(client: &LcuClient, skin_id: SkinId) -> RegistrationO
         skin_id,
         via = ?via,
         actual = ?actual,
+        last_read_error = ?read_error,
         "The client accepted the skin but the session does not show it"
     );
     RegistrationOutcome::NotApplied { via, actual }
@@ -132,16 +154,40 @@ mod tests {
     #[test]
     fn test_owned_entries_are_registered_as_themselves() {
         let owned: HashSet<u32> = [897_008, 804_015].into_iter().collect();
-        assert_eq!(skin_to_register(897, 897_008, &owned), 897_008);
+        assert_eq!(
+            skin_to_register(897, 897_008, Some(897_008), &owned),
+            897_008
+        );
 
-        assert_eq!(skin_to_register(804, 804_015, &owned), 804_015);
+        assert_eq!(skin_to_register(804, 804_015, None, &owned), 804_015);
     }
 
     #[test]
     fn test_unowned_entries_fall_back_to_the_base_skin() {
         let owned: HashSet<u32> = [897_008].into_iter().collect();
 
-        assert_eq!(skin_to_register(897, 897_011, &owned), 897_000);
-        assert_eq!(skin_to_register(33, 33_023, &HashSet::new()), 33_000);
+        assert_eq!(skin_to_register(897, 897_011, None, &owned), 897_000);
+        assert_eq!(skin_to_register(33, 33_023, None, &HashSet::new()), 33_000);
+    }
+
+    #[test]
+    fn test_owned_chroma_needs_its_parent_skin_owned() {
+        let chroma_only: HashSet<u32> = [103_029].into_iter().collect();
+        assert_eq!(
+            skin_to_register(103, 103_029, Some(103_027), &chroma_only),
+            103_000
+        );
+
+        let both: HashSet<u32> = [103_027, 103_029].into_iter().collect();
+        assert_eq!(
+            skin_to_register(103, 103_029, Some(103_027), &both),
+            103_029
+        );
+    }
+
+    #[test]
+    fn test_chroma_of_the_base_skin_needs_no_base_ownership() {
+        let owned: HashSet<u32> = [12_002].into_iter().collect();
+        assert_eq!(skin_to_register(12, 12_002, Some(12_000), &owned), 12_002);
     }
 }

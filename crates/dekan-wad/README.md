@@ -34,7 +34,7 @@ patch.
 | `archive/wad/mod.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
 | `archive/wad/decode.rs` | Decompression of WAD entries: gzip, zstd and zstd split by a subchunk table |
 | `archive/wad/file.rs` | `WadFile`: reads entries straight from an archive on disk at their offsets |
-| `archive/writer/mod.rs` | WAD writer used to build overlays |
+| `archive/writer/mod.rs` | WAD writer used to build overlays; `insert` hands back the entry it replaced, and a table field that does not fit WAD v3.4 is a `TooLarge` error |
 | `archive/writer/output.rs` | Writes the built WAD to a file (through a `.partial` file) or to memory, copying runs of source bytes |
 | `archive/writer/game_copy.rs` | Keeps a byte-for-byte copy of a game WAD and writes a replacement-only mod over it |
 | `archive/writer/encode.rs` | Picks how each mod entry is stored (raw or zstd), as the mod tools write them |
@@ -42,11 +42,12 @@ patch.
 | `properties/prop/fields.rs` | Finds a field by path and sets a top-level integer field in place |
 | `properties/prop/flatten.rs` | Flattens every field to a path and value, and diffs two objects field by field |
 | `properties/prop/refs.rs` | Lists and remaps every hash and link reference inside an object |
+| `properties/prop/tree.rs` | Typed field tree of an object: parse a body into fields and write it back, with lookups and in-place edits by field name |
 | `properties/prop/tree/shapes.rs` | Field shapes read from the game, used to retype a stale mod's strings as file references |
 | `hashing/hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
 | `archive/fantome.rs` | Reading `.fantome` packages |
-| `archive/modpkg/mod.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and the stored bytes pass through as WAD chunks |
-| `hashing/hash_index.rs` | Hash-to-path lookup table |
+| `archive/modpkg/mod.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and a zstd chunk whose frame is invalid or does not match its declared size is an error, a duplicate path is counted and logged, and the stored bytes pass through as WAD chunks |
+| `hashing/hash_index.rs` | Hash-to-path lookup table; a bad magic or inconsistent table is `InvalidHashIndex` and an unknown format version is `UnsupportedIndexVersion` |
 
 ## Design notes
 

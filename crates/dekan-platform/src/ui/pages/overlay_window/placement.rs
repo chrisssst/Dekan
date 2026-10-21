@@ -51,7 +51,9 @@ impl OverlayTracker {
                 let (width, height) = overlay_size();
                 let rect = overlay_placement(client_rect, width, height, OVERLAY_PADDING);
 
-                if self.last_client_rect != Some(client_rect) {
+                if self.last_client_rect != Some(client_rect)
+                    || REPOSITION_FAILED.load(Ordering::Relaxed)
+                {
                     controller.show_at(rect);
                     self.last_client_rect = Some(client_rect);
                 }

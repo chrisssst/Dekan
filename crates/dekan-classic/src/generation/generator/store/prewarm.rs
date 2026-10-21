@@ -32,8 +32,12 @@ pub(crate) const PREWARM_WAIT: std::time::Duration = std::time::Duration::from_s
 #[must_use]
 pub fn champion_aliases(game_dir: &Path) -> Vec<String> {
     let dir = game_dir.join("DATA").join("FINAL").join("Champions");
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return Vec::new();
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!(folder = %dir.display(), error = %e, "Champion archives folder unreadable; no champion indexed");
+            return Vec::new();
+        }
     };
     let mut aliases: Vec<String> = entries
         .flatten()

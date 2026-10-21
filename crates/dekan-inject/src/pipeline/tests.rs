@@ -196,13 +196,29 @@ async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
     )
     .await;
 
-    assert!(
-        matches!(
-            pipeline.confirm_hook(&mut overlay, budget).await,
-            InjectionStatus::Failed { .. }
-        ),
+    assert_eq!(
+        pipeline.confirm_hook(&mut overlay, budget).await,
+        InjectionStatus::PatcherExited { code: 0 },
         "an overlay process that died cannot be reported as merely unconfirmed"
     );
+}
+
+#[tokio::test]
+async fn test_a_patcher_terminated_by_another_program_reports_its_exit_code() {
+    let budget = Duration::from_secs(5);
+    let (pipeline, mut overlay) = fake_host(
+        "terminated",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "exit /b 1073807364",
+        ],
+        budget,
+    )
+    .await;
+
+    let status = pipeline.confirm_hook(&mut overlay, budget).await;
+
+    assert_eq!(status, InjectionStatus::PatcherExited { code: 0x4001_0004 });
 }
 
 #[tokio::test]

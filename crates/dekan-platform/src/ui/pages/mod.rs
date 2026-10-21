@@ -5,4 +5,5 @@ pub mod welcome;
 
 mod overlay_model;
 mod runtime;
+mod themes;
 mod views;

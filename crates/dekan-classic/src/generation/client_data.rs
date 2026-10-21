@@ -62,9 +62,16 @@ impl ClientGameData {
     #[must_use]
     pub fn read(&self, relative: &str) -> Option<Vec<u8>> {
         let hash = wad_path_hash(&format!("{GAME_DATA_ROOT}/{relative}"));
-        self.archives
-            .iter()
-            .find_map(|wad| wad.read(hash).ok().flatten())
+        for wad in &self.archives {
+            match wad.read(hash) {
+                Ok(Some(bytes)) => return Some(bytes),
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(file = relative, error = %e, "Client game data entry unreadable; trying the next archive")
+                }
+            }
+        }
+        None
     }
 
     pub fn champion_aliases(&self) -> Result<BTreeMap<u32, String>, ClassicError> {

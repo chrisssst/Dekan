@@ -100,11 +100,15 @@ pub(super) fn stage_one(entry: &ModEntry, mods_dir: &Path) -> Result<String, Str
                     "the archive declares {unpacked} bytes, more than a mod may unpack to"
                 ));
             }
-            if let Ok(free) = dekan_platform::fs::get_disk_free_space(mods_dir) {
-                if free < unpacked.saturating_add(STAGING_HEADROOM) {
+            match dekan_platform::fs::get_disk_free_space(mods_dir) {
+                Ok(free) if free < unpacked.saturating_add(STAGING_HEADROOM) => {
                     return Err(format!(
                         "not enough free disk space ({free} bytes) to unpack {unpacked} bytes"
                     ));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    debug!(mod_id = %entry.id, error = %e, "Free disk space unknown; unpacking without the check")
                 }
             }
 
@@ -184,10 +188,16 @@ pub fn stage_selected(
 }
 
 pub(super) fn remove_stale_staged(mods_dir: &Path, keep: &[String]) {
-    let Ok(entries) = std::fs::read_dir(mods_dir) else {
-        return;
+    let entries = match std::fs::read_dir(mods_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!(dir = %mods_dir.display(), error = %e, "The staging folder could not be read; stale staged mods stay");
+            return;
+        }
     };
     let mut removed = 0usize;
+    let mut failed = 0usize;
+    let mut first_error: Option<String> = None;
     for entry in entries.flatten() {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
@@ -197,8 +207,17 @@ pub(super) fn remove_stale_staged(mods_dir: &Path, keep: &[String]) {
         }
         match std::fs::remove_dir_all(entry.path()) {
             Ok(()) => removed += 1,
-            Err(e) => debug!(staged = %name, error = %e, "Stale staged mod could not be removed"),
+            Err(e) => {
+                failed += 1;
+                first_error.get_or_insert_with(|| format!("{name}: {e}"));
+            }
         }
+    }
+    if let Some(first_error) = first_error {
+        warn!(
+            failed,
+            first_error, "Stale staged mods could not be removed"
+        );
     }
     if removed > 0 {
         debug!(removed, "Stale staged custom mods removed");

@@ -230,15 +230,15 @@ pub(crate) fn run_client_audit(args: &[String]) {
     let data = match ClientData::open(&client_dir) {
         Ok(data) => data,
         Err(e) => {
-            println!("dados do cliente indisponiveis: {e}");
-            return;
+            eprintln!("[ERRO] dados do cliente indisponiveis: {e}");
+            std::process::exit(1);
         }
     };
     let champions = match champion_ids(&data) {
         Ok(champions) => champions,
         Err(e) => {
-            println!("{e}");
-            return;
+            eprintln!("[ERRO] {e}");
+            std::process::exit(1);
         }
     };
     let regular: Vec<&(i64, String)> = champions
@@ -258,8 +258,8 @@ pub(crate) fn run_client_audit(args: &[String]) {
         .collect();
     let staging = std::env::temp_dir().join("dekan_client_audit_classic");
     if let Err(e) = std::fs::create_dir_all(&staging) {
-        println!("pasta temporaria indisponivel: {e}");
-        return;
+        eprintln!("[ERRO] pasta temporaria indisponivel: {e}");
+        std::process::exit(1);
     }
     let classic: Vec<ClassicFindings> = champions
         .iter()
@@ -275,7 +275,13 @@ pub(crate) fn run_client_audit(args: &[String]) {
     );
     match std::fs::write(&out, report) {
         Ok(()) => println!("relatorio: {}", out.display()),
-        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+        Err(e) => {
+            eprintln!("[ERRO] relatorio nao gravado em {}: {e}", out.display());
+            std::process::exit(1);
+        }
+    }
+    if findings.iter().any(|f| f.error.is_some()) {
+        std::process::exit(1);
     }
 }
 

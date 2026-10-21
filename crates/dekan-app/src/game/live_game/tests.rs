@@ -133,11 +133,11 @@ fn only_logs_written_since_the_match_started_are_read() {
     std::fs::write(new.join("2026-09-30T10-00-00_r3dlog.txt"), "new").expect("new");
     std::fs::write(new.join("2026-09-30T10-00-00_netlog.txt"), "net").expect("net");
     assert_eq!(
-        newest_game_log(&root, since),
+        newest_game_log(&root, since).expect("read"),
         Some(new.join("2026-09-30T10-00-00_r3dlog.txt"))
     );
     assert_eq!(
-        newest_game_log(&root, SystemTime::now() + Duration::from_secs(60)),
+        newest_game_log(&root, SystemTime::now() + Duration::from_secs(60)).expect("read"),
         None
     );
     let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup

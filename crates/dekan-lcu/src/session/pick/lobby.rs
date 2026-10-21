@@ -1,6 +1,7 @@
 use dekan_core::lobby::{LOBBY_PICK_MODES, LOBBY_PICK_QUEUES, LobbySlot};
+use dekan_core::party::LobbyParty;
 use dekan_core::selection::{ChampionId, SkinId};
-use dekan_core::state::{QueueInfo, StateSender, set_lobby_picks, set_queue};
+use dekan_core::state::{QueueInfo, StateSender, set_lobby_party, set_lobby_picks, set_queue};
 use serde::Deserialize;
 use tracing::{debug, info, warn};
 
@@ -18,6 +19,8 @@ pub struct LobbyGameConfig {
     pub game_mode: String,
     #[serde(default)]
     pub map_id: u32,
+    #[serde(default)]
+    pub is_custom: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -43,6 +46,10 @@ pub struct LobbySession {
     pub game_config: LobbyGameConfig,
     #[serde(default)]
     pub local_member: Option<LobbyMember>,
+    #[serde(default)]
+    pub party_id: String,
+    #[serde(default)]
+    pub members: Vec<serde::de::IgnoredAny>,
 }
 
 impl LobbySession {
@@ -53,6 +60,17 @@ impl LobbySession {
             queue_id,
             game_mode: self.game_config.game_mode.clone(),
             map_id: self.game_config.map_id,
+        })
+    }
+
+    #[must_use]
+    pub fn party(&self) -> Option<LobbyParty> {
+        if self.game_config.is_custom || self.party_id.is_empty() {
+            return None;
+        }
+        Some(LobbyParty {
+            party_id: self.party_id.clone(),
+            members: self.members.len(),
         })
     }
 
@@ -88,9 +106,19 @@ impl LobbySession {
 }
 
 pub fn apply_lobby_to_state(state_tx: &StateSender, lobby: Option<&LobbySession>) {
+    let party = lobby.and_then(LobbySession::party);
+    let members = party.as_ref().map(|party| party.members);
+    if set_lobby_party(state_tx, party) {
+        debug!(members = ?members, "Lobby party changed");
+    }
     let queue = lobby.and_then(LobbySession::queue);
     if set_queue(state_tx, queue.clone()) {
         if let Some(queue) = &queue {
+            if queue.queue_id == 0 && queue.game_mode.is_empty() {
+                warn!(
+                    "The lobby carries no queue and no game mode; the client schema may have changed"
+                );
+            }
             info!(
                 queue_id = queue.queue_id,
                 game_mode = %queue.game_mode,
@@ -129,18 +157,7 @@ pub fn apply_lobby_to_state(state_tx: &StateSender, lobby: Option<&LobbySession>
 
 impl LcuClient {
     async fn lobby_as<T: serde::de::DeserializeOwned>(&self) -> Result<Option<T>, LcuError> {
-        let url = format!("{}/lol-lobby/v2/lobby", self.base_url());
-        let resp = self.http().get(&url).send().await?;
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !resp.status().is_success() {
-            return Err(LcuError::Parse(format!(
-                "/lol-lobby/v2/lobby unavailable (HTTP {})",
-                resp.status().as_u16()
-            )));
-        }
-        Ok(Some(resp.json::<T>().await?))
+        self.get_json_opt("/lol-lobby/v2/lobby").await
     }
 
     pub async fn get_lobby(&self) -> Result<Option<LobbySession>, LcuError> {
@@ -163,6 +180,7 @@ impl LcuClient {
             .ok_or_else(|| LcuError::Parse("the lobby has no player slots".into()))?;
 
         let mut changed = false;
+        let mut matched = false;
         for slot in &mut slots {
             let champion = slot
                 .get("championId")
@@ -171,10 +189,15 @@ impl LcuClient {
             let Some((_, skin)) = skins.iter().find(|(c, _)| Some(*c) == champion) else {
                 continue;
             };
+            matched = true;
             if slot.get("skinId").and_then(serde_json::Value::as_u64) != Some(u64::from(*skin)) {
                 slot["skinId"] = serde_json::Value::from(*skin);
                 changed = true;
             }
+        }
+        if !matched {
+            warn!(skins = ?skins, slots = slots.len(), "None of the champions to register is in the lobby slots");
+            return Ok(());
         }
         if !changed {
             debug!(skins = ?skins, "The lobby slots already hold the skins to register");
@@ -193,9 +216,11 @@ impl LcuClient {
         if status.is_success() {
             info!(skins = ?skins, "Skins registered in the lobby slots");
         } else {
+            let body = resp.text().await.unwrap_or_default();
             warn!(
                 skins = ?skins,
                 status = status.as_u16(),
+                body = %body.chars().take(200).collect::<String>(),
                 "The client refused the lobby slot skins; the loading screen may show another skin"
             );
         }
@@ -302,5 +327,37 @@ mod tests {
         assert!(rx.borrow().lobby.is_none());
         assert!(rx.borrow().queue.is_none());
         assert!(rx.borrow().champion_id.is_none());
+    }
+
+    const PREMADE: &str = r#"{
+        "partyId": "6f1c2a0e-party",
+        "gameConfig": { "queueId": 420, "gameMode": "CLASSIC", "mapId": 11, "isCustom": false },
+        "members": [ { "puuid": "me" }, { "puuid": "ana" }, { "puuid": "bruno" } ]
+    }"#;
+
+    #[test]
+    fn a_premade_lobby_publishes_its_party_without_the_members_identity() {
+        let lobby: LobbySession = serde_json::from_str(PREMADE).expect("valid lobby");
+        let (tx, rx) = new_state_channel();
+        set_phase(&tx, GamePhase::Lobby);
+        apply_lobby_to_state(&tx, Some(&lobby));
+        assert_eq!(
+            rx.borrow().lobby_party,
+            Some(LobbyParty {
+                party_id: "6f1c2a0e-party".into(),
+                members: 3
+            })
+        );
+        apply_lobby_to_state(&tx, None);
+        assert_eq!(rx.borrow().lobby_party, None);
+    }
+
+    #[test]
+    fn a_custom_game_lobby_or_one_without_a_party_id_has_no_lobby_party() {
+        let custom = PREMADE.replace(r#""isCustom": false"#, r#""isCustom": true"#);
+        let custom: LobbySession = serde_json::from_str(&custom).expect("valid lobby");
+        assert_eq!(custom.party(), None);
+        let unknown: LobbySession = serde_json::from_str(SWIFTPLAY).expect("valid lobby");
+        assert_eq!(unknown.party(), None);
     }
 }

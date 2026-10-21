@@ -69,10 +69,16 @@ impl ClassicChampion {
 
     #[must_use]
     pub fn jade_names_in_bins(&self) -> BTreeSet<String> {
-        character_names_in_bins(&self.wad, &self.alias)
+        self.jade_scan().0
+    }
+
+    fn jade_scan(&self) -> (BTreeSet<String>, bool) {
+        let (names, complete) = character_names_in_bins(&self.wad, &self.alias);
+        let jade = names
             .into_iter()
             .filter(|name| name.starts_with("jade_"))
-            .collect()
+            .collect();
+        (jade, complete)
     }
 
     #[must_use]
@@ -82,7 +88,7 @@ impl ClassicChampion {
             self.alias.to_ascii_lowercase()
         ));
         cached_names(&cache_path, &self.wad_stamp, &self.alias, false, || {
-            self.jade_names_in_bins()
+            self.jade_scan()
         })
     }
 
@@ -168,7 +174,7 @@ impl ClassicChampion {
 
             let anim_target = animation_bin(character, skin);
             if self.wad.contains(wad_path_hash(&anim_target)) {
-                if let Ok(Some(anim_source)) = self.wad.read(wad_path_hash(&anim_target)) {
+                if let Some(anim_source) = self.wad.read(wad_path_hash(&anim_target))? {
                     let anim_dir = partial
                         .join("WAD")
                         .join(format!("{}.wad.client", self.alias))
@@ -176,17 +182,29 @@ impl ClassicChampion {
                         .join("characters")
                         .join(character.as_str())
                         .join("animations");
-                    let _ = std::fs::create_dir_all(&anim_dir); // ignore-ok: classic anim dir
+                    std::fs::create_dir_all(&anim_dir)?;
+                    let mut failed = 0usize;
+                    let mut first_error = None;
                     for slot in slots.iter().copied().filter(|slot| *slot != skin) {
-                        if let Ok(retargeted_anim) =
-                            retarget_animation_bin(&anim_source, &display, skin, slot)
-                        {
-                            // ignore-ok: classic anim slot write
-                            let _ = std::fs::write(
-                                anim_dir.join(format!("skin{slot}.bin")),
-                                retargeted_anim,
-                            );
+                        match retarget_animation_bin(&anim_source, &display, skin, slot) {
+                            Ok(bytes) => {
+                                std::fs::write(anim_dir.join(format!("skin{slot}.bin")), bytes)?;
+                            }
+                            Err(e) => {
+                                failed += 1;
+                                first_error.get_or_insert(e.to_string());
+                            }
                         }
+                    }
+                    if let Some(error) = first_error {
+                        warn!(
+                            alias = %self.alias,
+                            character = %character,
+                            skin,
+                            failed,
+                            error = %error,
+                            "Animation bins not retargeted for some slots; those slots keep the source animations"
+                        );
                     }
                 }
             }

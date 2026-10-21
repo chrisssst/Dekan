@@ -1,4 +1,4 @@
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::boot::injector::install_from_panel;
 use crate::boot::panel::tray_status;
@@ -13,8 +13,16 @@ pub fn spawn_custom_mods_notice(
             _ = child_token.cancelled() => return,
             received = tokio::task::spawn_blocking(move || custom_mods_rx.recv()) => received,
         };
-        let Ok(Ok(summary)) = received else {
-            return;
+        let summary = match received {
+            Ok(Ok(summary)) => summary,
+            Ok(Err(_)) => {
+                debug!("The custom mods scan ended without a report");
+                return;
+            }
+            Err(e) => {
+                warn!(error = %e, "The custom mods notice could not wait for the scan");
+                return;
+            }
         };
         let text = dekan_platform::i18n::text();
         let mut lines = Vec::new();
@@ -120,7 +128,7 @@ pub fn spawn_tray_status(
 ) {
     let mut state_rx_tray = state_rx.clone();
     let text = dekan_platform::i18n::text();
-    supervisor.spawn("tray-status-updater", move |child_token| async move {
+    supervisor.spawn_essential("tray-status-updater", move |child_token| async move {
         loop {
             tokio::select! {
                 _ = child_token.cancelled() => break,
@@ -132,7 +140,7 @@ pub fn spawn_tray_status(
                     let tools_missing = !tool_files.iter().all(|file| file.is_file());
                     let state = state_rx_tray.borrow();
                     tray_controller.update_status(tray_status(&state, tools_missing, text));
-                    let (party_line, in_room) = dekan_app::control_panel::party_line(&state.party_status, state.party_hosting, text);
+                    let (party_line, in_room) = dekan_app::control_panel::party_line(&state.shown_party_status(), state.party_hosting, text);
                     tray_controller.update_party(&party_line, in_room);
                 }
             }
@@ -146,7 +154,7 @@ pub fn spawn_activation_listener(
 ) {
     match dekan_platform::activation::ActivationListener::create(crate::INSTANCE_NAME) {
         Ok(listener) => {
-            supervisor.spawn("activation-listener", move |child_token| async move {
+            supervisor.spawn_essential("activation-listener", move |child_token| async move {
                 loop {
                     tokio::select! {
                         _ = child_token.cancelled() => break,
@@ -169,4 +177,29 @@ pub fn spawn_activation_listener(
             warn!(error = %e, "Could not create the activation listener");
         }
     }
+}
+
+pub fn spawn_log_drop_monitor(
+    supervisor: &mut dekan_core::supervisor::Supervisor,
+    dropped_lines: tracing_appender::non_blocking::ErrorCounter,
+) {
+    supervisor.spawn_essential("log-drop-monitor", move |child_token| async move {
+        let mut reported = 0usize;
+        loop {
+            tokio::select! {
+                _ = child_token.cancelled() => break,
+                () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                    let now = dropped_lines.dropped_lines();
+                    if now > reported {
+                        warn!(
+                            dropped_lines = now,
+                            since_last_report = now - reported,
+                            "Log writer queue overflowed; lines were dropped"
+                        );
+                        reported = now;
+                    }
+                }
+            }
+        }
+    });
 }

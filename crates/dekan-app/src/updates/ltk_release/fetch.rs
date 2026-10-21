@@ -20,7 +20,15 @@ pub(super) async fn get(
         .await
         .map_err(|e| e.to_string())?;
     if !response.status().is_success() {
-        return Err(format!("GitHub answered HTTP {}", response.status()));
+        let rate_left = response
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+        return Err(format!(
+            "GitHub answered HTTP {} for {url} (rate limit remaining: {rate_left})",
+            response.status()
+        ));
     }
     if response
         .content_length()
@@ -68,23 +76,39 @@ pub(super) async fn inspect(client: &reqwest::Client, version: &str) -> Result<I
         "dekan_ltk_inspect_{}_{version}",
         std::process::id()
     ));
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let inspected = inspect_files(client, version, &dir).await;
+    if let Err(e) = std::fs::remove_dir_all(&dir) {
+        debug!(error = %e, "LTK inspection folder not removed");
+    }
+    inspected
+}
+
+async fn inspect_files(
+    client: &reqwest::Client,
+    version: &str,
+    dir: &Path,
+) -> Result<Injector, String> {
     let mut dll_sha256 = String::new();
     let mut trusted = true;
     for name in INJECTOR_FILES {
-        let bytes = resource(client, version, name).await?;
+        let bytes = match resource(client, version, name).await {
+            Ok(bytes) => bytes,
+            Err(e) if e.contains(NOT_FOUND_MARK) => {
+                warn!(version, file = name, error = %e, "An LTK Manager release lacks an injector file; it is treated as untrusted");
+                return Ok(Injector::Untrusted);
+            }
+            Err(e) => return Err(format!("release {version}, {name}: {e}")),
+        };
         let path = dir.join(name);
-        std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+        std::fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
         if let Err(e) = dekan_inject::trust::verify_injector_file(&path) {
-            info!(version, file = name, reason = %e, "An LTK Manager release carries an injector Dekan does not trust");
+            warn!(version, file = name, reason = %e, "An LTK Manager release carries an injector Dekan does not trust");
             trusted = false;
         }
         if name == INJECTOR_FILES[1] {
             dll_sha256 = dekan_inject::dll_validator::compute_sha256(&bytes);
         }
-    }
-    if let Err(e) = std::fs::remove_dir_all(&dir) {
-        debug!(error = %e, "LTK inspection folder not removed");
     }
     Ok(if trusted {
         Injector::Trusted { dll_sha256 }
@@ -128,7 +152,7 @@ pub async fn compatible_version(state_dir: &Path) -> Option<String> {
     match refreshed {
         Ok(status) => status.and_then(|s| s.compatible),
         Err(e) => {
-            debug!(error = %e, "LTK Manager releases could not be checked; using the last known result");
+            warn!(error = %e, "LTK Manager releases could not be checked; using the last known result");
             verdicts.status_from_cache().and_then(|s| s.compatible)
         }
     }

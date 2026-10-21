@@ -15,6 +15,27 @@ pub(crate) struct Arming<'a> {
         std::pin::Pin<Box<dyn std::future::Future<Output = Option<ArmedPatcher>> + Send + 'a>>,
 }
 
+pub(crate) fn resume_for_reconnect(
+    running: Option<dekan_inject::overlay_process::OverlayProcess>,
+    wanted: WantedSkin,
+) -> (
+    Option<ArmedPatcher>,
+    Option<dekan_inject::overlay_process::OverlayProcess>,
+) {
+    match (running, wanted) {
+        (Some(overlay), WantedSkin::Skin(key)) => (
+            Some(ArmedPatcher {
+                overlay,
+                key,
+                armed_before_game: true,
+                lcu_skin: None,
+            }),
+            None,
+        ),
+        (running, _) => (None, running),
+    }
+}
+
 pub(crate) async fn next_armed(arming: &mut Option<Arming<'_>>) -> Option<ArmedPatcher> {
     match arming {
         Some(in_flight) => in_flight.task.as_mut().await,
@@ -46,6 +67,14 @@ impl InjectionTrigger {
         let registration = async {
             match entry_id {
                 Some(_) if is_classic(champ_id) => None,
+                Some(_) if self.state_rx.borrow().phase == GamePhase::Reconnect => {
+                    debug!(
+                        champ_id,
+                        entry_id = ?entry_id,
+                        "Reconnect: the skin is not registered in the client"
+                    );
+                    None
+                }
                 Some(_) if lobby => {
                     self.register_in_lobby(&key.picks()).await;
                     None
@@ -57,10 +86,15 @@ impl InjectionTrigger {
         let (armed, lcu_skin) = tokio::join!(self.build_and_arm(key), registration);
         let (overlay, build) = armed?;
 
-        let game_already_running = matches!(
-            ProcessFinder::find_any_process(&dekan_platform::game_version::GAME_EXES),
-            Ok(Some(_))
-        );
+        let game_already_running = match ProcessFinder::find_any_process(
+            &dekan_platform::game_version::GAME_EXES,
+        ) {
+            Ok(found) => found.is_some(),
+            Err(e) => {
+                warn!(error = %e, "The game process could not be looked up; assuming it is not running yet");
+                false
+            }
+        };
         if game_already_running {
             warn!(
                 champ_id,
@@ -181,10 +215,13 @@ impl InjectionTrigger {
             }
         };
 
-        let skin_id = dekan_lcu::skin_registration::skin_to_register(champ_id, entry_id, &owned);
+        let parent = parent_skin(&client, champ_id, entry_id).await;
+        let skin_id =
+            dekan_lcu::skin_registration::skin_to_register(champ_id, entry_id, parent, &owned);
         info!(
             champ_id,
             entry_id,
+            parent = ?parent,
             skin_id,
             owned = skin_id == entry_id,
             owned_skins = owned.len(),
@@ -208,15 +245,14 @@ impl InjectionTrigger {
                 std::collections::HashSet::new()
             }
         };
-        let skins: Vec<(u32, u32)> = picks
-            .iter()
-            .map(|&(champ_id, entry_id)| {
-                (
-                    champ_id,
-                    dekan_lcu::skin_registration::skin_to_register(champ_id, entry_id, &owned),
-                )
-            })
-            .collect();
+        let mut skins: Vec<(u32, u32)> = Vec::with_capacity(picks.len());
+        for &(champ_id, entry_id) in picks {
+            let parent = parent_skin(&client, champ_id, entry_id).await;
+            skins.push((
+                champ_id,
+                dekan_lcu::skin_registration::skin_to_register(champ_id, entry_id, parent, &owned),
+            ));
+        }
         if let Err(e) = client.set_lobby_slot_skins(&skins).await {
             warn!(error = %e, skins = ?skins, "Could not register the skins in the lobby slots");
         }
@@ -234,4 +270,27 @@ impl InjectionTrigger {
             armed.overlay.shutdown().await;
         }
     }
+}
+
+async fn parent_skin(
+    client: &dekan_lcu::client::LcuClient,
+    champ_id: u32,
+    entry_id: u32,
+) -> Option<u32> {
+    if dekan_core::selection::is_base_skin(entry_id, champ_id) {
+        return None;
+    }
+    client
+        .get_champion_assets(champ_id)
+        .await
+        .inspect_err(|e| {
+            debug!(
+                champ_id,
+                entry_id,
+                error = %e,
+                "Champion assets unavailable; the parent skin of the entry is not checked"
+            );
+        })
+        .ok()?
+        .base_skin_of(entry_id)
 }

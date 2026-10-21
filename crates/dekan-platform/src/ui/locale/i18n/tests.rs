@@ -69,3 +69,32 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
         }
     }
 }
+
+fn literals(source: &str) -> Vec<String> {
+    source
+        .replace("\\\"", "'")
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn no_text_carries_emoji_symbols_or_shouting_capitals() {
+    for source in [include_str!("tr.rs"), include_str!("en.rs")] {
+        for text in &literals(source) {
+            assert!(
+                !text
+                    .chars()
+                    .any(|c| matches!(u32::from(c), 0x2190..=0x2BFF | 0xFE0F | 0x1F000..=0x1FFFF)),
+                "{text:?} draws a symbol; icons are vector paths in the interface"
+            );
+            let letters: Vec<char> = text.chars().filter(|c| c.is_alphabetic()).collect();
+            assert!(
+                !(letters.len() > 4 && letters.iter().all(|c| c.is_uppercase())),
+                "{text:?} is written in capitals; the interface uses sentence case"
+            );
+        }
+    }
+}

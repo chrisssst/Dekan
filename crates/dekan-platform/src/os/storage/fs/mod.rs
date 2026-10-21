@@ -120,17 +120,35 @@ pub fn atomic_write(target_path: &Path, content: &[u8], sync: bool) -> Result<()
                 });
             }
             Err(e) => {
-                error!(
-                    target = %target_path.display(),
-                    attempts = MAX_RETRIES,
-                    os_error = e.raw_os_error().unwrap_or(0),
-                    error = %e,
-                    "Atomic write gave up after exhausting every retry"
-                );
+                let raw_code = e.raw_os_error().unwrap_or(0);
+                let locked = raw_code == 5
+                    || raw_code == 32
+                    || e.kind() == std::io::ErrorKind::PermissionDenied;
+                if locked {
+                    error!(
+                        target = %target_path.display(),
+                        attempts = MAX_RETRIES,
+                        os_error = raw_code,
+                        error = %e,
+                        "Atomic write gave up after exhausting every retry"
+                    );
+                } else {
+                    warn!(
+                        target = %target_path.display(),
+                        os_error = raw_code,
+                        error = %e,
+                        "Atomic write failed for a reason retrying cannot fix"
+                    );
+                }
                 let _ = std::fs::remove_file(&tmp_path); // ignore-ok: cleaning up our own temp file after a failure already reported
+                let suffix = if locked {
+                    format!(" after {MAX_RETRIES} attempts")
+                } else {
+                    String::new()
+                };
                 return Err(PlatformError::Io {
                     context: format!(
-                        "failed to rename '{}' to '{}' after {MAX_RETRIES} attempts",
+                        "failed to rename '{}' to '{}'{suffix}",
                         tmp_path.display(),
                         target_path.display()
                     ),
@@ -162,6 +180,7 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
     }
 
     let mut stats = MirrorStats::default();
+    let mut first_link_error: Option<std::io::Error> = None;
     let mut stack = vec![(src.to_path_buf(), dst.to_path_buf())];
     while let Some((from_dir, to_dir)) = stack.pop() {
         std::fs::create_dir_all(&to_dir).map_err(|e| PlatformError::Io {
@@ -206,9 +225,8 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
             if kind.is_dir() {
                 stack.push((from, to));
             } else if kind.is_file() {
-                if std::fs::hard_link(&from, &to).is_ok() {
-                    stats.linked += 1;
-                } else {
+                if let Err(link_error) = std::fs::hard_link(&from, &to) {
+                    first_link_error.get_or_insert(link_error);
                     std::fs::copy(&from, &to).map_err(|e| PlatformError::Io {
                         context: format!(
                             "failed to copy '{}' to '{}'",
@@ -218,6 +236,8 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
                         source: e,
                     })?;
                     stats.copied += 1;
+                } else {
+                    stats.linked += 1;
                 }
             } else {
                 stats.skipped += 1;
@@ -231,6 +251,7 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
             linked = stats.linked,
             copied = stats.copied,
             skipped = stats.skipped,
+            first_link_error = first_link_error.as_ref().map(ToString::to_string),
             "Mirror could not hard-link everything"
         );
     } else {

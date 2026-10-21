@@ -10,8 +10,8 @@ fn open(content: &PartyContent) -> (PartyDialog, mpsc::Receiver<Option<String>>)
     (dialog, rx)
 }
 
-fn press(dialog: &PartyDialog, label: &str) {
-    ElementHandle::find_by_accessible_label(dialog, label)
+fn press(window: &impl ComponentHandle, label: &str) {
+    ElementHandle::find_by_accessible_label(window, label)
         .next()
         .unwrap_or_else(|| panic!("no button labelled {label:?}"))
         .invoke_accessible_default_action();
@@ -152,4 +152,29 @@ fn a_long_code_never_runs_under_the_inline_button() {
         "the text area ends at {field_right} but the button starts at {}",
         button.absolute_position().x
     );
+}
+
+fn open_invite_for_test(text: &crate::i18n::Text) -> (PartyInvite, mpsc::Receiver<bool>) {
+    let invite = PartyInvite::new().expect("lobby invite");
+    let (tx, rx) = mpsc::channel();
+    wire_invite(&invite, text, Answer::new(tx));
+    (invite, rx)
+}
+
+#[test]
+fn the_lobby_invite_answers_join_or_later_once_in_every_language() {
+    i_slint_backend_testing::init_no_event_loop();
+    for language in [Language::Turkish, Language::English] {
+        let text = language.text();
+        let (invite, answers) = open_invite_for_test(text);
+        assert_eq!(invite.get_heading(), text.party_invite_title);
+        press(&invite, text.party_invite_join);
+        press(&invite, text.party_invite_later);
+        assert_eq!(answers.try_recv().ok(), Some(true));
+        assert!(answers.try_recv().is_err(), "only the first answer counts");
+
+        let (invite, answers) = open_invite_for_test(text);
+        press(&invite, text.party_invite_later);
+        assert_eq!(answers.try_recv().ok(), Some(false));
+    }
 }

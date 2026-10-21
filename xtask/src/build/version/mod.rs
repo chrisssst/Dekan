@@ -10,27 +10,35 @@ pub(crate) fn run_set_version(args: &[String]) {
         std::process::exit(2);
     };
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let stamp = |file: &str, rewrite: fn(&str, &str) -> Result<String, String>| {
+    let prepare = |file: &str, rewrite: fn(&str, &str) -> Result<String, String>| {
         let path = root.join(file);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
             eprintln!("[ERROR] {}: {e}", path.display());
             std::process::exit(1);
         });
-        match rewrite(&text, &version) {
-            Ok(next) => {
-                if let Err(e) = std::fs::write(&path, next) {
-                    eprintln!("[ERROR] {}: {e}", path.display());
-                    std::process::exit(1);
-                }
-            }
-            Err(e) => {
-                eprintln!("[ERROR] {file}: {e}");
-                std::process::exit(1);
-            }
-        }
+        let next = rewrite(&text, &version).unwrap_or_else(|e| {
+            eprintln!("[ERROR] {file}: {e}");
+            std::process::exit(1);
+        });
+        (path, text, next)
     };
-    stamp("Cargo.toml", stamp_manifest);
-    stamp("Cargo.lock", stamp_lock);
+    let manifest = prepare("Cargo.toml", stamp_manifest);
+    let lock = prepare("Cargo.lock", stamp_lock);
+    if let Err(e) = std::fs::write(&manifest.0, &manifest.2) {
+        eprintln!("[ERROR] {}: {e}", manifest.0.display());
+        std::process::exit(1);
+    }
+    if let Err(e) = std::fs::write(&lock.0, &lock.2) {
+        eprintln!("[ERROR] {}: {e}", lock.0.display());
+        match std::fs::write(&manifest.0, &manifest.1) {
+            Ok(()) => eprintln!("Cargo.toml restored to its previous content"),
+            Err(restore) => eprintln!(
+                "[ERROR] could not restore {}: {restore}; restore it with git",
+                manifest.0.display()
+            ),
+        }
+        std::process::exit(1);
+    }
     println!("[OK] Workspace version set to {version} (displayed as {display})");
 }
 

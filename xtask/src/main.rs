@@ -135,9 +135,10 @@ fn check_status(name: &str, status: ExitStatus) {
 fn game_dir() -> Option<PathBuf> {
     let found = dekan_platform::paths::discover_game_dir();
     if found.is_none() {
-        println!(
-            "Jogo nao encontrado: abra o cliente do League ou instale-o pelo Riot Client (ou use --root)"
+        eprintln!(
+            "[ERRO] Jogo nao encontrado: abra o cliente do League ou instale-o pelo Riot Client (ou use --root)"
         );
+        std::process::exit(1);
     }
     found
 }

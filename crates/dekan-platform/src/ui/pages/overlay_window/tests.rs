@@ -217,3 +217,43 @@ fn the_historic_origin_tags_the_selected_card() {
     assert_eq!(view.get_origin(), views::SelectionOrigin::Historic);
     assert_eq!(view.get_selected_skin(), 238_001);
 }
+
+#[test]
+fn the_party_line_shows_the_room_and_teammate_skins_and_goes_away_outside_a_party() {
+    let (view, _commands) = open_overlay();
+    assert_eq!(view.get_party_line(), "");
+
+    with_overlay(|overlay| {
+        overlay.party = Some(dekan_core::party::PartySummary {
+            members: 3,
+            teammate_skins: 2,
+        });
+        overlay.render_party();
+    });
+    assert_eq!(
+        view.get_party_line(),
+        "party: 3 in the room, 2 teammate skin(s)"
+    );
+
+    with_overlay(|overlay| {
+        overlay.party = None;
+        overlay.render_party();
+    });
+    assert_eq!(view.get_party_line(), "");
+}
+
+#[test]
+fn overlay_starts_with_the_saved_theme_and_tracks_changes_without_selection_commands() {
+    let (view, mut commands) = open_overlay();
+    assert_eq!(
+        view.global::<views::Theme>().get_mode(),
+        crate::preferences::theme_mode()
+    );
+    let initial_cards = card_ids(&view);
+    for mode in [0, 2, 1, 0] {
+        super::super::themes::apply(mode);
+        assert_eq!(view.global::<views::Theme>().get_mode(), mode);
+        assert_eq!(card_ids(&view), initial_cards);
+        assert!(commands.try_recv().is_err());
+    }
+}

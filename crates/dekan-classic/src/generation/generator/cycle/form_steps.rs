@@ -117,7 +117,7 @@ impl StandardChampion {
                 return Ok(Some((path.clone(), graph_bin)));
             }
         }
-        debug!(alias = %self.alias, "Form cycle skipped: no linked animation graph could take the cycle");
+        warn!(alias = %self.alias, graphs = animations.0.len(), "Form cycle skipped: no linked animation graph could take the cycle");
         Ok(None)
     }
 }

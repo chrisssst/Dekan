@@ -42,7 +42,7 @@ fn test_listing_helpers_tolerate_missing_and_broken_inputs() {
     let dir = temp("listing");
     std::fs::create_dir_all(dir.join("no_wad_here")).expect("dir");
     assert!(mod_wads(&dir.join("no_wad_here")).is_empty());
-    assert!(files_under(&dir.join("does_not_exist")).is_empty());
+    assert!(files_under(&dir.join("does_not_exist")).is_err());
     let garbage = dir.join("Broken.wad.client");
     std::fs::write(&garbage, b"not a wad").expect("garbage");
     assert!(mod_hashes(std::slice::from_ref(&garbage)).is_empty());
@@ -330,6 +330,27 @@ fn test_a_bin_link_in_neither_game_nor_mod_is_dangling() {
         vec![missing.to_owned()],
         "only the .bin, not the .tex"
     );
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup
+}
+
+#[test]
+fn test_a_prop_entry_that_does_not_parse_makes_the_mod_incompatible() {
+    let dir = temp("corrupt_prop");
+    let wad = dir.join("Zed.wad.client");
+    write_wad(
+        &wad,
+        &[(
+            wad_path_hash("data/x.bin"),
+            b"PROP\x03\x00truncated".to_vec(),
+        )],
+    );
+    let compat = check_wad(&wad, &HashSet::new()).expect("check");
+    assert!(
+        !compat.is_compatible(),
+        "a damaged PROP is not loaded silently"
+    );
+    assert_eq!(compat.unreadable.len(), 1);
+    assert_eq!(compat.entries_skipped, 0);
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup
 }
 

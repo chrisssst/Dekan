@@ -3,6 +3,7 @@ use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use tracing::debug;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_IMPERSONATE, TOKEN_QUERY, TOKEN_USER, TokenUser,
@@ -95,17 +96,19 @@ impl Drop for OwnedHandle {
 }
 
 fn own_local_app_data() -> Option<PathBuf> {
-    known_local_app_data(None).or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
+    known_local_app_data(None).or_else(|| {
+        debug!(
+            "The shell reported no LocalAppData for this process; using the LOCALAPPDATA variable"
+        );
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+    })
 }
 
 fn known_local_app_data(token: Option<HANDLE>) -> Option<PathBuf> {
     unsafe {
-        let pwstr = SHGetKnownFolderPath(
-            &FOLDERID_LocalAppData,
-            KF_FLAG_DEFAULT,
-            token.unwrap_or_default(),
-        )
-        .ok()?;
+        let pwstr = SHGetKnownFolderPath(&FOLDERID_LocalAppData, KF_FLAG_DEFAULT, token)
+            .inspect_err(|e| debug!(error = %e, "SHGetKnownFolderPath(LocalAppData) failed"))
+            .ok()?;
         let path = pwstr.as_wide().to_vec();
         CoTaskMemFree(Some(pwstr.0 as *const _));
         if path.is_empty() {
@@ -154,8 +157,14 @@ fn explorer_pids() -> Result<Vec<u32>, String> {
             ..Default::default()
         };
         let mut pids = Vec::new();
-        let mut more = Process32FirstW(snapshot.0, &mut entry).is_ok();
-        while more {
+        let mut step = Process32FirstW(snapshot.0, &mut entry);
+        loop {
+            if let Err(e) = step {
+                if !crate::process::is_end_of_list(&e) {
+                    return Err(format!("process enumeration failed: {e}"));
+                }
+                break;
+            }
             let len = entry
                 .szExeFile
                 .iter()
@@ -168,7 +177,7 @@ fn explorer_pids() -> Result<Vec<u32>, String> {
             {
                 pids.push(entry.th32ProcessID);
             }
-            more = Process32NextW(snapshot.0, &mut entry).is_ok();
+            step = Process32NextW(snapshot.0, &mut entry);
         }
         Ok(pids)
     }

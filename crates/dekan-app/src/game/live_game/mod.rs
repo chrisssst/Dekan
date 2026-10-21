@@ -16,6 +16,11 @@ const GAME_LOG_SETTLE: Duration = Duration::from_secs(8);
 const MAX_GAME_LOG_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_MATCH_SCREENSHOTS: usize = 12;
 const KEPT_AUTOMATIC_EXPORTS: usize = 5;
+const MAX_LOGGED_ERRORS: usize = 30;
+const SILENT_POLLS_BEFORE_WARNING: u32 = 6;
+
+static LOOKUP_FAILURE_LOGGED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveSnapshot {
@@ -45,19 +50,31 @@ impl std::fmt::Debug for LiveGame {
 impl LiveGame {
     #[must_use]
     pub fn latest(&self) -> Option<LiveSnapshot> {
-        self.snapshot.lock().ok().and_then(|s| s.clone())
+        match self.snapshot.lock() {
+            Ok(slot) => slot.clone(),
+            Err(e) => {
+                debug!(error = %e, "Live game snapshot lock poisoned; no snapshot");
+                None
+            }
+        }
     }
 
     pub fn on_match(&self, hook: MatchHook) {
-        if let Ok(mut slot) = self.on_match.lock() {
-            *slot = Some(hook);
+        match self.on_match.lock() {
+            Ok(mut slot) => *slot = Some(hook),
+            Err(e) => warn!(error = %e, "Match hook lock poisoned; the hook was not registered"),
         }
     }
 
     fn match_changed(&self, playing: bool) {
-        if let Ok(slot) = self.on_match.lock() {
-            if let Some(hook) = slot.as_ref() {
-                hook(playing);
+        match self.on_match.lock() {
+            Ok(slot) => {
+                if let Some(hook) = slot.as_ref() {
+                    hook(playing);
+                }
+            }
+            Err(e) => {
+                warn!(playing, error = %e, "Match hook lock poisoned; the hook was not called")
             }
         }
     }
@@ -69,8 +86,11 @@ impl LiveGame {
     }
 
     fn set(&self, snapshot: Option<LiveSnapshot>) {
-        if let Ok(mut slot) = self.snapshot.lock() {
-            *slot = snapshot;
+        match self.snapshot.lock() {
+            Ok(mut slot) => *slot = snapshot,
+            Err(e) => {
+                debug!(error = %e, "Live game snapshot lock poisoned; the snapshot was not stored")
+            }
         }
     }
 }
@@ -83,13 +103,27 @@ struct MatchWatch {
     last_event: i64,
     polls: u32,
     answered: u32,
+    roster_logged: bool,
+    warned_event_ids: bool,
+    warned_silence: bool,
+    last_error: Option<String>,
 }
 
 impl MatchWatch {
     fn observe(&mut self, data: &AllGameData, live: &LiveGame, now: SystemTime) {
         self.answered += 1;
         self.timeline.push((now, data.game_time));
-        if self.last_players.is_empty() {
+        if !self.roster_logged {
+            if data.players.is_empty() {
+                return self.finish(data, live, now);
+            }
+            self.roster_logged = true;
+            if !data.players.iter().any(|p| p.local) {
+                warn!(
+                    players = data.players.len(),
+                    "Live game data: none of the players is the local one; the skin marks will lack champion and skin"
+                );
+            }
             info!(
                 mode = %data.mode,
                 map = data.map,
@@ -99,10 +133,10 @@ impl MatchWatch {
             );
         } else {
             for now in &data.players {
-                let before = self
-                    .last_players
-                    .iter()
-                    .find(|p| p.team == now.team && p.champion == now.champion);
+                let same = |p: &&Player| p.team == now.team && p.champion == now.champion;
+                let unique = data.players.iter().filter(same).count() == 1
+                    && self.last_players.iter().filter(same).count() == 1;
+                let before = self.last_players.iter().find(same).filter(|_| unique);
                 if let Some(before) =
                     before.filter(|b| b.skin_id != now.skin_id || b.skin_name != now.skin_name)
                 {
@@ -115,6 +149,17 @@ impl MatchWatch {
                     );
                 }
             }
+        }
+        self.finish(data, live, now);
+    }
+
+    fn finish(&mut self, data: &AllGameData, live: &LiveGame, now: SystemTime) {
+        if !self.warned_event_ids && data.events.iter().any(|e| e.id < 0) {
+            self.warned_event_ids = true;
+            warn!(
+                events = data.events.len(),
+                "Live game data: events arrived without an EventID; they are not listed"
+            );
         }
         let seen = self.last_event;
         for event in data.events.iter().filter(|e| e.id > seen) {
@@ -187,6 +232,7 @@ pub async fn run(
                 info!(
                     polls = current.polls,
                     answered = current.answered,
+                    last_error = current.last_error.as_deref().unwrap_or(""),
                     "Match ended; live game data stopped"
                 );
                 live.match_changed(false);
@@ -195,7 +241,10 @@ pub async fn run(
                 let timeline = std::mem::take(&mut current.timeline);
                 watch = None;
                 tokio::select! {
-                    _ = token.cancelled() => break,
+                    _ = token.cancelled() => {
+                        debug!("Dekan is closing; the post-match game log report is skipped");
+                        break;
+                    }
                     () = tokio::time::sleep(GAME_LOG_SETTLE) => {}
                 }
                 let dir = game_dir.clone();
@@ -214,7 +263,17 @@ pub async fn run(
             current.polls += 1;
             match poll(&client).await {
                 Ok(data) => current.observe(&data, &live, SystemTime::now()),
-                Err(e) => debug!(error = %e, "Live game data not available yet"),
+                Err(e) => {
+                    debug!(error = %e, "Live game data not available yet");
+                    if current.polls >= SILENT_POLLS_BEFORE_WARNING
+                        && current.answered == 0
+                        && !current.warned_silence
+                    {
+                        current.warned_silence = true;
+                        warn!(polls = current.polls, error = %e, "Live game data has not answered since the match started");
+                    }
+                    current.last_error = Some(e);
+                }
             }
         }
         tokio::select! {
@@ -241,9 +300,16 @@ fn game_alive() -> bool {
     match dekan_platform::process::ProcessFinder::find_any_process(
         &dekan_platform::game_version::GAME_EXES,
     ) {
-        Ok(found) => found.is_some(),
+        Ok(found) => {
+            LOOKUP_FAILURE_LOGGED.store(false, std::sync::atomic::Ordering::Relaxed);
+            found.is_some()
+        }
         Err(e) => {
-            debug!(error = %e, "Game process lookup failed; the match is treated as still running");
+            if LOOKUP_FAILURE_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                debug!(error = %e, "Game process lookup still failing; the match is treated as still running");
+            } else {
+                warn!(error = %e, "Game process lookup failed; the match is treated as still running");
+            }
             true
         }
     }

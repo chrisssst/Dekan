@@ -26,7 +26,14 @@ pub fn tray_status(
             InjectionStatus::Pending => text.status_injecting,
             InjectionStatus::Confirmed => text.status_in_game_confirmed,
             InjectionStatus::Unconfirmed => text.status_in_game_unconfirmed,
-            InjectionStatus::Failed { .. } => text.status_in_game_failed,
+            InjectionStatus::PatcherExited { code }
+                if dekan_inject::ltk_host::closed_by_another_program(code) =>
+            {
+                text.status_in_game_patcher_killed
+            }
+            InjectionStatus::Failed { .. } | InjectionStatus::PatcherExited { .. } => {
+                text.status_in_game_failed
+            }
             InjectionStatus::Idle => text.status_in_game,
         },
         GamePhase::Reconnect => text.status_reconnecting,
@@ -61,6 +68,7 @@ pub fn panel_links_for(
     notices: ReleaseNotices,
 ) -> dekan_platform::panel::PanelLinks {
     let controller = tray.clone();
+    let last_failing = std::sync::Mutex::new(Vec::<String>::new());
     let snapshot = move || {
         let (party_line, in_room) = controller.party();
         let lcu_connected = state_rx.borrow().lcu_connected;
@@ -76,6 +84,7 @@ pub fn panel_links_for(
             party_line,
             in_room,
             auto_accept: dekan_platform::preferences::AUTO_ACCEPT.is_enabled(),
+            injection: dekan_platform::preferences::INJECTION.is_enabled(),
             random_skin: dekan_platform::preferences::RANDOM_SKIN.is_enabled(),
             light_loading: dekan_platform::preferences::LIGHT_LOADING.is_enabled(),
             autostart,
@@ -92,7 +101,25 @@ pub fn panel_links_for(
             installed_dll: notices.installed.cache.read(&notices.installed.dll),
             custom_mods: notices.custom_mods.summary(),
         };
-        dekan_app::control_panel::snapshot(&facts, dekan_platform::i18n::text())
+        let snapshot = dekan_app::control_panel::snapshot(&facts, dekan_platform::i18n::text());
+        let failing: Vec<String> = snapshot
+            .checks
+            .iter()
+            .filter(|check| !check.ok)
+            .map(|check| format!("{}: {}", check.label, check.detail))
+            .collect();
+        let mut last = last_failing
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *last != failing {
+            if failing.is_empty() {
+                info!("Control panel checks all pass");
+            } else {
+                warn!(failing = ?failing, "Control panel shows failing checks");
+            }
+            *last = failing;
+        }
+        snapshot
     };
     dekan_platform::panel::PanelLinks {
         events: tray.events(),
@@ -166,6 +193,12 @@ impl TrayActions {
             }
             dekan_platform::tray::TrayEvent::Activated => {
                 dekan_platform::panel::show_panel(self.links.clone());
+            }
+            dekan_platform::tray::TrayEvent::ToggleInjection => {
+                match dekan_platform::preferences::INJECTION.toggle() {
+                    Ok(enabled) => info!(enabled, "Skin injection changed from the control panel"),
+                    Err(e) => warn!(error = %e, "Could not change the skin injection setting"),
+                }
             }
             dekan_platform::tray::TrayEvent::ToggleRandomSkin => {
                 match dekan_platform::preferences::RANDOM_SKIN.toggle() {
@@ -273,5 +306,42 @@ impl TrayActions {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tray_status;
+    use dekan_core::phase::GamePhase;
+    use dekan_core::state::{AppState, InjectionStatus};
+
+    fn in_game(injection: InjectionStatus) -> AppState {
+        AppState {
+            lcu_connected: true,
+            phase: GamePhase::InProgress,
+            injection,
+            ..AppState::default()
+        }
+    }
+
+    #[test]
+    fn a_patcher_closed_by_another_program_is_told_apart_from_a_failure() {
+        let text = dekan_platform::i18n::text();
+        assert_eq!(
+            tray_status(
+                &in_game(InjectionStatus::PatcherExited { code: 0x4001_0004 }),
+                false,
+                text
+            ),
+            text.status_in_game_patcher_killed
+        );
+        assert_eq!(
+            tray_status(
+                &in_game(InjectionStatus::PatcherExited { code: 1 }),
+                false,
+                text
+            ),
+            text.status_in_game_failed
+        );
     }
 }

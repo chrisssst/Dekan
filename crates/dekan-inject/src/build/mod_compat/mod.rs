@@ -6,7 +6,7 @@ use dekan_wad::prop::tree::{Value, parse_fields, write_fields};
 use dekan_wad::prop::{FIELD_STRING, parse_prop_file, parse_prop_links, serialize_prop_file};
 use dekan_wad::wad::WadFile;
 use dekan_wad::writer::{WadWriter, WriterEntry, optimal_raw};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::error::InjectError;
 use crate::overlay_builder::GameWad;
@@ -41,12 +41,14 @@ pub struct ModCompat {
     pub props_checked: usize,
 
     pub entries_skipped: usize,
+
+    pub unreadable: Vec<String>,
 }
 
 impl ModCompat {
     #[must_use]
     pub fn is_compatible(&self) -> bool {
-        self.dangling.is_empty()
+        self.dangling.is_empty() && self.unreadable.is_empty()
     }
 }
 
@@ -62,42 +64,49 @@ fn ends_with_ci(name: &str, suffix: &str) -> bool {
         && name[name.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
 }
 
+fn listed(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    std::fs::read_dir(dir)?
+        .map(|entry| entry.map(|e| e.path()))
+        .collect()
+}
+
 #[must_use]
 pub fn mod_wads(mod_dir: &Path) -> Vec<PathBuf> {
-    let Some(wad_dir) = std::fs::read_dir(mod_dir).ok().and_then(|entries| {
-        entries.flatten().map(|e| e.path()).find(|p| {
+    let found = listed(mod_dir).and_then(|children| {
+        let Some(wad_dir) = children.into_iter().find(|p| {
             p.is_dir()
                 && p.file_name()
                     .and_then(|n| n.to_str())
                     .is_some_and(|n| n.eq_ignore_ascii_case("WAD"))
-        })
-    }) else {
-        return Vec::new();
+        }) else {
+            return Ok(Vec::new());
+        };
+        listed(&wad_dir)
+    });
+    let mut wads: Vec<PathBuf> = match found {
+        Ok(children) => children
+            .into_iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| ends_with_ci(n, ".wad.client"))
+            })
+            .collect(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            warn!(mod_dir = %mod_dir.display(), error = %e, "Mod WADs could not be listed; the mod is not checked");
+            Vec::new()
+        }
     };
-    let Ok(entries) = std::fs::read_dir(&wad_dir) else {
-        return Vec::new();
-    };
-    let mut wads: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| ends_with_ci(n, ".wad.client"))
-        })
-        .collect();
     wads.sort();
     wads
 }
 
-fn files_under(dir: &Path) -> Vec<(String, PathBuf)> {
+fn files_under(dir: &Path) -> std::io::Result<Vec<(String, PathBuf)>> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&current) else {
-            continue;
-        };
-        for path in entries.flatten().map(|e| e.path()) {
+        for path in listed(&current)? {
             if path.is_dir() {
                 stack.push(path);
             } else if let Ok(relative) = path.strip_prefix(dir) {
@@ -106,42 +115,65 @@ fn files_under(dir: &Path) -> Vec<(String, PathBuf)> {
         }
     }
     out.sort();
-    out
+    Ok(out)
 }
 
 #[must_use]
 pub fn mod_hashes(wads: &[PathBuf]) -> HashSet<u64> {
     let mut hashes = HashSet::new();
+    let (mut unreadable, mut first_error) = (0usize, None);
     for wad in wads {
-        if wad.is_dir() {
-            hashes.extend(
-                files_under(wad)
-                    .iter()
-                    .map(|(relative, _)| relative_path_hash(relative)),
-            );
-        } else if let Ok(file) = WadFile::open_toc_only(wad) {
-            hashes.extend(file.toc().map(|e| e.path_hash));
+        let read = if wad.is_dir() {
+            files_under(wad).map(|files| {
+                hashes.extend(
+                    files
+                        .iter()
+                        .map(|(relative, _)| relative_path_hash(relative)),
+                );
+            })
+        } else {
+            WadFile::open_toc_only(wad)
+                .map(|file| hashes.extend(file.toc().map(|e| e.path_hash)))
+                .map_err(std::io::Error::other)
+        };
+        if let Err(e) = read {
+            unreadable += 1;
+            first_error.get_or_insert_with(|| format!("{}: {e}", wad.display()));
         }
+    }
+    if unreadable > 0 {
+        warn!(
+            unreadable,
+            first_error = first_error.as_deref().unwrap_or_default(),
+            "Mod WADs could not be read; links into them may be reported as dangling"
+        );
     }
     hashes
 }
 
-fn starts_as_prop(file: &WadFile, hash: u64) -> bool {
-    file.read_prefix(hash, 4)
-        .ok()
-        .flatten()
-        .is_some_and(|head| head == b"PROP" || head == b"PTCH")
+fn starts_as_prop(file: &WadFile, hash: u64) -> Result<bool, dekan_wad::error::WadError> {
+    Ok(file
+        .read_prefix(hash, 4)?
+        .is_some_and(|head| head == b"PROP" || head == b"PTCH"))
+}
+
+fn is_prop_bytes(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"PROP") || bytes.starts_with(b"PTCH")
 }
 
 fn inspect_links(
     wad: &Path,
-    bytes: Option<Vec<u8>>,
+    entry: &str,
+    bytes: &[u8],
     resolvable: &dyn Fn(u64) -> bool,
     compat: &mut ModCompat,
 ) {
-    let Some(links) = bytes.and_then(|b| parse_prop_links(&b).ok()) else {
-        compat.entries_skipped += 1;
-        return;
+    let links = match parse_prop_links(bytes) {
+        Ok(links) => links,
+        Err(e) => {
+            compat.unreadable.push(format!("{entry}: {e}"));
+            return;
+        }
     };
     compat.props_checked += 1;
     for link in links {
@@ -162,11 +194,21 @@ pub fn check(
     mod_hashes: &HashSet<u64>,
 ) -> Result<ModCompat, InjectError> {
     let mut compat = ModCompat::default();
+    let unreadable_folder = |e: std::io::Error| {
+        InjectError::Overlay(format!("mod folder unreadable '{}': {e}", wad.display()))
+    };
     if wad.is_dir() {
         let resolvable = |hash: u64| game_hashes.contains(&hash) || mod_hashes.contains(&hash);
-        for (relative, path) in files_under(wad) {
-            if ends_with_ci(&relative, ".bin") {
-                inspect_links(wad, std::fs::read(&path).ok(), &resolvable, &mut compat);
+        for (relative, path) in files_under(wad).map_err(unreadable_folder)? {
+            if !ends_with_ci(&relative, ".bin") {
+                continue;
+            }
+            match std::fs::read(&path) {
+                Ok(bytes) if is_prop_bytes(&bytes) => {
+                    inspect_links(wad, &relative, &bytes, &resolvable, &mut compat);
+                }
+                Ok(_) => compat.entries_skipped += 1,
+                Err(e) => compat.unreadable.push(format!("{relative}: {e}")),
             }
         }
         return Ok(compat);
@@ -181,16 +223,22 @@ pub fn check(
         game_hashes.contains(&hash) || mod_hashes.contains(&hash) || own.contains(&hash)
     };
     for hash in hashes {
-        if !starts_as_prop(&file, hash) {
-            compat.entries_skipped += 1;
-            continue;
+        let entry = format!("{hash:016x}");
+        let bytes = match starts_as_prop(&file, hash) {
+            Ok(false) => {
+                compat.entries_skipped += 1;
+                continue;
+            }
+            Ok(true) => file.read(hash),
+            Err(e) => Err(e),
+        };
+        match bytes {
+            Ok(Some(bytes)) => inspect_links(wad, &entry, &bytes, &resolvable, &mut compat),
+            Ok(None) => compat
+                .unreadable
+                .push(format!("{entry}: missing from its own table")),
+            Err(e) => compat.unreadable.push(format!("{entry}: {e}")),
         }
-        inspect_links(
-            wad,
-            file.read(hash).ok().flatten(),
-            &resolvable,
-            &mut compat,
-        );
     }
     Ok(compat)
 }

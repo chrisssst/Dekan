@@ -3,7 +3,8 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 17] = [
+const ACTIONS: [PanelAction; 18] = [
+    PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
     PanelAction::ToggleAutoAccept,
@@ -23,7 +24,7 @@ const ACTIONS: [PanelAction; 17] = [
     PanelAction::Quit,
 ];
 
-fn tall_panel() -> ControlPanel {
+pub(super) fn tall_panel() -> ControlPanel {
     i_slint_backend_testing::init_no_event_loop();
     let window = ControlPanel::new().expect("panel");
     window
@@ -38,6 +39,7 @@ fn snapshot() -> PanelSnapshot {
         party_line: "Room BLT-7Q2M".into(),
         in_room: true,
         auto_accept: true,
+        injection: true,
         random_skin: false,
         light_loading: true,
         autostart: false,
@@ -76,10 +78,21 @@ fn every_language_fills_every_label() {
     for language in [Language::Turkish, Language::English] {
         let labels = labels(language.text());
         for (name, value) in [
-            ("options", &labels.section_options),
-            ("party", &labels.section_party),
+            ("home", &labels.tab_home),
+            ("options", &labels.tab_options),
+            ("theme", &labels.theme),
+            ("classic theme", &labels.theme_classic),
+            ("crimson theme", &labels.theme_crimson),
+            ("obsidian theme", &labels.theme_obsidian),
+            ("party", &labels.tab_party),
+            ("help", &labels.tab_help),
+            ("all clear", &labels.all_clear),
+            ("attention", &labels.attention),
+            ("see diagnostics", &labels.see_diagnostics),
+            ("party hint", &labels.party_hint),
             ("folders", &labels.section_folders),
             ("diagnostics", &labels.section_diagnostics),
+            ("injection", &labels.injection),
             ("random", &labels.random_skin),
             ("light", &labels.light_loading),
             ("accept", &labels.auto_accept),
@@ -106,6 +119,8 @@ fn the_real_panel_shows_the_snapshot_and_a_toggle_sends_its_action() {
 
     assert_eq!(window.get_status(), "Champion select");
     assert_eq!(window.get_checks().row_count(), 2);
+    assert_eq!(window.get_attention(), 1);
+    window.set_tab(1);
     let light = ElementHandle::find_by_accessible_label(&window, text.menu_light_loading)
         .next()
         .expect("light loading toggle");
@@ -123,6 +138,7 @@ fn the_real_panel_shows_the_snapshot_and_a_toggle_sends_its_action() {
         .next()
         .expect("quit button")
         .invoke_accessible_default_action();
+    window.set_tab(0);
     ElementHandle::find_by_accessible_label(&window, text.panel_update_download)
         .next()
         .expect("the update notice offers its download")
@@ -147,14 +163,16 @@ fn party_buttons_follow_the_room_state() {
     window.on_action(move |action| sink.borrow_mut().push(action));
 
     let press = |label: &str| {
-        ElementHandle::find_by_accessible_label(&window, label)
-            .next()
-            .expect("party button")
-            .invoke_accessible_default_action();
+        let button = ElementHandle::find_by_accessible_label(&window, label).next();
+        button.map(|button| button.invoke_accessible_default_action())
     };
+    window.set_tab(2);
     render(&window, &snapshot());
-    press(text.menu_party_create);
-    press(text.menu_party_leave);
+    assert!(
+        press(text.menu_party_create).is_none(),
+        "create is hidden in a room"
+    );
+    assert!(press(text.menu_party_leave).is_some());
     render(
         &window,
         &PanelSnapshot {
@@ -162,8 +180,11 @@ fn party_buttons_follow_the_room_state() {
             ..snapshot()
         },
     );
-    press(text.menu_party_create);
-    press(text.menu_party_leave);
+    assert!(press(text.menu_party_create).is_some());
+    assert!(
+        press(text.menu_party_leave).is_none(),
+        "leave is hidden outside a room"
+    );
     assert_eq!(
         *fired.borrow(),
         vec![PanelAction::PartyLeave, PanelAction::PartyCreate]
@@ -187,33 +208,36 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
     window.on_action(move |action| sink.borrow_mut().push(action));
 
     let clicks = [
-        (text.panel_update_download, PanelAction::OpenRelease),
-        ("Install injector 1.27", PanelAction::InstallInjector),
-        (text.menu_random_skin, PanelAction::ToggleRandomSkin),
-        (text.menu_light_loading, PanelAction::ToggleLightLoading),
-        (text.menu_auto_accept, PanelAction::ToggleAutoAccept),
-        (text.menu_autostart, PanelAction::ToggleAutostart),
-        (text.menu_party_create, PanelAction::PartyCreate),
-        (text.menu_party_join, PanelAction::PartyJoin),
-        (text.folder_mods, PanelAction::OpenMods),
-        (text.folder_tools, PanelAction::OpenTools),
-        (text.folder_logs, PanelAction::OpenLogs),
-        (text.folder_restore_mods, PanelAction::RestoreMods),
-        (text.panel_mark_problem, PanelAction::MarkProblem),
+        (0, text.panel_update_download, PanelAction::OpenRelease),
+        (0, "Install injector 1.27", PanelAction::InstallInjector),
+        (0, text.menu_injection, PanelAction::ToggleInjection),
+        (1, text.menu_random_skin, PanelAction::ToggleRandomSkin),
+        (1, text.menu_light_loading, PanelAction::ToggleLightLoading),
+        (1, text.menu_auto_accept, PanelAction::ToggleAutoAccept),
+        (1, text.menu_autostart, PanelAction::ToggleAutostart),
+        (2, text.menu_party_create, PanelAction::PartyCreate),
+        (2, text.menu_party_join, PanelAction::PartyJoin),
+        (3, text.folder_mods, PanelAction::OpenMods),
+        (3, text.folder_tools, PanelAction::OpenTools),
+        (3, text.folder_logs, PanelAction::OpenLogs),
+        (3, text.folder_restore_mods, PanelAction::RestoreMods),
+        (3, text.panel_mark_problem, PanelAction::MarkProblem),
         (
+            3,
             text.panel_export_diagnostics,
             PanelAction::ExportDiagnostics,
         ),
-        (text.menu_about, PanelAction::About),
-        (text.menu_quit, PanelAction::Quit),
+        (3, text.menu_about, PanelAction::About),
+        (3, text.menu_quit, PanelAction::Quit),
     ];
-    for (label, _) in clicks {
+    for (tab, label, _) in clicks {
+        window.set_tab(tab);
         ElementHandle::find_by_accessible_label(&window, label)
             .next()
             .unwrap_or_else(|| panic!("no control labelled {label:?}"))
             .invoke_accessible_default_action();
     }
-    let expected: Vec<PanelAction> = clicks.iter().map(|(_, action)| *action).collect();
+    let expected: Vec<PanelAction> = clicks.iter().map(|(_, _, action)| *action).collect();
     assert_eq!(*fired.borrow(), expected);
 
     render(
@@ -223,6 +247,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
             ..state
         },
     );
+    window.set_tab(2);
     ElementHandle::find_by_accessible_label(&window, text.menu_party_leave)
         .next()
         .expect("leave button")
@@ -284,6 +309,7 @@ fn long_diagnostic_lines_never_run_under_the_hint_below_them() {
             .collect(),
         ..snapshot()
     };
+    window.set_tab(3);
     render(&window, &state);
     let bottom = |label: &str| {
         let element = ElementHandle::find_by_accessible_label(&window, label)
@@ -325,4 +351,42 @@ fn labels_follow_the_client_language_once_it_is_known() {
         Language::English.text().panel_section_diagnostics
     );
     assert_eq!(shown.get(), Some(Language::English));
+}
+
+#[test]
+fn tabs_switch_by_their_label_and_a_failing_check_leads_to_the_diagnostics() {
+    let window = tall_panel();
+    let text = Language::English.text();
+    window.set_labels(labels(text));
+    render(&window, &snapshot());
+    let find = |label: &str| ElementHandle::find_by_accessible_label(&window, label).next();
+    assert!(
+        find(text.menu_random_skin).is_none(),
+        "options start hidden"
+    );
+
+    find(text.panel_section_options)
+        .expect("options tab")
+        .invoke_accessible_default_action();
+    assert_eq!(window.get_tab(), 1);
+    assert!(find(text.menu_random_skin).is_some());
+
+    find(text.panel_tab_home)
+        .expect("home tab")
+        .invoke_accessible_default_action();
+    find(text.panel_see_diagnostics)
+        .expect("a failing check is announced on the home tab")
+        .invoke_accessible_default_action();
+    assert_eq!(window.get_tab(), 3);
+    assert!(find("refused").is_some());
+
+    let healthy = PanelSnapshot {
+        update_line: None,
+        checks: Vec::new(),
+        ..snapshot()
+    };
+    window.set_tab(0);
+    render(&window, &healthy);
+    assert!(find(text.panel_all_clear).is_some());
+    assert!(find(text.panel_see_diagnostics).is_none());
 }

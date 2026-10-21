@@ -19,9 +19,16 @@ pub struct ResolvedPaths {
 
 impl ResolvedPaths {
     pub fn discover() -> Self {
-        let app_state_dir =
-            state_dir().unwrap_or_else(|_| std::env::temp_dir().join("Dekan_state"));
-        let app_data_dir = data_dir().unwrap_or_else(|_| std::env::temp_dir().join("Dekan"));
+        let app_state_dir = state_dir().unwrap_or_else(|e| {
+            let fallback = std::env::temp_dir().join("Dekan_state");
+            warn!(error = %e, fallback = %fallback.display(), "State folder could not be resolved; using a temporary one");
+            fallback
+        });
+        let app_data_dir = data_dir().unwrap_or_else(|e| {
+            let fallback = std::env::temp_dir().join("Dekan");
+            warn!(error = %e, fallback = %fallback.display(), "Data folder could not be resolved; using a temporary one");
+            fallback
+        });
         Self::discover_in(app_state_dir, app_data_dir)
     }
 
@@ -57,12 +64,15 @@ impl ResolvedPaths {
             .cloned()
             .unwrap_or_else(|| candidate_library_dirs[0].clone());
 
-        let game_dir = match dekan_platform::paths::discover_game_dir() {
-            Some(dir) => dir,
+        let game_dir = match dekan_platform::paths::discover_game_dir_with_source() {
+            Some((dir, found_by)) => {
+                info!(game = %dir.display(), found_by, "League install found");
+                dir
+            }
             None => {
                 warn!(
                     "League install not found yet (client closed and no install registered by the \
-                     Riot Client); it will be looked up again when a skin is prepared"
+                     Riot Client; the discovery reasons are logged at debug, DEKAN_LOG=debug);                      it will be looked up again when a skin is prepared"
                 );
                 PathBuf::new()
             }

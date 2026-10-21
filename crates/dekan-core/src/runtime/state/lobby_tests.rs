@@ -171,3 +171,54 @@ fn a_lobby_target_restored_for_the_other_champion_can_be_taken_back() {
             .is_some_and(|l| l.targets.is_empty())
     );
 }
+
+#[test]
+fn the_lobby_party_is_kept_through_the_match_and_cleared_with_the_client() {
+    let (tx, rx) = new_state_channel();
+    let party = LobbyParty {
+        party_id: "p-1".into(),
+        members: 3,
+    };
+    assert!(set_lobby_party(&tx, Some(party.clone())));
+    assert!(
+        !set_lobby_party(&tx, Some(party.clone())),
+        "same lobby, no change"
+    );
+    set_phase(&tx, GamePhase::ChampSelect);
+    set_phase(&tx, GamePhase::InProgress);
+    assert_eq!(rx.borrow().lobby_party, Some(party));
+    clear_for_new_game(&tx);
+    assert_eq!(rx.borrow().lobby_party, None);
+}
+
+#[test]
+fn stopping_to_share_drops_the_friends_picks() {
+    let (tx, rx) = new_state_channel();
+    set_party_share(&tx, true);
+    set_party_peers(
+        &tx,
+        vec![PartyPeer {
+            member_id: 7,
+            puuid: "friend".into(),
+            champion_id: 1,
+            skin_id: 1_004,
+            chroma_id: None,
+        }],
+    );
+    assert_eq!(rx.borrow().party_peers.len(), 1);
+    set_party_share(&tx, false);
+    assert!(!rx.borrow().party_share);
+    assert!(rx.borrow().party_peers.is_empty());
+}
+
+#[test]
+fn a_room_is_shown_only_once_the_player_shares() {
+    let (tx, rx) = new_state_channel();
+    set_party_status(&tx, PartyStatus::Connected { members: 3 });
+    assert_eq!(rx.borrow().shown_party_status(), PartyStatus::Off);
+    set_party_share(&tx, true);
+    assert_eq!(
+        rx.borrow().shown_party_status(),
+        PartyStatus::Connected { members: 3 }
+    );
+}

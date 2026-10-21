@@ -80,11 +80,19 @@ impl LcuEvent {
     pub fn parse(text: &str) -> Result<Option<Self>, LcuError> {
         let trimmed = text.trim();
         if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+            debug!(
+                bytes = text.len(),
+                "LCU frame is not an event array; ignored"
+            );
             return Ok(None);
         }
 
         let array: Vec<serde_json::Value> = serde_json::from_str(trimmed)?;
         if array.len() != 3 {
+            debug!(
+                items = array.len(),
+                "LCU frame does not have 3 items; ignored"
+            );
             return Ok(None);
         }
 
@@ -93,6 +101,7 @@ impl LcuEvent {
             .ok_or_else(|| LcuError::Parse("opcode is not an integer".into()))?;
 
         if opcode != 8 {
+            debug!(opcode, "LCU frame is not an event; ignored");
             return Ok(None);
         }
 
@@ -116,20 +125,41 @@ pub fn make_subscribe_frame(topic: &str) -> String {
     format!(r#"[5,"{topic}"]"#)
 }
 
+fn json_kind(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "bool",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
 pub fn dispatch_event_to_state(state_tx: &StateSender, event: &LcuEvent) {
     match event.topic.as_str() {
         TOPIC_GAMEFLOW => {
-            if let Some(phase_str) = event.payload.data.as_str() {
-                let phase = GamePhase::from_lcu(phase_str).unwrap_or_else(|| {
+            let Some(phase_str) = event.payload.data.as_str() else {
+                if event.payload.data.is_null() {
+                    debug!(event_type = %event.payload.event_type, "LCU gameflow event carried no phase");
+                } else {
                     warn!(
-                        raw = %phase_str,
-                        "Unmapped LCU gameflow phase; treating it as None"
+                        event_type = %event.payload.event_type,
+                        data = json_kind(&event.payload.data),
+                        "LCU gameflow event carried a phase that is not text; ignored"
                     );
-                    GamePhase::None
-                });
-                info!(phase = ?phase, raw = %phase_str, "LCU gameflow phase transition");
-                set_phase(state_tx, phase);
-            }
+                }
+                return;
+            };
+            let Some(phase) = GamePhase::from_lcu(phase_str) else {
+                warn!(
+                    raw = %phase_str,
+                    "Unmapped LCU gameflow phase; keeping the current phase"
+                );
+                return;
+            };
+            info!(phase = ?phase, raw = %phase_str, "LCU gameflow phase transition");
+            set_phase(state_tx, phase);
         }
         TOPIC_CHAMP_SELECT => {
             match serde_json::from_value::<ChampSelectSession>(event.payload.data.clone()) {

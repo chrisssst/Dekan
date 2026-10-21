@@ -8,6 +8,7 @@ impl OverlaySession {
         let Some(game_dir) = dekan_platform::paths::normalize_game_dir(&self.mods.game_dir)
             .or_else(dekan_platform::paths::discover_game_dir)
         else {
+            debug!("The game folder is not known; companion characters are not warmed");
             return;
         };
         let cache_dir = self.mods.state_dir.clone();

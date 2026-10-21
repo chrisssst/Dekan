@@ -1,3 +1,4 @@
+use tracing::debug;
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
@@ -43,7 +44,7 @@ pub fn set_text(text: &str) -> Result<(), PlatformError> {
         let target = GlobalLock(block) as *mut u16;
         if target.is_null() {
             // ignore-ok: freeing our own block after a failure already being reported
-            let _ = GlobalFree(block);
+            let _ = GlobalFree(Some(block));
             return Err(PlatformError::Window(
                 "clipboard memory could not be locked".into(),
             ));
@@ -53,9 +54,9 @@ pub fn set_text(text: &str) -> Result<(), PlatformError> {
         // ignore-ok: GlobalUnlock reports "not locked any more" as an error on success
         let _ = GlobalUnlock(block);
 
-        if let Err(e) = SetClipboardData(u32::from(CF_UNICODETEXT.0), HANDLE(block.0)) {
+        if let Err(e) = SetClipboardData(u32::from(CF_UNICODETEXT.0), Some(HANDLE(block.0))) {
             // ignore-ok: the clipboard refused the block, so it is still ours to free
-            let _ = GlobalFree(block);
+            let _ = GlobalFree(Some(block));
             return Err(PlatformError::Window(format!(
                 "clipboard refused the text: {e}"
             )));
@@ -68,18 +69,32 @@ pub fn get_text() -> Result<Option<String>, PlatformError> {
     let _guard = OpenGuard::open()?;
 
     unsafe {
-        let Ok(handle) = GetClipboardData(u32::from(CF_UNICODETEXT.0)) else {
-            return Ok(None);
+        let handle = match GetClipboardData(u32::from(CF_UNICODETEXT.0)) {
+            Ok(handle) => handle,
+            Err(e) => {
+                debug!(error = %e, "The clipboard holds no unicode text");
+                return Ok(None);
+            }
         };
         let block = HGLOBAL(handle.0);
         let source = GlobalLock(block) as *const u16;
         if source.is_null() {
+            debug!(
+                error = %windows::core::Error::from_thread(),
+                "The clipboard text could not be locked"
+            );
             return Ok(None);
         }
         let readable = (GlobalSize(block) / std::mem::size_of::<u16>()).min(MAX_READ_CHARS);
         let mut len = 0usize;
         while len < readable && *source.add(len) != 0 {
             len += 1;
+        }
+        if len == MAX_READ_CHARS {
+            debug!(
+                limit = MAX_READ_CHARS,
+                "The clipboard text was cut at the read limit"
+            );
         }
         let text = String::from_utf16_lossy(std::slice::from_raw_parts(source, len));
 

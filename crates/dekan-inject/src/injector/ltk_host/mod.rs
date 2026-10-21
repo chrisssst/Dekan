@@ -177,6 +177,13 @@ pub fn joined_too_late(message: &str) -> bool {
     message.contains("joined too late")
 }
 
+const TERMINATED_EXTERNALLY: u32 = 0x4001_0004;
+
+#[must_use]
+pub fn closed_by_another_program(exit_code: i32) -> bool {
+    exit_code as u32 == TERMINATED_EXTERNALLY
+}
+
 #[must_use]
 pub fn is_dll_failure(level: &str, message: &str) -> bool {
     if is_expected_status(message) {

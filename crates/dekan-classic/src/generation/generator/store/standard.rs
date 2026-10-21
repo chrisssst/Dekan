@@ -97,7 +97,7 @@ impl StandardChampion {
                 ahead_of_time,
                 || character_names_in_bins(&self.wad, &self.alias),
             ),
-            None => character_names_in_bins(&self.wad, &self.alias),
+            None => character_names_in_bins(&self.wad, &self.alias).0,
         })
     }
 
@@ -125,9 +125,23 @@ impl StandardChampion {
     #[must_use]
     pub fn parent_skin(&self, skin: u32) -> Option<u32> {
         let main = self.alias.to_ascii_lowercase();
-        let bin = self.read_skin_bin(&main, skin).ok().flatten()?;
-        let parent = slot_identity(&bin).ok()?.parent;
-        (parent != 0 && parent != skin).then_some(parent)
+        let bin = match self.read_skin_bin(&main, skin) {
+            Ok(Some(bin)) => bin,
+            Ok(None) => return None,
+            Err(e) => {
+                warn!(alias = %self.alias, skin, error = %e, "Skin bin unreadable; the client's parent skin is used");
+                return None;
+            }
+        };
+        match slot_identity(&bin) {
+            Ok(identity) => {
+                (identity.parent != 0 && identity.parent != skin).then_some(identity.parent)
+            }
+            Err(e) => {
+                warn!(alias = %self.alias, skin, error = %e, "Skin identity unreadable; the client's parent skin is used");
+                None
+            }
+        }
     }
 
     #[must_use]
@@ -145,11 +159,18 @@ impl StandardChampion {
 
     pub fn gear_count(&self, skin: u32) -> usize {
         let main = self.alias.to_ascii_lowercase();
-        self.read_skin_bin(&main, skin)
-            .ok()
-            .flatten()
-            .and_then(|bin| crate::forms::gear_keys(&bin).ok())
-            .map_or(0, |keys| keys.len())
+        let keys = match self.read_skin_bin(&main, skin) {
+            Ok(Some(bin)) => crate::forms::gear_keys(&bin).map_err(|e| e.to_string()),
+            Ok(None) => return 0,
+            Err(e) => Err(e.to_string()),
+        };
+        match keys {
+            Ok(keys) => keys.len(),
+            Err(error) => {
+                warn!(alias = %self.alias, skin, error = %error, "Skin gears unreadable; the skin is treated as having no forms");
+                0
+            }
+        }
     }
 
     pub fn build_mod(
@@ -274,8 +295,10 @@ impl StandardChampion {
         std::fs::write(bins_dir.join("skin0.bin"), retargeted)?;
 
         let mut retargeted_companions = Vec::new();
+        let mut without_skin = Vec::new();
         for companion in self.companions() {
             let Some(source_skin) = self.companion_source_skin(&companion, skin, base_skin) else {
+                without_skin.push(companion);
                 continue;
             };
             let written = self
@@ -326,6 +349,9 @@ impl StandardChampion {
                 continue;
             }
             retargeted_companions.push(companion);
+        }
+        if !without_skin.is_empty() {
+            debug!(alias = %self.alias, skin, companions = ?without_skin, "Companions with no skin of their own keep their base look");
         }
 
         let meta = partial.join("META");

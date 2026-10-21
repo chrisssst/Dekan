@@ -74,9 +74,9 @@ fn open(content: &WelcomeContent, auto_dismiss: Option<Duration>) {
             return;
         }
     };
-    window
-        .global::<Theme>()
-        .set_mode(super::panel::active_theme());
+    super::themes::follow(&window, |window, mode| {
+        window.global::<Theme>().set_mode(mode)
+    });
     fill(&window, content);
     runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
     let weak = window.as_weak();

@@ -3,12 +3,14 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::prop::{PropEntry, parse_prop_file, serialize_prop_file};
 
+use tracing::{debug, warn};
+
 use crate::error::ClassicError;
 use crate::gear_toggle::{bin_error, h, hash_value, named};
 
 use crate::vfx_markers::{
-    EMITTER_LISTS, FIELD_LINK, FIELD_LIST, FIELD_POINTER, FIELD_U8, MAX_DEPTH, STENCIL_BASE,
-    STENCIL_EQUAL, embed, hold_markers, marker_systems, raw, text,
+    EMITTER_LISTS, FIELD_LINK, FIELD_LIST, FIELD_POINTER, FIELD_U8, MAX_DEPTH, STENCIL_EQUAL,
+    embed, form_stencil, hold_markers, marker_systems, raw, text,
 };
 
 fn resource_map(value: &Value) -> BTreeMap<u32, u32> {
@@ -50,6 +52,7 @@ struct Gate<'a> {
     targets: &'a BTreeMap<u32, Vec<Option<u32>>>,
     added: BTreeMap<u32, Vec<Field>>,
     stamped: usize,
+    unresolved: usize,
 }
 
 impl Gate<'_> {
@@ -62,10 +65,7 @@ impl Gate<'_> {
         tree::set_field(
             fields,
             h("stencilRef"),
-            raw(
-                FIELD_U8,
-                vec![STENCIL_BASE + u8::try_from(form).unwrap_or(0)],
-            ),
+            raw(FIELD_U8, vec![form_stencil(form)]),
         );
         self.stamped += 1;
         let Some(ids) = tree::field_mut(fields, h("childParticleSetDefinition"))
@@ -107,9 +107,14 @@ impl Gate<'_> {
             return Some(key);
         }
         if depth > MAX_DEPTH {
+            self.unresolved += 1;
             return None;
         }
-        let mut fields = self.systems.get(&path)?.clone();
+        let Some(system) = self.systems.get(&path) else {
+            self.unresolved += 1;
+            return None;
+        };
+        let mut fields = system.clone();
         self.added.insert(key, Vec::new());
         for list in EMITTER_LISTS {
             if let Some(items) = tree::field_mut(&mut fields, h(list)).and_then(Value::items_mut) {
@@ -226,9 +231,16 @@ pub fn gate_form_effects(
 ) -> Result<Option<(Vec<u8>, usize)>, ClassicError> {
     let forms = plan.gear_bodies.len();
     if forms < 2 || plan.markers.len() + 1 != forms {
+        debug!(
+            forms,
+            markers = plan.markers.len(),
+            "Form effects skipped: the markers do not match the forms"
+        );
         return Ok(None);
     }
     let mut systems: HashMap<u32, Vec<Field>> = HashMap::new();
+    let mut unparsed = 0usize;
+    let mut first_error = None;
     for bin in plan.bins {
         let file = parse_prop_file(bin).map_err(bin_error)?;
         for entry in file
@@ -236,10 +248,19 @@ pub fn gate_form_effects(
             .iter()
             .filter(|e| e.class_hash == h("VfxSystemDefinitionData"))
         {
-            if let Ok(fields) = tree::parse_fields(&entry.body) {
-                systems.entry(entry.key_hash).or_insert(fields);
+            match tree::parse_fields(&entry.body) {
+                Ok(fields) => {
+                    systems.entry(entry.key_hash).or_insert(fields);
+                }
+                Err(e) => {
+                    unparsed += 1;
+                    first_error.get_or_insert(e.to_string());
+                }
             }
         }
+    }
+    if let Some(error) = first_error {
+        warn!(unparsed, error = %error, "Effect systems unreadable; their form gating is skipped");
     }
     let gears = plan
         .gear_bodies
@@ -253,14 +274,20 @@ pub fn gate_form_effects(
         .iter()
         .position(|e| e.class_hash == h("SkinCharacterDataProperties"))
     else {
+        warn!("Form effects skipped: the skin bin has no skin object");
         return Ok(None);
     };
     let mut skin = tree::parse_fields(&file.entries[skin_at].body).map_err(bin_error)?;
     let Some(resolver_key) = tree::field(&skin, h("mResourceResolver")).and_then(Value::as_u32)
     else {
+        debug!("Form effects skipped: the skin names no resource resolver");
         return Ok(None);
     };
     let Some(resolver_at) = file.entries.iter().position(|e| e.key_hash == resolver_key) else {
+        warn!(
+            resolver = format!("{resolver_key:08x}"),
+            "Form effects skipped: the resource resolver is not in the skin bin"
+        );
         return Ok(None);
     };
     let mut resolver = tree::parse_fields(&file.entries[resolver_at].body).map_err(bin_error)?;
@@ -283,6 +310,7 @@ pub fn gate_form_effects(
         targets: &targets,
         added: BTreeMap::new(),
         stamped: 0,
+        unresolved: 0,
     };
     let mut links = Vec::new();
     for (key, per_form) in &targets {
@@ -291,7 +319,14 @@ pub fn gate_form_effects(
             links.push((*key, path));
         }
     }
+    if gate.unresolved > 0 {
+        warn!(
+            unresolved = gate.unresolved,
+            "Child effects not found in the skin's bins; they stay ungated and show in every form"
+        );
+    }
     if links.is_empty() {
+        debug!("Form effects skipped: no effect differs between forms");
         return Ok(None);
     }
     for (key, path, system) in marker_systems(forms) {
@@ -300,6 +335,7 @@ pub fn gate_form_effects(
     }
 
     let Some(Value::Map { entries, .. }) = tree::field_mut(&mut resolver, h("resourceMap")) else {
+        warn!("Form effects skipped: the resource resolver has no resource map");
         return Ok(None);
     };
     for (key, path) in links {

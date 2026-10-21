@@ -55,7 +55,7 @@ pub async fn offer(ctx: UpdateOffer, offer: Offer) {
         None => {
             info!(
                 version,
-                "The update question closed unanswered as a match started or Dekan exited; it is asked again later"
+                "The update question closed unanswered (a match started, Dekan exited or the dialog failed); it is asked again later"
             );
             return;
         }
@@ -71,7 +71,11 @@ pub async fn offer(ctx: UpdateOffer, offer: Offer) {
     let setup = match downloaded {
         Ok(setup) => setup,
         Err(e) => {
-            warn!(version, error = %e, "The update was not downloaded or failed verification; opening the download page");
+            if matches!(e, self_update::UpdateError::Untrusted(_)) {
+                error!(version, error = %e, "The update failed verification and was discarded; opening the download page");
+            } else {
+                warn!(version, error = %e, "The update was not downloaded or failed verification; opening the download page");
+            }
             ctx.tray
                 .notify(text.update_failed_title, text.update_failed_body);
             if let Err(e) = dekan_platform::shell::open_web_page(&update_check::release_page()) {
@@ -84,8 +88,12 @@ pub async fn offer(ctx: UpdateOffer, offer: Offer) {
         return;
     }
     info!(version, setup = %setup.path.display(), "Update verified; closing Dekan to install it");
-    update_check::remember_notified(&ctx.state_dir, offer.version);
-    ctx.pending.set(setup);
+    if let Err(e) = ctx.pending.set(setup) {
+        error!(version, error = %e, "The verified update could not be handed to the installer step; Dekan stays open");
+        ctx.tray
+            .notify(text.update_failed_title, text.update_failed_body);
+        return;
+    }
     ctx.shutdown.cancel();
 }
 
@@ -100,7 +108,13 @@ async fn ask(ctx: &UpdateOffer, version: &str) -> Option<bool> {
     let mut state_rx = ctx.state_rx.clone();
     loop {
         tokio::select! {
-            answer = &mut question => return Some(answer.unwrap_or(false)),
+            answer = &mut question => return match answer {
+                Ok(accepted) => Some(accepted),
+                Err(e) => {
+                    warn!(error = %e, "The update question failed; it is asked again later");
+                    None
+                }
+            },
             _ = ctx.shutdown.cancelled() => break,
             changed = state_rx.changed() => {
                 if changed.is_err() || update_check::is_busy(state_rx.borrow().phase) {
@@ -173,12 +187,15 @@ pub fn run_installer(install: Option<ReadyInstall>, instance_guard: Option<Singl
             );
         }
         Err(e) => {
-            error!(error = %e, "Could not start the update installer");
+            error!(error = %e, setup = %install.setup.path.display(), "Could not start the update installer");
             relaunch();
         }
     }
 }
 
 fn relaunch() {
-    let _ = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn()); // ignore-ok: the log is already closed; the user reopens Dekan from the Start menu
+    if let Err(e) = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn())
+    {
+        warn!(error = %e, "Dekan could not reopen itself after the update; open it from the Start menu");
+    }
 }

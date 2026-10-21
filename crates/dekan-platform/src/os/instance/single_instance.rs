@@ -26,10 +26,11 @@ impl SingleInstanceGuard {
         if last_error == ERROR_ALREADY_EXISTS {
             if let Some(dir) = state_dir {
                 let pid_path = dir.join(format!("{name}.pid"));
-                if pid_path.exists() {
-                    if let Ok(content) = std::fs::read_to_string(&pid_path) {
-                        if let Ok(existing_pid) = content.trim().parse::<u32>() {
-                            if let Ok(Some(_)) = ProcessFinder::find_first_thread_id(existing_pid) {
+                match std::fs::read_to_string(&pid_path) {
+                    Ok(content) => match content.trim().parse::<u32>() {
+                        Ok(existing_pid) => match ProcessFinder::find_first_thread_id(existing_pid)
+                        {
+                            Ok(Some(_)) => {
                                 info!(
                                     pid = existing_pid,
                                     "Another Dekan instance holds the single-instance lock"
@@ -42,15 +43,31 @@ impl SingleInstanceGuard {
                                     pid: Some(existing_pid),
                                 });
                             }
-
-                            warn!(
+                            Ok(None) => {
+                                warn!(
+                                    pid = existing_pid,
+                                    path = %pid_path.display(),
+                                    "Removing a stale instance lockfile left by a process that died"
+                                );
+                                let _ = std::fs::remove_file(&pid_path); // ignore-ok: a stale file only costs this log line next boot
+                            }
+                            Err(e) => warn!(
                                 pid = existing_pid,
-                                path = %pid_path.display(),
-                                "Removing a stale instance lockfile left by a process that died"
-                            );
-                            let _ = std::fs::remove_file(&pid_path); // ignore-ok: a stale file only costs this log line next boot
-                        }
-                    }
+                                error = %e,
+                                "Could not check whether the instance named in the lockfile is alive; the lockfile stays"
+                            ),
+                        },
+                        Err(e) => debug!(
+                            path = %pid_path.display(),
+                            error = %e,
+                            "Instance lockfile does not hold a PID"
+                        ),
+                    },
+                    Err(e) => debug!(
+                        path = %pid_path.display(),
+                        error = %e,
+                        "Instance lockfile unreadable while the lock is held"
+                    ),
                 }
             }
 

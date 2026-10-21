@@ -52,11 +52,11 @@ pub fn jade_characters(hashes_path: &Path, cache_path: &Path) -> BTreeSet<String
         Ok(bytes) => {
             if let Some(parent) = cache_path.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    debug!(error = %e, "Rift Classic character cache folder unavailable");
+                    warn!(error = %e, "Rift Classic character cache folder unavailable; the next build scans again");
                 }
             }
             if let Err(e) = std::fs::write(cache_path, bytes) {
-                debug!(error = %e, "Rift Classic character index could not be cached");
+                warn!(error = %e, "Rift Classic character index could not be cached; the next build scans again");
             }
         }
         Err(e) => debug!(error = %e, "Rift Classic character index could not be serialized"),
@@ -124,12 +124,13 @@ pub(crate) fn wad_stamp(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-pub(crate) fn character_names_in_bins(wad: &WadFile, alias: &str) -> BTreeSet<String> {
+pub(crate) fn character_names_in_bins(wad: &WadFile, alias: &str) -> (BTreeSet<String>, bool) {
     const MAX_BIN_BYTES: usize = 8 * 1024 * 1024;
     const NEEDLE: &[u8] = b"characters/";
 
     let mut found = BTreeSet::new();
     let mut unreadable = 0usize;
+    let mut first_error = None;
     let mut on_disk: Vec<&dekan_wad::WadEntry> = wad
         .toc()
         .filter(|entry| entry.uncompressed_size <= MAX_BIN_BYTES)
@@ -139,16 +140,18 @@ pub(crate) fn character_names_in_bins(wad: &WadFile, alias: &str) -> BTreeSet<St
         match wad.read_prefix(hash, 4) {
             Ok(Some(head)) if head.starts_with(b"PROP") || head.starts_with(b"PTCH") => {}
             Ok(_) => continue,
-            Err(_) => {
+            Err(e) => {
                 unreadable += 1;
+                first_error.get_or_insert(e.to_string());
                 continue;
             }
         }
         let bytes = match wad.read(hash) {
             Ok(Some(bytes)) => bytes,
             Ok(None) => continue,
-            Err(_) => {
+            Err(e) => {
                 unreadable += 1;
+                first_error.get_or_insert(e.to_string());
                 continue;
             }
         };
@@ -179,10 +182,14 @@ pub(crate) fn character_names_in_bins(wad: &WadFile, alias: &str) -> BTreeSet<St
         warn!(
             alias,
             unreadable,
+            error = first_error.as_deref().unwrap_or_default(),
             "Some entries of the champion WAD could not be read while looking for character names"
         );
+    } else if found.is_empty() {
+        warn!(alias, "No character names found in the champion WAD's bins");
     }
-    found
+    let complete = unreadable == 0 && !found.is_empty();
+    (found, complete)
 }
 
 pub(crate) fn cached_names(
@@ -190,7 +197,7 @@ pub(crate) fn cached_names(
     stamp: &str,
     alias: &str,
     ahead_of_time: bool,
-    scan: impl FnOnce() -> BTreeSet<String>,
+    scan: impl FnOnce() -> (BTreeSet<String>, bool),
 ) -> BTreeSet<String> {
     if !stamp.is_empty() {
         if let Ok(bytes) = std::fs::read(cache_path) {
@@ -208,7 +215,7 @@ pub(crate) fn cached_names(
     }
 
     let started = std::time::Instant::now();
-    let characters = scan();
+    let (characters, complete) = scan();
     if ahead_of_time {
         debug!(
             alias,
@@ -224,7 +231,7 @@ pub(crate) fn cached_names(
             "Character names recovered from the champion's bins"
         );
     }
-    if !stamp.is_empty() {
+    if !stamp.is_empty() && complete {
         let cache = CharacterCache {
             source: stamp.to_owned(),
             characters: characters.clone(),
@@ -233,11 +240,11 @@ pub(crate) fn cached_names(
             Ok(bytes) => {
                 if let Some(parent) = cache_path.parent() {
                     if let Err(e) = std::fs::create_dir_all(parent) {
-                        debug!(error = %e, "Bin-scan cache folder unavailable");
+                        warn!(alias, error = %e, "Bin-scan cache folder unavailable; the next build scans again");
                     }
                 }
                 if let Err(e) = std::fs::write(cache_path, bytes) {
-                    debug!(error = %e, "Bin-scan cache not written; the next build scans again");
+                    warn!(alias, error = %e, "Bin-scan cache not written; the next build scans again");
                 }
             }
             Err(e) => debug!(error = %e, "Bin-scan cache not serialized"),

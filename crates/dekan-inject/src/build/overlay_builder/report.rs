@@ -39,7 +39,7 @@ pub(super) fn log_overlay_wad(
     outcome: WriteOutcome,
     mode: &str,
     out: &Path,
-) -> serde_json::Value {
+) -> (serde_json::Value, bool) {
     let game_toc = game_wad.and_then(|g| WadFile::open_toc_only(&g.path).ok());
     let mut entries = Vec::new();
     let (mut replaced, mut added) = (0usize, 0usize);
@@ -72,7 +72,8 @@ pub(super) fn log_overlay_wad(
     } else {
         mode
     };
-    info!(
+    let header_matches = game_header.is_some() && game_header == overlay_header;
+    debug!(
         mount,
         file = %wad.relpath.display(),
         map = game_wad.is_some_and(is_map),
@@ -80,11 +81,11 @@ pub(super) fn log_overlay_wad(
         entries = wad.writer.len(),
         replaced,
         added,
-        header_matches_game = game_header.is_some() && game_header == overlay_header,
+        header_matches_game = header_matches,
         bytes = outcome.bytes(),
         "Overlay WAD written"
     );
-    serde_json::json!({
+    let record = serde_json::json!({
         "mount": mount,
         "file": wad.relpath.display().to_string(),
         "map": game_wad.is_some_and(is_map),
@@ -96,7 +97,8 @@ pub(super) fn log_overlay_wad(
         "game_header": game_header,
         "overlay_header": overlay_header,
         "changes": entries,
-    })
+    });
+    (record, header_matches)
 }
 
 pub(super) fn write_overlay_manifest(

@@ -1,4 +1,4 @@
-import { Theme, GoldButton, Caps } from "../theme.slint";
+import { Theme, GoldButton } from "../theme.slint";
 import { ScrollView, ComboBox } from "std-widgets.slint";
 import { ChromaGem, SkinRow, ModLineKind, ModLine, OverlayLabels, SelectionOrigin } from "parts/overlay_types.slint";
 import { Card } from "parts/overlay_cards.slint";
@@ -42,7 +42,7 @@ export component SkinList inherits ScrollView {
             HorizontalLayout {
                 alignment: center;
                 Image {
-                    source: @image-url("../assets/logo.png");
+                    source: @image-url("../assets/logo-40.png");
                     width: 40px;
                     height: 40px;
                     opacity: 0.28;
@@ -87,8 +87,11 @@ export component SkinList inherits ScrollView {
                 if line.kind == ModLineKind.section: VerticalLayout {
                     padding-top: 6px;
                     padding-bottom: 2px;
-                    Caps {
-                        text: line.text.to-uppercase();
+                    Text {
+                        text: line.text;
+                        color: Theme.gold-bright;
+                        font-size: Theme.text-base;
+                        font-weight: 600;
                     }
                 }
                 if line.kind == ModLineKind.group: VerticalLayout {
@@ -98,7 +101,6 @@ export component SkinList inherits ScrollView {
                         color: Theme.muted;
                         font-size: Theme.text-xs;
                         font-weight: 600;
-                        letter-spacing: 0.8px;
                     }
                 }
                 if line.kind == ModLineKind.entry: ModEntry {
@@ -147,14 +149,12 @@ export component SkinList inherits ScrollView {
             HorizontalLayout {
                 spacing: 6px;
                 GoldButton {
-                    border-radius: 3px;
                     min-height: 30px;
                     font-size: Theme.text-sm;
                     text: root.labels.import-mod;
                     clicked => { root.import-mod(root.import-index); }
                 }
                 GoldButton {
-                    border-radius: 3px;
                     min-height: 30px;
                     font-size: Theme.text-sm;
                     text: root.labels.open-folder;

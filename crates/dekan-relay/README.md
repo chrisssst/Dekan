@@ -14,6 +14,7 @@ Limits:
 
 - at most **5 members** per room (one team); a sixth connection gets `409 Room is full`,
 - at most **8 KiB** per message,
+- at most **1024** simultaneous connections; beyond that a connection is refused and logged,
 - a room disappears when its last member leaves.
 
 Endpoints:

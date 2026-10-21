@@ -1,11 +1,12 @@
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+use tracing::debug;
+use windows::Win32::Foundation::{CloseHandle, ERROR_FILE_NOT_FOUND, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
     CreateEventW, EVENT_MODIFY_STATE, OpenEventW, SetEvent, WaitForSingleObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
 };
-use windows::core::HSTRING;
+use windows::core::{HRESULT, HSTRING};
 
 use crate::error::PlatformError;
 
@@ -46,7 +47,12 @@ impl Drop for ActivationListener {
 pub fn request_activation(name: &str) -> Result<bool, PlatformError> {
     let handle = match unsafe { OpenEventW(EVENT_MODIFY_STATE, false, &event_name(name)) } {
         Ok(handle) => handle,
-        Err(_) => return Ok(false),
+        Err(e) => {
+            if e.code() != HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) {
+                debug!(error = %e, "The running instance's activation event could not be opened");
+            }
+            return Ok(false);
+        }
     };
 
     let signaled = unsafe { SetEvent(handle) };
@@ -60,15 +66,16 @@ pub fn request_activation(name: &str) -> Result<bool, PlatformError> {
 }
 
 pub fn notify_already_running() {
-    unsafe {
-        // ignore-ok: the process is exiting regardless of which button came back
-        let _ = MessageBoxW(
+    let title = crate::i18n::text().already_running_title;
+    let answer = unsafe {
+        MessageBoxW(
             None,
             &HSTRING::from(crate::i18n::text().already_running_body),
-            &HSTRING::from(crate::i18n::text().already_running_title),
+            &HSTRING::from(title),
             MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
-        );
-    }
+        )
+    };
+    crate::shell::note_if_not_shown(answer.0, title);
 }
 
 #[cfg(test)]

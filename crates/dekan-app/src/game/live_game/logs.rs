@@ -27,28 +27,44 @@ pub fn parse_game_log(content: &str) -> GameLogFacts {
                     facts.roster.push((champion, skin, local));
                 }
             }
-        } else if let Some(message) = body
-            .strip_prefix("ERROR|")
-            .or_else(|| body.strip_prefix("FATAL|"))
-        {
+        } else if let Some(message) = body.strip_prefix("ERROR|") {
             *facts.errors.entry(message.trim().to_owned()).or_default() += 1;
+        } else if let Some(message) = body.strip_prefix("FATAL|") {
+            *facts
+                .errors
+                .entry(format!("FATAL {}", message.trim()))
+                .or_default() += 1;
         }
     }
     facts
 }
 
-pub(super) fn newest_game_log(logs_dir: &Path, since: SystemTime) -> Option<PathBuf> {
+pub(super) fn newest_game_log(
+    logs_dir: &Path,
+    since: SystemTime,
+) -> std::io::Result<Option<PathBuf>> {
     let mut newest: Option<(SystemTime, PathBuf)> = None;
-    for dir in std::fs::read_dir(logs_dir).ok()?.flatten() {
-        let Ok(files) = std::fs::read_dir(dir.path()) else {
+    let mut skipped = 0usize;
+    for dir in std::fs::read_dir(logs_dir)? {
+        let Ok(dir) = dir else {
+            skipped += 1;
             continue;
         };
-        for file in files.flatten() {
+        let Ok(files) = std::fs::read_dir(dir.path()) else {
+            skipped += 1;
+            continue;
+        };
+        for file in files {
+            let Ok(file) = file else {
+                skipped += 1;
+                continue;
+            };
             let path = file.path();
             if !path.to_string_lossy().ends_with("_r3dlog.txt") {
                 continue;
             }
             let Ok(modified) = file.metadata().and_then(|m| m.modified()) else {
+                skipped += 1;
                 continue;
             };
             if modified >= since && newest.as_ref().is_none_or(|(t, _)| modified > *t) {
@@ -56,7 +72,10 @@ pub(super) fn newest_game_log(logs_dir: &Path, since: SystemTime) -> Option<Path
             }
         }
     }
-    newest.map(|(_, path)| path)
+    if skipped > 0 {
+        debug!(skipped, dir = %logs_dir.display(), "Game log folders or files could not be inspected");
+    }
+    Ok(newest.map(|(_, path)| path))
 }
 
 #[must_use]
@@ -68,11 +87,23 @@ pub fn game_logs_dir(game_dir: &Path) -> Option<PathBuf> {
 
 pub(super) fn report_game_log(game_dir: &Path, since: SystemTime) {
     let Some(dir) = game_logs_dir(game_dir) else {
+        warn!(game_dir = %game_dir.display(), "Game log not read: the game folder has no parent");
         return;
     };
-    let Some(path) = newest_game_log(&dir, since) else {
-        info!(dir = %dir.display(), "No game log was written for this match");
-        return;
+    let path = match newest_game_log(&dir, since) {
+        Ok(Some(path)) => path,
+        Ok(None) => {
+            info!(dir = %dir.display(), "No game log was written for this match");
+            return;
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            info!(dir = %dir.display(), "The game has no log folder; nothing to read for this match");
+            return;
+        }
+        Err(e) => {
+            warn!(dir = %dir.display(), error = %e, "Game log folder could not be read");
+            return;
+        }
     };
     let content = match std::fs::metadata(&path) {
         Ok(meta) if meta.len() <= MAX_GAME_LOG_BYTES => std::fs::read(&path),
@@ -97,7 +128,16 @@ pub(super) fn report_game_log(game_dir: &Path, since: SystemTime) {
         distinct_errors = facts.errors.len(),
         "Game log: skins the game loaded for this match"
     );
-    for (message, count) in &facts.errors {
+    let mut errors: Vec<(&String, &usize)> = facts.errors.iter().collect();
+    errors.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
+    if errors.len() > MAX_LOGGED_ERRORS {
+        info!(
+            omitted = errors.len() - MAX_LOGGED_ERRORS,
+            "Game log: more distinct errors than are listed; the most frequent follow"
+        );
+    }
+    for (message, count) in errors.into_iter().take(MAX_LOGGED_ERRORS) {
+        let count = *count;
         if message.contains("FATAL")
             || message.contains("mount failed")
             || message.contains("corrupt")
@@ -115,8 +155,14 @@ pub fn match_screenshots(
     since: SystemTime,
     until: SystemTime,
 ) -> Vec<(SystemTime, PathBuf)> {
-    let Ok(entries) = std::fs::read_dir(install_dir.join("Screenshots")) else {
-        return Vec::new();
+    let entries = match std::fs::read_dir(install_dir.join("Screenshots")) {
+        Ok(entries) => entries,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                debug!(error = %e, "Match screenshots folder could not be read");
+            }
+            return Vec::new();
+        }
     };
     let mut shots: Vec<(SystemTime, PathBuf)> = entries
         .flatten()
@@ -138,8 +184,12 @@ pub fn match_screenshots(
 }
 
 pub(super) fn prune_exports(logs_dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(logs_dir) else {
-        return;
+    let entries = match std::fs::read_dir(logs_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!(dir = %logs_dir.display(), error = %e, "Old diagnostics exports could not be listed");
+            return;
+        }
     };
     let mut exports: Vec<PathBuf> = entries
         .flatten()
@@ -154,10 +204,16 @@ pub(super) fn prune_exports(logs_dir: &Path) {
     if exports.len() <= KEPT_AUTOMATIC_EXPORTS {
         return;
     }
+    let mut failed = 0usize;
+    let mut first_error = None;
     for old in &exports[..exports.len() - KEPT_AUTOMATIC_EXPORTS] {
         if let Err(e) = std::fs::remove_file(old) {
-            debug!(file = %old.display(), error = %e, "Old diagnostics export not removed");
+            failed += 1;
+            first_error.get_or_insert_with(|| format!("{}: {e}", old.display()));
         }
+    }
+    if let Some(first_error) = first_error {
+        warn!(failed, first_error = %first_error, "Old diagnostics exports not removed");
     }
 }
 

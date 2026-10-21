@@ -213,8 +213,8 @@ fn test_an_effect_that_changes_by_form_draws_each_form_only_under_its_stencil() 
     let merged = emitters_of(&systems[&merged_path]);
     assert_eq!(merged.len(), 3, "the emitter both forms share goes in once");
     assert_eq!(stencil(&merged[0]), None);
-    assert_eq!(stencil(&merged[1]), Some((STENCIL_EQUAL, STENCIL_BASE)));
-    assert_eq!(stencil(&merged[2]), Some((STENCIL_EQUAL, STENCIL_BASE + 1)));
+    assert_eq!(stencil(&merged[1]), Some((STENCIL_EQUAL, form_stencil(0))));
+    assert_eq!(stencil(&merged[2]), Some((STENCIL_EQUAL, form_stencil(1))));
     assert!(
         tree::field(&merged[2], h("StencilReferenceId")).is_none(),
         "a named stencil would replace the form's reference"
@@ -230,7 +230,7 @@ fn test_an_effect_that_changes_by_form_draws_each_form_only_under_its_stencil() 
     assert_eq!(child, gated_key(SPARK, 1));
     assert_eq!(
         stencil(&emitters_of(&systems[&child])[0]),
-        Some((STENCIL_EQUAL, STENCIL_BASE + 1)),
+        Some((STENCIL_EQUAL, form_stencil(1))),
         "a child effect follows its parent's form"
     );
     assert_eq!(stamped, 3);
@@ -250,10 +250,7 @@ fn test_each_form_draws_its_stencil_marker_while_active() {
         let marker = emitters_of(&systems[&map[&h(&format!("DekanMarker{form}"))]]);
         assert_eq!(
             stencil(&marker[0]),
-            Some((
-                STENCIL_WRITE,
-                STENCIL_BASE + u8::try_from(form).expect("form")
-            ))
+            Some((STENCIL_WRITE, form_stencil(form)))
         );
     }
     let load = emitters_of(&systems[&map[&h("DekanMarker0Load")]]);
@@ -311,4 +308,13 @@ fn test_the_ground_bone_keeps_the_skeleton_spelling() {
         Some("Buffbone_Glb_Ground_Loc")
     );
     assert_eq!(ground_bone(b"Root\0Spine"), None);
+}
+
+#[test]
+fn form_stencils_are_distinct_and_avoid_the_references_the_game_uses() {
+    let used_by_the_game = [40, 41, 49];
+    let distinct: BTreeSet<u8> = crate::vfx_markers::FORM_STENCILS.into_iter().collect();
+    assert_eq!(distinct.len(), crate::vfx_markers::FORM_STENCILS.len());
+    assert!(distinct.iter().all(|r| !used_by_the_game.contains(r)));
+    assert_eq!(form_stencil(99), form_stencil(9));
 }

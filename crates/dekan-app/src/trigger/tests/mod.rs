@@ -1,4 +1,4 @@
-use super::arm_key::WantedSkin;
+use super::arm_key::{WantedSkin, wanted_skin, wanted_skin_when};
 use super::*;
 
 pub(super) fn champ_select_state(
@@ -53,6 +53,25 @@ async fn test_match_ended_waits_for_the_match_to_end() {
 
 fn decide(state: &dekan_core::state::AppState, current: Option<ArmKey>) -> ArmDecision {
     arm_decision(wanted_skin(state), current)
+}
+
+#[test]
+fn test_on_the_reconnect_screen_only_a_new_pick_rebuilds() {
+    let mut state = champ_select_state(Some(81), Some(target(81, 81065)));
+    state.phase = GamePhase::Reconnect;
+    let WantedSkin::Skin(kept) = wanted_skin(&state) else {
+        panic!("the skin of the match is still wanted on the reconnect screen");
+    };
+    assert!(matches!(decide(&state, Some(kept)), ArmDecision::Settled));
+
+    state.overlay_target = Some(target(81, 81001));
+    assert!(matches!(
+        decide(&state, Some(kept)),
+        ArmDecision::Schedule(_)
+    ));
+
+    state.overlay_target = None;
+    assert!(should_disarm(wanted_skin(&state), kept));
 }
 
 #[test]
@@ -359,3 +378,16 @@ fn test_a_teammate_pick_change_keeps_the_armed_patcher_until_its_replacement() {
 
 mod files;
 mod lobby;
+
+#[test]
+fn the_reconnect_screen_keeps_nothing_armed_without_a_running_patcher() {
+    let state = champ_select_state(Some(238), Some(target(238, 238_001)));
+    for wanted in [
+        WantedSkin::Unknown,
+        WantedSkin::Nothing,
+        wanted_skin(&state),
+    ] {
+        let (armed, running) = resume_for_reconnect(None, wanted);
+        assert!(armed.is_none() && running.is_none());
+    }
+}

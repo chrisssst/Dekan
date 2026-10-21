@@ -113,7 +113,13 @@ pub fn run(args: &[String]) {
 
 fn tracked_files(root: &Path) -> Result<Vec<(String, Language)>, String> {
     let output = Command::new("git")
-        .args(["ls-files", "-z"])
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ])
         .current_dir(root)
         .output()
         .map_err(|e| format!("git ls-files: {e}"))?;

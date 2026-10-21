@@ -1,3 +1,5 @@
+use tracing::{debug, warn};
+
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,10 +45,15 @@ fn find_in_fields<'a>(
             let mut inner = Cursor { data: bytes, at: 8 };
             return find_in_fields(&mut inner, rest);
         }
+        debug!(
+            field = format!("{wanted:08x}"),
+            kind, "Field path crosses a value that is not a struct"
+        );
         return Ok(None);
     }
     Ok(None)
 }
+
 pub fn field_value<'a>(body: &'a [u8], path: &[u32]) -> Result<Option<FieldValue<'a>>, WadError> {
     find_in_fields(&mut Cursor { data: body, at: 0 }, path)
 }
@@ -68,9 +75,16 @@ fn set_top_level_int(
         for _ in 0..count {
             let name = cursor.u32("field name")?;
             let kind = cursor.take(1, "field type")?[0];
-            if name == field_hash && kinds.contains(&kind) {
-                found = Some(cursor.at);
-                break;
+            if name == field_hash {
+                if kinds.contains(&kind) {
+                    found = Some(cursor.at);
+                    break;
+                }
+                warn!(
+                    field = format!("{field_hash:08x}"),
+                    kind, "Integer field has an unexpected type; left unchanged"
+                );
+                return Ok(false);
             }
             skip_field_value(&mut cursor, kind)?;
         }

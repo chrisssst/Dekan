@@ -24,6 +24,7 @@ const RELEASES_PER_PAGE: u32 = 30;
 const MAX_INSPECTIONS_PER_CHECK: usize = 12;
 const VERDICTS_FILE: &str = "ltk_releases.txt";
 const NOTIFIED_FILE: &str = "ltk_notified.txt";
+const NOT_FOUND_MARK: &str = "HTTP 404";
 
 pub const INJECTOR_FILES: [&str; 2] = [
     dekan_inject::ltk_host::HOST_EXE,
@@ -96,6 +97,7 @@ struct PublishedRelease {
 pub fn published_versions(body: &str) -> Result<Vec<String>, String> {
     let releases: Vec<PublishedRelease> =
         serde_json::from_str(body).map_err(|e| format!("unreadable release list: {e}"))?;
+    let mut unreadable = Vec::new();
     let mut versions: Vec<(Version, String)> = releases
         .into_iter()
         .filter(|r| !r.draft && !r.prerelease)
@@ -105,9 +107,20 @@ pub fn published_versions(body: &str) -> Result<Vec<String>, String> {
                 .strip_prefix('v')
                 .or_else(|| tag.strip_prefix('V'))
                 .unwrap_or(tag);
-            Version::parse(raw).map(|v| (v, raw.to_owned()))
+            let parsed = Version::parse(raw).map(|v| (v, raw.to_owned()));
+            if parsed.is_none() {
+                unreadable.push(tag.to_owned());
+            }
+            parsed
         })
         .collect();
+    if let Some(first) = unreadable.first() {
+        if versions.is_empty() {
+            warn!(dropped = unreadable.len(), first_tag = %first, "No LTK Manager release tag is a readable version");
+        } else {
+            debug!(dropped = unreadable.len(), first_tag = %first, "LTK Manager release tags that are not versions were skipped");
+        }
+    }
     versions.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     versions.dedup_by(|a, b| a.0 == b.0);
     Ok(versions.into_iter().map(|(_, raw)| raw).collect())
@@ -168,16 +181,26 @@ impl Verdicts {
         let mut lines = raw.lines();
         let mut verdicts = Self::default();
         if lines.next().map(str::trim) != Some(fingerprint().as_str()) {
+            debug!(
+                "LTK release verdicts were recorded under another publisher key or format; they are checked again"
+            );
             return verdicts;
         }
+        let mut dropped = 0usize;
         for line in lines {
             let words: Vec<&str> = line.split_whitespace().collect();
             if let [version, rest @ ..] = words.as_slice() {
-                if let (Some(_), Some(injector)) = (Version::parse(version), Injector::parse(rest))
-                {
-                    verdicts.insert(version, injector);
+                match (Version::parse(version), Injector::parse(rest)) {
+                    (Some(_), Some(injector)) => verdicts.insert(version, injector),
+                    _ => dropped += 1,
                 }
             }
+        }
+        if dropped > 0 {
+            debug!(
+                dropped,
+                "Unreadable lines of the LTK release verdicts were dropped"
+            );
         }
         verdicts
     }
@@ -189,9 +212,15 @@ fn fingerprint() -> String {
 
 #[must_use]
 pub fn load_verdicts(state_dir: &Path) -> Verdicts {
-    std::fs::read_to_string(state_dir.join(VERDICTS_FILE))
-        .map(|raw| Verdicts::parse(&raw))
-        .unwrap_or_default()
+    match std::fs::read_to_string(state_dir.join(VERDICTS_FILE)) {
+        Ok(raw) => Verdicts::parse(&raw),
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(error = %e, "Could not read the LTK Manager release record; the releases are checked again");
+            }
+            Verdicts::default()
+        }
+    }
 }
 
 pub fn save_verdicts(state_dir: &Path, verdicts: &Verdicts) {
@@ -222,14 +251,27 @@ impl InstalledDll {
 
 type DllStamp = (std::time::SystemTime, u64);
 
+fn log_unreadable_dll(dll: &Path, e: &std::io::Error) {
+    if e.kind() != std::io::ErrorKind::NotFound {
+        debug!(file = %dll.display(), error = %e, "The installed patcher DLL could not be inspected");
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct InstalledDllCache(Arc<Mutex<Option<(DllStamp, InstalledDll)>>>);
 
 impl InstalledDllCache {
     #[must_use]
     pub fn read(&self, dll: &Path) -> Option<InstalledDll> {
-        let meta = std::fs::metadata(dll).ok()?;
-        let stamp = (meta.modified().ok()?, meta.len());
+        let meta = std::fs::metadata(dll)
+            .inspect_err(|e| log_unreadable_dll(dll, e))
+            .ok()?;
+        let stamp = (
+            meta.modified()
+                .inspect_err(|e| log_unreadable_dll(dll, e))
+                .ok()?,
+            meta.len(),
+        );
         if let Ok(slot) = self.0.lock() {
             if let Some((known, installed)) = slot.as_ref() {
                 if *known == stamp {
@@ -237,7 +279,10 @@ impl InstalledDllCache {
                 }
             }
         }
-        let installed = InstalledDll::from_bytes(&std::fs::read(dll).ok()?);
+        let bytes = std::fs::read(dll)
+            .inspect_err(|e| log_unreadable_dll(dll, e))
+            .ok()?;
+        let installed = InstalledDll::from_bytes(&bytes);
         if let Ok(mut slot) = self.0.lock() {
             *slot = Some((stamp, installed.clone()));
         }
@@ -247,8 +292,15 @@ impl InstalledDllCache {
 
 #[must_use]
 pub fn already_notified(state_dir: &Path, version: &str) -> bool {
-    std::fs::read_to_string(state_dir.join(NOTIFIED_FILE))
-        .is_ok_and(|saved| saved.trim() == version)
+    match std::fs::read_to_string(state_dir.join(NOTIFIED_FILE)) {
+        Ok(saved) => saved.trim() == version,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(error = %e, "Could not read the injector notice record; the notice may repeat");
+            }
+            false
+        }
+    }
 }
 
 pub fn remember_notified(state_dir: &Path, version: &str) {
@@ -259,100 +311,12 @@ pub fn remember_notified(state_dir: &Path, version: &str) {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct LtkNotice(Arc<Mutex<Option<LtkStatus>>>);
-
-impl LtkNotice {
-    #[must_use]
-    pub fn status(&self) -> Option<LtkStatus> {
-        self.0.lock().map(|v| v.clone()).unwrap_or_default()
-    }
-
-    fn set(&self, status: LtkStatus) {
-        if let Ok(mut slot) = self.0.lock() {
-            *slot = Some(status);
-        }
-    }
-}
-
-pub struct LtkCheck {
-    pub state_dir: PathBuf,
-    pub installed_dll: PathBuf,
-    pub installed: InstalledDllCache,
-    pub notice: LtkNotice,
-    pub notify: Box<dyn Fn(&str) + Send>,
-}
-
-async fn pause(token: &CancellationToken, duration: Duration) -> bool {
-    tokio::select! {
-        _ = token.cancelled() => false,
-        () = tokio::time::sleep(duration) => true,
-    }
-}
-
-pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationToken) {
-    let client = match http_client() {
-        Ok(client) => client,
-        Err(e) => {
-            warn!(error = %e, "Injector check off: the HTTP client could not be created");
-            return;
-        }
-    };
-    let mut verdicts = load_verdicts(&check.state_dir);
-    if let Some(status) = verdicts.status_from_cache() {
-        check.notice.set(status);
-    }
-    if !pause(&token, FIRST_CHECK_DELAY).await {
-        return;
-    }
-    loop {
-        match refresh(&client, &mut verdicts).await {
-            Ok(Some(status)) => {
-                save_verdicts(&check.state_dir, &verdicts);
-                if check.notice.status().as_ref() != Some(&status) {
-                    info!(
-                        latest = %status.latest,
-                        latest_trusted = status.latest_trusted,
-                        compatible = status.compatible.as_deref().unwrap_or("none"),
-                        "LTK Manager releases checked against the publisher's signature"
-                    );
-                    check.notice.set(status.clone());
-                }
-                let installed = check
-                    .installed
-                    .read(&check.installed_dll)
-                    .map(|dll| dll.sha256);
-                if let Some(version) = status.offers_update_over(installed.as_deref()) {
-                    if !already_notified(&check.state_dir, version) {
-                        while is_busy(state_rx.borrow().phase) {
-                            if !pause(&token, BUSY_RETRY).await {
-                                return;
-                            }
-                        }
-                        (check.notify)(version);
-                        remember_notified(&check.state_dir, version);
-                    }
-                }
-            }
-            Ok(None) => {
-                save_verdicts(&check.state_dir, &verdicts);
-                debug!("No published LTK Manager release could be classified");
-            }
-            Err(e) => {
-                save_verdicts(&check.state_dir, &verdicts);
-                debug!(error = %e, "Injector check failed; trying again later");
-            }
-        }
-        if !pause(&token, CHECK_INTERVAL).await {
-            return;
-        }
-    }
-}
-
 mod fetch;
+mod watch;
 
 pub use fetch::{compatible_version, download_injector};
 use fetch::{http_client, refresh};
+pub use watch::{LtkCheck, LtkNotice, run};
 
 #[cfg(test)]
 mod tests;

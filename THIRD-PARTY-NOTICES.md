@@ -1,5 +1,3 @@
-Dekan is a customized fork of **Bullet** by Isllan Toso. The original Bullet source is MIT licensed; the original copyright notice is preserved in `LICENSE`. See `UPSTREAM-NOTICE.md` for provenance.
-
 # Third-party notices
 
 Dekan's own source code is licensed under the [MIT License](LICENSE). This file lists the third-party
@@ -18,7 +16,7 @@ They are governed by the
 League Toolkit. In short, it allows using, studying and building software that uses the binaries. Anyone who
 redistributes them outside an unmodified official LTK Manager release must remove League Toolkit's code
 signature and may only sign them with their own certificate. The official way to get them is to copy both
-files from an LTK Manager release. Dekan only runs copies whose SHA-256 matches an audited build, whatever
+files from an LTK Manager release. Dekan only runs copies that carry a valid Authenticode signature from League Toolkit's publisher, whatever
 their source.
 
 For questions about these binaries or their license, use the contact published by League Toolkit in that

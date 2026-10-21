@@ -110,12 +110,21 @@ pub fn prop_payload(entry: &WriterEntry) -> Option<Vec<u8>> {
 pub fn decode_zstd_bounded(stored: &[u8], declared: u64) -> Option<Vec<u8>> {
     let limit = declared.min(crate::wad::MAX_ENTRY_BYTES as u64);
     let mut decoded = Vec::new();
-    zstd::Decoder::new(stored)
-        .ok()?
-        .take(limit + 1)
-        .read_to_end(&mut decoded)
-        .ok()?;
-    (decoded.len() as u64 == declared).then_some(decoded)
+    let read = zstd::Decoder::new(stored)
+        .and_then(|decoder| decoder.take(limit + 1).read_to_end(&mut decoded));
+    if let Err(e) = read {
+        warn!(declared, stored = stored.len(), error = %e, "Zstd payload could not be decoded");
+        return None;
+    }
+    if decoded.len() as u64 != declared {
+        warn!(
+            declared,
+            actual = decoded.len(),
+            "Zstd payload decoded to a size other than declared"
+        );
+        return None;
+    }
+    Some(decoded)
 }
 
 fn zstd_head(stored: &[u8]) -> Vec<u8> {

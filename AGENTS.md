@@ -19,5 +19,5 @@
 1. **A green `cargo test` is not proof that a feature works.** Anything that touches the outside world (a
    process, the registry, the League client, a binary format, the game) is only done with evidence collected
    outside the Dekan process, ideally a real match and its log.
-2. **Filtered command output is not evidence.** If a proxy such as `rtk` filters output, run the raw command
-   (`rtk proxy <cmd>`) or use the agent's own search tools before claiming a count or a result.
+2. **Filtered command output is not evidence.** If a proxy or wrapper filters output, run the raw command or use
+   the agent's own search tools before claiming a count or a result.

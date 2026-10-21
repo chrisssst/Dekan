@@ -4,7 +4,7 @@ use tokio::sync::watch;
 use crate::lobby::{LobbyPicks, LobbySlot};
 use crate::mods::ModSelection;
 use crate::overlay::OverlayTarget;
-use crate::party::{PartyPeer, PartyStatus, TeamMember};
+use crate::party::{LobbyParty, PartyPeer, PartyStatus, TeamMember};
 use crate::phase::GamePhase;
 use crate::selection::{ChampionId, SkinId};
 
@@ -21,6 +21,10 @@ pub enum InjectionStatus {
 
     Failed {
         error: String,
+    },
+
+    PatcherExited {
+        code: i32,
     },
 }
 
@@ -50,6 +54,10 @@ pub struct AppState {
 
     pub party_peers: Vec<PartyPeer>,
 
+    pub party_share: bool,
+
+    pub lobby_party: Option<LobbyParty>,
+
     pub lobby: Option<LobbyPicks>,
 
     pub queue: Option<QueueInfo>,
@@ -77,6 +85,8 @@ impl Default for AppState {
             party_status: PartyStatus::Off,
             party_hosting: false,
             party_peers: Vec::new(),
+            party_share: false,
+            lobby_party: None,
             lobby: None,
             queue: None,
         }
@@ -86,6 +96,17 @@ impl Default for AppState {
 pub type StateReceiver = watch::Receiver<AppState>;
 
 pub type StateSender = watch::Sender<AppState>;
+
+impl AppState {
+    #[must_use]
+    pub fn shown_party_status(&self) -> PartyStatus {
+        if self.party_share {
+            self.party_status.clone()
+        } else {
+            PartyStatus::Off
+        }
+    }
+}
 
 #[must_use]
 pub fn new_state_channel() -> (StateSender, StateReceiver) {
@@ -301,6 +322,29 @@ pub fn set_party_peers(tx: &StateSender, peers: Vec<PartyPeer>) {
     });
 }
 
+pub fn set_party_share(tx: &StateSender, share: bool) {
+    tx.send_if_modified(|state| {
+        if state.party_share == share {
+            return false;
+        }
+        state.party_share = share;
+        if !share {
+            state.party_peers.clear();
+        }
+        true
+    });
+}
+
+pub fn set_lobby_party(tx: &StateSender, party: Option<LobbyParty>) -> bool {
+    tx.send_if_modified(|state| {
+        if state.lobby_party == party {
+            return false;
+        }
+        state.lobby_party = party;
+        true
+    })
+}
+
 pub fn set_injection_status(tx: &StateSender, status: InjectionStatus) {
     tx.send_modify(|state| {
         state.injection = status;
@@ -310,6 +354,7 @@ pub fn set_injection_status(tx: &StateSender, status: InjectionStatus) {
 pub fn clear_for_new_game(tx: &StateSender) {
     tx.send_modify(|state| {
         state.lobby = None;
+        state.lobby_party = None;
         reset_match(state);
         state.phase = GamePhase::None;
     });
@@ -321,6 +366,15 @@ pub fn set_phase(tx: &StateSender, phase: GamePhase) {
             && state.phase.is_before_champ_select()
             && (phase.is_before_champ_select() || phase.is_champ_select());
         if starts_new_match(state.phase, phase) && !keeps_lobby_picks {
+            if let Some(target) = &state.overlay_target {
+                tracing::info!(
+                    from = ?state.phase,
+                    to = ?phase,
+                    champion_id = target.champion_id,
+                    skin_id = target.skin_id,
+                    "New match: the skin chosen for the previous one was cleared"
+                );
+            }
             reset_match(state);
         }
         state.phase = phase;

@@ -1,4 +1,4 @@
-import { Theme, ExposeLayer, GoldButton, Diamond, Hairline, Wordmark } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Diamond, Wordmark, Halo, Surface } from "theme.slint";
 
 export component WelcomeWindow inherits Window {
     in property <bool> expose-flip;
@@ -38,44 +38,39 @@ export component WelcomeWindow inherits Window {
         padding-top: 22px;
         padding-bottom: 24px;
         spacing: 14px;
-        HorizontalLayout {
-            spacing: 14px;
-            Image {
-                source: @image-url("assets/logo.png");
-                width: 38px;
-                height: 38px;
+        Rectangle {
+            height: 72px;
+            Halo {
+                x: -72px;
+                y: -64px;
             }
-            VerticalLayout {
-                alignment: center;
-                spacing: 2px;
-                Wordmark {
-                    version: root.version;
-                    size: 20px;
+            HorizontalLayout {
+                spacing: 16px;
+                Image {
+                    source: @image-url("assets/logo-56.png");
+                    width: 56px;
+                    height: 56px;
                 }
-                Text {
-                    text: "League of Legends Skin Changer";
-                    color: Theme.muted;
-                    font-size: Theme.text-sm;
-                    letter-spacing: 0.8px;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 5px;
+                    Wordmark {
+                        version: root.version;
+                        size: 11px;
+                    }
+                    Text {
+                        text: "League of Legends Skin Changer";
+                        color: Theme.gold-bright;
+                        font-family: Theme.serif;
+                        font-size: 20px;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
                 }
             }
         }
-        Hairline { }
-        Rectangle {
+        Surface {
             vertical-stretch: 1;
-            border-radius: 8px;
-            border-width: 1px;
-            border-color: Theme.surface-line;
-            background: Theme.card-fill;
-            drop-shadow-blur: 20px;
-            drop-shadow-offset-y: 4px;
-            drop-shadow-color: #00000059;
-            clip: true;
-            Rectangle {
-                x: 0;
-                width: 2px;
-                background: Theme.gold;
-            }
             VerticalLayout {
                 padding-top: 16px;
                 padding-bottom: 16px;
@@ -87,7 +82,7 @@ export component WelcomeWindow inherits Window {
                     alignment: start;
                     padding-bottom: 3px;
                     Rectangle {
-                        border-radius: 11px;
+                        border-radius: 12px;
                         border-width: 1px;
                         border-color: Theme.cyan.with-alpha(0.25);
                         background: Theme.cyan.with-alpha(0.08);
@@ -109,11 +104,10 @@ export component WelcomeWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: root.pill.to-uppercase();
+                                text: root.pill;
                                 color: Theme.cyan;
                                 font-size: Theme.text-sm;
-                                font-weight: 700;
-                                letter-spacing: 0.7px;
+                                font-weight: 600;
                                 vertical-alignment: center;
                             }
                         }
@@ -128,7 +122,7 @@ export component WelcomeWindow inherits Window {
                     Text {
                         text: item;
                         color: Theme.text;
-                        font-size: 12.5px;
+                        font-size: Theme.text-base;
                         wrap: word-wrap;
                         horizontal-stretch: 1;
                     }
@@ -142,8 +136,7 @@ export component WelcomeWindow inherits Window {
                 min-height: 40px;
                 horizontal-stretch: 0;
                 primary: true;
-                caps: true;
-                tracking: 1.2px;
+                font-size: Theme.text-base;
                 text: root.dismiss-label;
                 clicked => { root.dismiss(); }
             }

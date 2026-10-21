@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
+use tracing::warn;
 
 use crate::error::ClassicError;
 use crate::form_state::{form_active, form_parts};
@@ -107,12 +108,14 @@ pub fn material_plan(
         .map(|b| gear_data(b))
         .collect::<Result<Vec<_>, _>>()?;
     let mut by_part: BTreeMap<String, (String, Vec<Option<Value>>)> = BTreeMap::new();
+    let mut unnamed = 0usize;
     for (form, gear) in gears.iter().enumerate() {
         for entry in tree::field(&mesh_of(gear), h("materialOverride"))
             .and_then(Value::items)
             .unwrap_or_default()
         {
             let Some(name) = submesh_of(entry) else {
+                unnamed += 1;
                 continue;
             };
             let slot = by_part
@@ -120,6 +123,12 @@ pub fn material_plan(
                 .or_insert_with(|| (name.clone(), vec![None; gears.len()]));
             slot.1[form] = Some(entry.clone());
         }
+    }
+    if unnamed > 0 {
+        warn!(
+            unnamed,
+            "Material overrides without a part name dropped from the form materials"
+        );
     }
     let hidden: Vec<BTreeSet<u32>> = form_parts(swaps)
         .into_iter()

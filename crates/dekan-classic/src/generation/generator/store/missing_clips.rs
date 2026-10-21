@@ -61,10 +61,13 @@ impl StandardChampion {
         };
         let current = match std::fs::read(wad_root.join(&path)) {
             Ok(bytes) => bytes,
-            Err(_) => match self.wad.read(wad_path_hash(&path))? {
-                Some(bytes) => bytes,
-                None => return Ok(None),
-            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                match self.wad.read(wad_path_hash(&path))? {
+                    Some(bytes) => bytes,
+                    None => return Ok(None),
+                }
+            }
+            Err(e) => return Err(e.into()),
         };
         let spells = self
             .wad
@@ -72,6 +75,7 @@ impl StandardChampion {
             .map(|record| crate::clip_alias::spell_names(&record))
             .unwrap_or_default();
         if spells.is_empty() {
+            warn!(alias = %self.alias, "No spell names readable from the character record; missing spell clips are not aliased");
             return Ok(None);
         }
         Ok(

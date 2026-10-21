@@ -283,8 +283,8 @@ pub(crate) fn run_skin_audit(args: &[String]) {
         .unwrap_or_else(|| std::env::temp_dir().join("dekan_skin_audit_mods"));
     let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder may not exist
     if let Err(e) = std::fs::create_dir_all(&staging).and(std::fs::create_dir_all(&cache_dir)) {
-        println!("pasta temporaria indisponivel: {e}");
-        return;
+        eprintln!("[ERRO] pasta temporaria indisponivel: {e}");
+        std::process::exit(1);
     }
 
     let started = std::time::Instant::now();
@@ -327,10 +327,21 @@ relatorio: {} ({} s)",
             out.display(),
             started.elapsed().as_secs()
         ),
-        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+        Err(e) => {
+            eprintln!("[ERRO] relatorio nao gravado em {}: {e}", out.display());
+            std::process::exit(1);
+        }
     }
+    let defects = reports.iter().any(|r| {
+        r.open_error.is_some()
+            || r.skins.values().any(|f| !f.is_clean())
+            || r.forms.values().any(|f| !f.is_clean())
+    });
     if keep.is_none() {
         let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    }
+    if defects {
+        std::process::exit(1);
     }
 }
 

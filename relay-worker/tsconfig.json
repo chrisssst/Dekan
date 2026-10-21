@@ -6,6 +6,9 @@
     "types": ["@cloudflare/workers-types"],
     "moduleResolution": "bundler",
     "strict": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
     "noEmit": true
   },
   "include": ["src/**/*.ts"]

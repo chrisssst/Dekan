@@ -8,6 +8,6 @@
 | Contact the maintainer | [GitHub](https://github.com/chrisssst/Dekan) |
 | Report a security issue | [Private advisory](https://github.com/chrisssst/Dekan/security/advisories/new), never in public |
 
-Before asking, check the README's [Troubleshooting](README.md#troubleshooting) section. Most problems show up
+Before asking, check the README's [Troubleshooting](../README.md#troubleshooting) section. Most problems show up
 in the log: `%LOCALAPPDATA%\Dekan\logs`. Set `DEKAN_LOG=debug`, reproduce the problem, and attach the newest
 file.

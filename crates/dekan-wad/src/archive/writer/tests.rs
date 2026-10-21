@@ -323,3 +323,24 @@ fn test_a_kept_checksum_never_hides_a_content_change() {
     );
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
 }
+
+#[test]
+fn test_toc_entry_refuses_fields_that_do_not_fit_their_bits() {
+    let mut entry = memory(0, b"x", 1);
+    entry.subchunk_count = 0x10;
+    assert!(matches!(
+        toc_entry(1, &entry, 0),
+        Err(WadError::TooLarge {
+            what: "subchunk count",
+            ..
+        })
+    ));
+    entry.subchunk_count = 0;
+    entry.kind = 0x10;
+    assert!(toc_entry(1, &entry, 0).is_err());
+    entry.kind = 0;
+    entry.first_subchunk = 0x0100_0000;
+    assert!(toc_entry(1, &entry, 0).is_err());
+    entry.first_subchunk = 0xFF_FFFF;
+    assert!(toc_entry(1, &entry, 0).is_ok());
+}

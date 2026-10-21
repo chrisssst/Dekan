@@ -100,6 +100,37 @@ pub fn validate_archive_path(entry_path: &Path) -> Result<PathBuf, PlatformError
     Ok(clean_path)
 }
 
+fn link_on_the_way(dest_dir: &Path, relative: &Path) -> Result<Option<PathBuf>, PlatformError> {
+    let mut current = dest_dir.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => return Ok(Some(current)),
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => {
+                warn!(
+                    path = %current.display(),
+                    error = %e,
+                    "Refused an archive entry whose path could not be checked for links"
+                );
+                return Err(PlatformError::Io {
+                    context: format!("failed to check '{}' for links", current.display()),
+                    source: e,
+                });
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn discard_partial(file: File, path: &Path) {
+    drop(file);
+    if let Err(e) = std::fs::remove_file(path) {
+        warn!(path = %path.display(), error = %e, "A partially extracted file could not be removed");
+    }
+}
+
 pub fn safe_extract_zip<R: Read + Seek>(
     reader: R,
     dest_dir: &Path,
@@ -137,9 +168,9 @@ pub fn safe_extract_zip<R: Read + Seek>(
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
         let declared_size = file.size();
-        let raw_name = file.name();
+        let raw_name = file.name()?.into_owned();
 
-        let clean_relative = validate_archive_path(Path::new(raw_name))?;
+        let clean_relative = validate_archive_path(Path::new(&raw_name))?;
         let target_file_path = dest_dir.join(&clean_relative);
 
         let path_len = target_file_path.as_os_str().encode_wide().count();
@@ -156,6 +187,30 @@ pub fn safe_extract_zip<R: Read + Seek>(
                 target_file_path.display(),
                 limits.max_path_len,
                 path_len
+            )));
+        }
+
+        if file.is_symlink() {
+            warn!(
+                entry = %clean_relative.display(),
+                "Refused an archive entry that is a symbolic link"
+            );
+            return Err(PlatformError::Security(format!(
+                "archive entry is a symbolic link: '{}'",
+                clean_relative.display()
+            )));
+        }
+
+        if let Some(link) = link_on_the_way(dest_dir, &clean_relative)? {
+            warn!(
+                entry = %clean_relative.display(),
+                link = %link.display(),
+                "Refused an archive entry that would be written through a link or junction"
+            );
+            return Err(PlatformError::Security(format!(
+                "archive entry '{}' would be written through the link '{}'",
+                clean_relative.display(),
+                link.display()
             )));
         }
 
@@ -192,10 +247,19 @@ pub fn safe_extract_zip<R: Read + Seek>(
         let mut content = (&mut file).take(declared_size);
 
         loop {
-            let bytes_read = content.read(&mut buffer).map_err(|e| PlatformError::Io {
-                context: format!("read error while extracting '{}'", clean_relative.display()),
-                source: e,
-            })?;
+            let bytes_read = match content.read(&mut buffer) {
+                Ok(read) => read,
+                Err(e) => {
+                    discard_partial(out_file, &target_file_path);
+                    return Err(PlatformError::Io {
+                        context: format!(
+                            "read error while extracting '{}'",
+                            clean_relative.display()
+                        ),
+                        source: e,
+                    });
+                }
+            };
 
             if bytes_read == 0 {
                 break;
@@ -211,7 +275,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
                     limit = limits.max_single_file_bytes,
                     "Refused an archive entry that exceeded the single-file limit"
                 );
-                let _ = std::fs::remove_file(&target_file_path); // ignore-ok: removing a partial extraction after a refusal already logged
+                discard_partial(out_file, &target_file_path);
                 return Err(PlatformError::Security(format!(
                     "file entry '{}' exceeded single file limit of {} bytes",
                     clean_relative.display(),
@@ -227,26 +291,27 @@ pub fn safe_extract_zip<R: Read + Seek>(
                     limit = limits.max_total_bytes,
                     "Aborted extraction: cumulative size limit exceeded (zip bomb)"
                 );
-                let _ = std::fs::remove_file(&target_file_path); // ignore-ok: removing a partial extraction after a refusal already logged
+                discard_partial(out_file, &target_file_path);
                 return Err(PlatformError::Security(format!(
                     "archive exceeded total size limit of {} bytes (zip bomb detected)",
                     limits.max_total_bytes
                 )));
             }
 
-            out_file
-                .write_all(&buffer[..bytes_read])
-                .map_err(|e| PlatformError::Io {
+            if let Err(e) = out_file.write_all(&buffer[..bytes_read]) {
+                discard_partial(out_file, &target_file_path);
+                return Err(PlatformError::Io {
                     context: format!(
                         "write error while extracting '{}'",
                         clean_relative.display()
                     ),
                     source: e,
-                })?;
+                });
+            }
         }
 
         if entry_bytes != declared_size {
-            let _ = std::fs::remove_file(&target_file_path); // ignore-ok: removing a truncated extraction; the refusal is what gets reported
+            discard_partial(out_file, &target_file_path);
             return Err(PlatformError::Io {
                 context: format!(
                     "'{}' is truncated: {entry_bytes} of {declared_size} bytes",

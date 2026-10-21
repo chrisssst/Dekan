@@ -81,21 +81,29 @@ pub(crate) fn run_package() {
         workspace_root.join("target/x86_64-pc-windows-msvc/release/dekan-relay.exe"),
         workspace_root.join("target/release/dekan-relay.exe"),
     ];
-    if let Some(relay_bin) = relay_paths.iter().find(|p| p.exists()) {
-        let relay_dest = dist_dir.join("dekan-relay.exe");
-        if std::fs::copy(relay_bin, &relay_dest).is_ok() {
-            if let Ok(bytes_relay) = std::fs::read(&relay_dest) {
-                let hash_relay = dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_relay));
-                checksum_content.push_str(&format!("{hash_relay} *dekan-relay.exe\n"));
-                println!(
-                    "  Relay:    {} ({} bytes, SHA-256: {})",
-                    relay_dest.display(),
-                    bytes_relay.len(),
-                    hash_relay
-                );
-            }
-        }
+    let relay_bin = relay_paths.iter().find(|p| p.exists()).unwrap_or_else(|| {
+        eprintln!(
+            "[ERROR] dekan-relay.exe was not built under target/; the package would ship without it"
+        );
+        std::process::exit(1);
+    });
+    let relay_dest = dist_dir.join("dekan-relay.exe");
+    if let Err(e) = std::fs::copy(relay_bin, &relay_dest) {
+        eprintln!("[ERROR] copying {} to dist/: {e}", relay_bin.display());
+        std::process::exit(1);
     }
+    let bytes_relay = std::fs::read(&relay_dest).unwrap_or_else(|e| {
+        eprintln!("[ERROR] reading {}: {e}", relay_dest.display());
+        std::process::exit(1);
+    });
+    let hash_relay = dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_relay));
+    checksum_content.push_str(&format!("{hash_relay} *dekan-relay.exe\n"));
+    println!(
+        "  Relay:    {} ({} bytes, SHA-256: {})",
+        relay_dest.display(),
+        bytes_relay.len(),
+        hash_relay
+    );
 
     let default_party_json = format!(
         "{{\n  \"relay_url\": \"{}\"\n}}\n",
@@ -126,22 +134,29 @@ pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
         std::fs::create_dir_all(dist_dir).expect("failed to create dist directory");
         return;
     }
-    if let Ok(entries) = std::fs::read_dir(dist_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name == "tools" || name == "library" {
-                continue;
-            }
-            if path.is_file() {
-                // ignore-ok: clean old artifact
-                let _ = std::fs::remove_file(&path);
-            } else if path.is_dir() && name == "installer" {
-                // ignore-ok: clean old installer folder
-                let _ = std::fs::remove_dir_all(&path);
-            }
+    let entries = std::fs::read_dir(dist_dir).unwrap_or_else(|e| fail_clean(dist_dir, &e));
+    for entry in entries {
+        let path = entry.unwrap_or_else(|e| fail_clean(dist_dir, &e)).path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name == "tools" || name == "library" {
+            continue;
+        }
+        let removed = if path.is_file() {
+            std::fs::remove_file(&path)
+        } else if path.is_dir() && name == "installer" {
+            std::fs::remove_dir_all(&path)
+        } else {
+            Ok(())
+        };
+        if let Err(e) = removed {
+            fail_clean(&path, &e);
         }
     }
+}
+
+fn fail_clean(path: &std::path::Path, error: &std::io::Error) -> ! {
+    eprintln!("[ERROR] cleaning {}: {error}", path.display());
+    std::process::exit(1);
 }
 
 pub(crate) fn run_installer(args: &[String]) {

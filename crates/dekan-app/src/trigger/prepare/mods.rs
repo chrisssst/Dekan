@@ -88,8 +88,13 @@ impl InjectionTrigger {
 
     pub(crate) async fn party_mods(&self, key: ArmKey) -> Vec<String> {
         let (accepted, rejected) = party_skins(&self.state_rx.borrow());
-        for (member_id, reason) in &rejected {
-            warn!(member_id, reason = ?reason, "Party skin not injected");
+        if let Some((member_id, reason)) = rejected.first() {
+            warn!(
+                rejected = rejected.len(),
+                first_member = member_id,
+                first_reason = ?reason,
+                "Party skins not injected"
+            );
         }
         if dekan_core::party::party_fingerprint(&accepted) != key.party {
             debug!("Party skins changed since the build was scheduled; using the current ones");
@@ -153,8 +158,16 @@ pub(crate) fn drop_incompatible_mods(
     mods_dir: &Path,
     game_dir: &Path,
 ) -> Vec<String> {
-    let Ok(game) = dekan_inject::overlay_builder::get_or_index_game(game_dir) else {
-        return staged;
+    let game = match dekan_inject::overlay_builder::get_or_index_game(game_dir) {
+        Ok(game) => game,
+        Err(e) => {
+            warn!(
+                error = %e,
+                mods = staged.len(),
+                "Custom mods not checked against the installed patch: the game could not be indexed"
+            );
+            return staged;
+        }
     };
     let game_hashes = dekan_inject::mod_compat::game_hash_set(&game);
     let mut repairer = dekan_inject::mod_compat::Repairer::new(&game, &game_hashes);
@@ -163,12 +176,16 @@ pub(crate) fn drop_incompatible_mods(
         let wads = dekan_inject::mod_compat::mod_wads(&mods_dir.join(&name));
         let own = dekan_inject::mod_compat::mod_hashes(&wads);
         let mut dangling = Vec::new();
+        let mut unreadable = Vec::new();
+        let mut unchecked = 0usize;
+        let mut first_unchecked: Option<String> = None;
         for wad in &wads {
             let found = match dekan_inject::mod_compat::check(wad, &game_hashes, &own) {
                 Ok(compat) if compat.is_compatible() => continue,
                 Ok(compat) => compat.dangling,
                 Err(e) => {
-                    debug!(mod_name = %name, error = %e, "Custom mod WAD not checked");
+                    unchecked += 1;
+                    first_unchecked.get_or_insert_with(|| e.to_string());
                     continue;
                 }
             };
@@ -187,9 +204,33 @@ pub(crate) fn drop_incompatible_mods(
                 ),
             }
             match dekan_inject::mod_compat::check(wad, &game_hashes, &own) {
-                Ok(compat) => dangling.extend(compat.dangling),
-                Err(_) => dangling.extend(found),
+                Ok(compat) => {
+                    dangling.extend(compat.dangling);
+                    unreadable.extend(compat.unreadable);
+                }
+                Err(e) => {
+                    unchecked += 1;
+                    first_unchecked.get_or_insert_with(|| e.to_string());
+                    dangling.extend(found);
+                }
             }
+        }
+        if let Some(first_error) = first_unchecked {
+            warn!(
+                mod_name = %name,
+                unchecked,
+                wads = wads.len(),
+                first_error,
+                "Custom mod WADs could not be checked against the installed patch; it is kept as it is"
+            );
+        }
+        if let Some(first) = unreadable.first() {
+            warn!(
+                mod_name = %name,
+                entries = unreadable.len(),
+                first,
+                "Custom mod has PROP entries that could not be read; it is kept as it is"
+            );
         }
         if dangling.is_empty() {
             kept.push(name);

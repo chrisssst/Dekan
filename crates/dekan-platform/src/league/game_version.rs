@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::warn;
 
 pub const GAME_PATCH_FILE: &str = "game_patch.json";
 
@@ -130,7 +131,10 @@ pub fn check(state_dir: &Path, game_dir: &Path) -> Result<BuildCheck, GameVersio
     let current = read_time_date_stamp(&game_exe(game_dir))?;
     let previous = match load(state_dir) {
         Ok(previous) => previous,
-        Err(GameVersionError::Malformed { .. }) => None,
+        Err(e @ GameVersionError::Malformed { .. }) => {
+            warn!(error = %e, "Recorded game build unreadable; treating this build as first seen");
+            None
+        }
         Err(e) => return Err(e),
     };
     let outcome = match previous {

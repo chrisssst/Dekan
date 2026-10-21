@@ -4,6 +4,7 @@ use dekan_wad::hash::{prop_key_hash, wad_path_hash};
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::prop::{PropFile, parse_prop_file, serialize_prop_file};
 use dekan_wad::wad::WadFile;
+use tracing::warn;
 
 use crate::error::ClassicError;
 
@@ -49,16 +50,24 @@ pub fn find_linked_object(
     links: &[String],
     key: u32,
 ) -> Result<Option<Vec<u8>>, ClassicError> {
+    let mut unparsed = 0usize;
     for link in links {
         let Some(bytes) = wad.read(wad_path_hash(&link.to_ascii_lowercase()))? else {
             continue;
         };
         let Ok(bin) = parse_prop_file(&bytes) else {
+            unparsed += 1;
             continue;
         };
         if let Some(entry) = bin.entries.into_iter().find(|e| e.key_hash == key) {
             return Ok(Some(entry.body));
         }
+    }
+    if unparsed > 0 {
+        warn!(
+            unparsed,
+            "Linked bins unreadable while looking for {key:08x}"
+        );
     }
     Ok(None)
 }
@@ -243,7 +252,10 @@ fn fix_gear_drivers(
                 Value::Raw { bytes, .. } => bytes.first().copied(),
                 _ => None,
             })
-            .unwrap_or(0);
+            .unwrap_or_else(|| {
+                warn!("Gear driver without a readable gear index; it is read as gear 0");
+                0
+            });
         *value = constant_driver(value.kind(), u32::from(index) == gear_index);
         return Ok(1);
     }
@@ -334,6 +346,9 @@ pub fn bake_form(file: &mut PropFile, form: &GearForm<'_>) -> Result<(), Classic
         .and_then(Value::fields)
         .and_then(|r| tree::field(r, h("resourceMap")));
     if let (Some(Value::Map { entries: extra, .. }), Some(key)) = (gear_map, resolver_key) {
+        if file.entries.iter().all(|e| e.key_hash != key) {
+            warn!("Form effect resolver {key:08x} missing; its effects are not linked");
+        }
         if let Some(resolver) = file.entries.iter_mut().find(|e| e.key_hash == key) {
             let mut fields = tree::parse_fields(&resolver.body).map_err(bin_error)?;
             if let Some(Value::Map { entries, .. }) = tree::field_mut(&mut fields, h("resourceMap"))

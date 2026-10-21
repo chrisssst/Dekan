@@ -1,9 +1,9 @@
-# Upstream notice
+# Dekan source notes
 
-Dekan is a customized fork of **Bullet**, originally created by Isllan Toso.
-The original project is available at https://github.com/Isllanrx/Bullet and is licensed under the MIT License.
+Dekan is distributed under the MIT License in `LICENSE`. Product names, executable names, local data paths,
+environment variables, interface assets and Windows installer metadata use Dekan branding.
 
-This fork preserves the original MIT license and copyright notice. Branding, package names, executable names,
-local data paths, environment variable prefixes and user-interface identity are customized for Dekan.
+This update integrates source revision `3cfa3d76646837a8ac797402afeca42c147f9ec1` (v1.6).
+Dekan maintains its Turkish/English interface, Discord Rich Presence, theme preferences and installer handoff.
 
-The 1.5 source used for this build corresponds to the upstream Bullet v1.5 release.
+Third-party components retain their separate terms in `THIRD-PARTY-NOTICES.md`.

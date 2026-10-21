@@ -77,8 +77,14 @@ pub(super) fn package_stamp(path: &Path, package: Package) -> Option<String> {
 }
 
 pub(super) fn collect_mods(dir: &Path, out: &mut Vec<(PathBuf, Package)>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(dir = %dir.display(), error = %e, "A custom mods folder could not be read; its mods are not checked");
+            }
+            return;
+        }
     };
     let mut paths: Vec<PathBuf> = entries
         .flatten()
@@ -157,10 +163,26 @@ pub(super) fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 pub(super) fn load_verdicts(path: &Path) -> Verdicts {
-    std::fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Verdicts::default(),
+        Err(e) => {
+            warn!(file = %path.display(), error = %e, "Custom mod verdicts could not be read; every mod is checked again");
+            return Verdicts::default();
+        }
+    };
+    serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+        let aside = path.with_extension("json.unreadable");
+        let moved = std::fs::rename(path, &aside);
+        warn!(
+            file = %path.display(),
+            moved_to = %aside.display(),
+            moved_error = ?moved.err(),
+            error = %e,
+            "Custom mod verdicts file is not valid; it was set aside and every mod is checked again"
+        );
+        Verdicts::default()
+    })
 }
 
 pub(super) fn save_verdicts(path: &Path, verdicts: &Verdicts) {

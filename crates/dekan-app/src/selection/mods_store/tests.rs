@@ -31,7 +31,7 @@ fn make_archive(path: &Path) {
 fn make_archive_with(path: &Path, content: &str) {
     let file = std::fs::File::create(path).expect("archive");
     let mut writer = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+    let options: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
     writer.start_file("META/info.json", options).expect("meta");
     std::io::Write::write_all(&mut writer, b"{}").expect("meta body");
     writer.start_file(content, options).expect("content");
@@ -179,7 +179,7 @@ fn test_import_archive_no_content() {
 
     let file = std::fs::File::create(&source_file).expect("file");
     let mut writer = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+    let options: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
     writer.start_file("META/info.json", options).expect("meta");
     std::io::Write::write_all(&mut writer, b"{}").expect("meta body");
     writer.finish().expect("finish");

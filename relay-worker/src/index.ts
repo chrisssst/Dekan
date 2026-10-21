@@ -1,10 +1,10 @@
-export { PartyRoom } from './room';
+import { isRoomKey } from './protocol.ts';
+
+export { PartyRoom } from './room.ts';
 
 interface Env {
   ROOM: DurableObjectNamespace;
 }
-
-const ROOM_KEY = /^[0-9a-f]{32}$/;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -18,13 +18,22 @@ export default {
 
     if (url.pathname === '/room' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
       const roomKey = url.searchParams.get('key') ?? '';
-      if (!ROOM_KEY.test(roomKey)) {
+      if (!isRoomKey(roomKey)) {
+        console.warn(JSON.stringify({ event: 'join_refused_invalid_key' }));
         return new Response('Invalid room key', { status: 400 });
       }
-      const stub = env.ROOM.get(env.ROOM.idFromName(roomKey));
-      return stub.fetch(request);
+      try {
+        const stub = env.ROOM.get(env.ROOM.idFromName(roomKey));
+        return await stub.fetch(request);
+      } catch (error) {
+        console.error(
+          JSON.stringify({ event: 'room_unavailable', error: error instanceof Error ? error.message : String(error) }),
+        );
+        return new Response('Room unavailable', { status: 503 });
+      }
     }
 
+    console.warn(JSON.stringify({ event: 'request_refused', status: 426 }));
     return new Response('Dekan party relay - WebSocket upgrade required at /room', { status: 426 });
   },
 };

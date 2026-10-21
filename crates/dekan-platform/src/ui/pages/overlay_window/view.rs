@@ -4,6 +4,9 @@ pub(super) fn create(
     commands: UnboundedSender<OverlayCommand>,
 ) -> Result<views::OverlayWindow, String> {
     let view = views::OverlayWindow::new().map_err(|e| format!("overlay window: {e}"))?;
+    super::super::themes::follow(&view, |view, mode| {
+        view.global::<views::Theme>().set_mode(mode);
+    });
     runtime::repaint_on_expose(&view, |v| v.set_expose_flip(!v.get_expose_flip()));
     wire(&view);
     view.show().map_err(|e| format!("overlay window: {e}"))?;
@@ -48,10 +51,9 @@ pub(super) fn wire(view: &views::OverlayWindow) {
         with_overlay(|overlay| crate::client_window::take_foreground(overlay.hwnd));
     });
     view.on_search_done(crate::client_window::return_foreground_to_client);
-    view.on_choose(|id| {
-        if let Ok(id) = u32::try_from(id) {
-            with_overlay(|overlay| overlay.choose(id));
-        }
+    view.on_choose(|id| match u32::try_from(id) {
+        Ok(id) => with_overlay(|overlay| overlay.choose(id)),
+        Err(_) => debug!(id, "Ignored a click on a card without a valid id"),
     });
     view.on_random(|| with_overlay(|overlay| overlay.send(OverlayCommand::Random)));
     view.on_show_tab(|mods_tab| {
@@ -88,12 +90,7 @@ pub(super) fn wire(view: &views::OverlayWindow) {
         with_overlay(|overlay| {
             if on && gem.has_preview {
                 overlay.show_preview(&gem, x, y);
-            } else if on {
-                debug!(
-                    chroma_id = gem.id,
-                    "Hovered chroma has no preview image in the catalog"
-                );
-            } else {
+            } else if !on {
                 overlay.hide_preview();
             }
         });
@@ -113,10 +110,9 @@ pub(super) fn wire(view: &views::OverlayWindow) {
     view.on_profile_removed(|| {
         with_overlay(|overlay| overlay.send(OverlayCommand::DeleteProfile));
     });
-    view.on_focus_champion(|id| {
-        if let Ok(id) = u32::try_from(id) {
-            with_overlay(|overlay| overlay.send(OverlayCommand::FocusChampion { id }));
-        }
+    view.on_focus_champion(|id| match u32::try_from(id) {
+        Ok(id) => with_overlay(|overlay| overlay.send(OverlayCommand::FocusChampion { id })),
+        Err(_) => debug!(id, "Ignored a lobby champion without a valid id"),
     });
     view.on_scrolled(|| with_overlay(Overlay::hide_preview));
     view.on_columns_changed(|columns| {

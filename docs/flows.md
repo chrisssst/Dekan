@@ -49,6 +49,13 @@ been running for more than two seconds, the game is already reading its archives
 the game and from the overlay, and the game can crash. The patcher waits for that process to close and hooks the
 next one (a reconnect) instead; the late path leaves the match with the default skin.
 
+**Changing the skin on the reconnect screen.** When the game closes and the client shows Reconnect, the skin window
+opens again with the current pick marked. The running patcher stays armed for that pick, so reconnecting without a
+change loads the same skin. Picking another skin or chroma rebuilds the overlay and re-arms the patcher before the
+Reconnect click; clearing the pick disarms it. Registration in the client is skipped in this phase, because there
+is no champion select to register into. Back in game, the hook is confirmed as on a normal start. With the "Inject
+skins" option off, the window stays closed.
+
 **Why the loading screen shows the default name for an unowned skin.** The name on the loading card comes
 from the skin id the server received. The client refuses to register a skin you do not own, so the card
 shows the champion's default name while the skin's art still loads from the overlay. Showing the skin's name
@@ -146,16 +153,28 @@ The classic ids are kept as they are. They are never forced back to the regular 
 ## 4. Party mode
 
 ```text
-A player creates or joins a room from the control panel
-  └─ dekan-party connects to the relay with a room id derived from the invite key
-     └─ each member announces champion and skin, encrypted on their own machine
-        └─ the trigger keeps only announcements whose champion matches the real roster
-           reported by the client for that player's slot
-           └─ each teammate's skin is generated like your own and merged into the same overlay
-              └─ you see your friends' skins in the match
+Friends sit in the same League lobby, each running Dekan
+  └─ every Dekan derives the same room id from the lobby's party id and joins the relay quietly
+     └─ when another member is in the room (lobby or end of game only),
+        Dekan asks "Join the party" / "Don't join"
+        └─ after "Join the party", each member announces champion and skin, encrypted on their own machine
+           └─ the trigger keeps only announcements whose champion matches the real roster
+              reported by the client for that player's slot
+              └─ each teammate's skin is generated like your own and merged into the same overlay
+                 └─ you see your friends' skins in the match
 ```
 
-The control panel shows the room state; a room you created reads "Party created" until you leave it.
+Nothing is announced, read or shown before the player agrees. "Don't join", closing the invite or leaving the room
+closes the room for that lobby; a new lobby starts over, and a lobby already accepted shares again when its room reopens.
+Only lobbies with two or more members that are not custom games get a room (custom lobbies mix both teams and go
+past the relay's five members). The room survives the lobby disappearing during the match and closes between
+matches. An open invite closes on its own when queueing starts or the lobby changes. Without a configured relay
+the lobby room is skipped with a single warning; an unreachable relay logs one warning per run of failures.
+
+A room code still works: creating or joining a room from the control panel takes priority and closes the lobby
+room until it is left. The control panel shows the room state; a room you created reads "Party created" until you
+leave it. The selection window footer shows how many are in the room and how many teammate skins (checked against
+the real roster) will be applied.
 
 Open work: the selection window does not yet show who is in the room or which skins were applied, and the
 mode has not been proven with several players in one real match.
@@ -163,7 +182,8 @@ mode has not been proven with several players in one real match.
 ## 5. Startup and patches
 
 ```text
-Dekan starts → finds the game → reads the game build
+Dekan starts → finds the game → checks the injector files (missing or not signed by the publisher: the user is
+offered the signed LTK Manager release, otherwise its page opens and Dekan stops) → reads the game build
   · new build? cached overlays and locale data are discarded; the archive index revalidates
     itself by file size and modification time
   · once the archive index is ready, at background priority and only while no champion select or match is
@@ -180,7 +200,24 @@ Dekan starts → finds the game → reads the game build
 ## 6. Shutdown and recovery
 
 - Dekan never suspends or opens the game's threads. When the game starts before the injector is armed, the
-  late path builds the overlay and arms the injector within a fixed time budget; the hook may then land too
-  late, and the log says so.
+  late path builds the overlay and arms the injector within a time budget (60 s by default); the hook may then
+  land too late, and the log says so.
+- A supervised task that dies is logged (`error` for the essential ones) and a panic is logged by the panic
+  hook; Dekan does not restart the task, so the log line is the first thing to look for in a report.
 - Uninstalling removes logs, state, overlays and generated mods, and asks before deleting the user's own
   skins. `cargo xtask install-audit` checks the result.
+
+## 7. Updates
+
+```text
+Dekan runs from an installed copy (the uninstaller sits next to it)
+  └─ 15 s after start, then every 6 h, the latest GitHub release is read; a newer one is offered once per version,
+     never during ready check, champion select, a match or a reconnect
+     └─ "yes": SHA256SUMS and SHA256SUMS.sig are downloaded and the Ed25519 signature is checked
+        └─ the installer's SHA-256 must match the signed list; the file is checked again right before it runs
+           └─ when no match is running, Dekan closes, the installer runs silently and reopens Dekan
+"no", or a failed check: nothing runs; a failed verification opens the release page
+```
+
+A copy not installed by the setup only gets a notice with the download page. `DEKAN_UPDATE_CHECK=off` disables
+the check.

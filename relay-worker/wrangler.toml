@@ -9,3 +9,6 @@ class_name = "PartyRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PartyRoom"]
+
+[observability]
+enabled = true

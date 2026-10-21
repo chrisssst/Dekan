@@ -1,4 +1,4 @@
-import { Theme, ExposeLayer, GoldButton, Field, Hairline } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Field, Hairline, Halo } from "theme.slint";
 
 component PeopleGlyph inherits Path {
     width: 18px;
@@ -15,7 +15,7 @@ component InlineButton inherits Rectangle {
     in property <string> text;
     callback clicked();
     width: max(64px, label.preferred-width + 24px);
-    border-radius: 3px;
+    border-radius: 6px;
     border-width: 1px;
     border-color: touch.has-hover ? Theme.gold-bright : Theme.button-line;
     background: touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.12);
@@ -36,6 +36,101 @@ component InlineButton inherits Rectangle {
     accessible-role: button;
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
+}
+
+export component PartyInvite inherits Window {
+    in property <bool> expose-flip;
+    in property <string> heading;
+    in property <string> description;
+    in property <string> join-label;
+    in property <string> later-label;
+    callback join();
+    callback later();
+    title: root.heading;
+    icon: @image-url("assets/logo.png");
+    width: 460px;
+    height: 200px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+
+    Halo {
+        x: -46px;
+        y: -64px;
+    }
+
+    FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.later();
+                return accept;
+            }
+            reject
+        }
+        VerticalLayout {
+            padding: 22px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 12px;
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 10px;
+                    border-width: 1px;
+                    border-color: Theme.gold-dim;
+                    background: Theme.card-fill-hover;
+                    PeopleGlyph {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: root.heading;
+                        color: Theme.gold-bright;
+                        font-family: Theme.serif;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.description;
+                        color: Theme.muted;
+                        font-size: Theme.text-md;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+            }
+            Hairline { }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+                GoldButton {
+                    min-width: 130px;
+                    min-height: 36px;
+                    horizontal-stretch: 0;
+                    font-size: Theme.text-base;
+                    text: root.later-label;
+                    clicked => { root.later(); }
+                }
+                GoldButton {
+                    min-width: 168px;
+                    min-height: 36px;
+                    horizontal-stretch: 0;
+                    primary: true;
+                    font-size: Theme.text-base;
+                    text: root.join-label;
+                    clicked => { root.join(); }
+                }
+            }
+        }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
 }
 
 export component PartyDialog inherits Window {
@@ -71,6 +166,11 @@ export component PartyDialog inherits Window {
         }
     }
 
+    Halo {
+        x: -46px;
+        y: -64px;
+    }
+
     FocusScope {
         key-pressed(event) => {
             if event.text == Key.Escape {
@@ -88,14 +188,12 @@ export component PartyDialog inherits Window {
             HorizontalLayout {
                 spacing: 12px;
                 Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 6px;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 10px;
                     border-width: 1px;
                     border-color: Theme.gold-dim;
-                    background: @linear-gradient(135deg, #1c2738 0%, #0d1622 100%);
-                    drop-shadow-blur: 10px;
-                    drop-shadow-color: Theme.gold.with-alpha(0.2);
+                    background: Theme.card-fill-hover;
                     PeopleGlyph {
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -105,11 +203,11 @@ export component PartyDialog inherits Window {
                     spacing: 3px;
                     alignment: center;
                     Text {
-                        text: root.heading.to-uppercase();
+                        text: root.heading;
                         color: Theme.gold-bright;
-                        font-size: Theme.text-lg;
+                        font-family: Theme.serif;
+                        font-size: 18px;
                         font-weight: 700;
-                        letter-spacing: 0.6px;
                     }
                     Text {
                         text: root.description;
@@ -174,8 +272,7 @@ export component PartyDialog inherits Window {
                     min-width: 130px;
                     min-height: 36px;
                     horizontal-stretch: 0;
-                    caps: true;
-                    tracking: 0.6px;
+                    font-size: Theme.text-base;
                     text: root.cancel-label;
                     clicked => { root.cancel(); }
                 }
@@ -184,8 +281,7 @@ export component PartyDialog inherits Window {
                     min-height: 36px;
                     horizontal-stretch: 0;
                     primary: true;
-                    caps: true;
-                    tracking: 0.6px;
+                    font-size: Theme.text-base;
                     text: root.confirm-label;
                     clicked => { root.confirm(); }
                 }

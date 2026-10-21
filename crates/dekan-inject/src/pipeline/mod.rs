@@ -16,12 +16,22 @@ const LOADING_GAME_POLL: Duration = Duration::from_millis(500);
 
 #[must_use]
 pub fn game_already_loading() -> Option<(u32, Duration)> {
-    let pid = dekan_platform::process::ProcessFinder::find_any_process(
+    let pid = match dekan_platform::process::ProcessFinder::find_any_process(
         &dekan_platform::game_version::GAME_EXES,
-    )
-    .ok()
-    .flatten()?;
-    let age = dekan_platform::process::ProcessFinder::process_age(pid)?;
+    ) {
+        Ok(found) => found?,
+        Err(e) => {
+            warn!(error = %e, "Could not look for a running game; arming as if none is loading");
+            return None;
+        }
+    };
+    let Some(age) = dekan_platform::process::ProcessFinder::process_age(pid) else {
+        warn!(
+            pid,
+            "The running game's age could not be read; it is treated as not loading yet"
+        );
+        return None;
+    };
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }
 
@@ -30,6 +40,7 @@ fn exit_code_hex(code: i32) -> String {
 }
 
 async fn wait_out_loading_game() {
+    let waited = std::time::Instant::now();
     let mut reported = false;
     while let Some((pid, age)) = game_already_loading() {
         if !reported {
@@ -41,6 +52,12 @@ async fn wait_out_loading_game() {
             );
         }
         tokio::time::sleep(LOADING_GAME_POLL).await;
+    }
+    if reported {
+        info!(
+            waited_ms = waited.elapsed().as_millis(),
+            "The game that was already loading is gone; arming the patcher"
+        );
     }
 }
 
@@ -128,9 +145,9 @@ impl InjectionPipeline {
         );
 
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Injection aborted: DLL hash mismatch or missing");
+            error!(error = %e, "Injection aborted: an injector file is missing or not signed by its publisher");
             self.publish(InjectionStatus::Failed {
-                error: format!("DLL validation error: {e}"),
+                error: format!("injector validation error: {e}"),
             });
             return Err(e);
         }
@@ -143,6 +160,13 @@ impl InjectionPipeline {
                     status,
                     overlay: Some(overlay),
                 })
+            }
+            Err(e @ (InjectError::GameAlreadyLoading { .. } | InjectError::Cancelled)) => {
+                warn!(error = %e, "Injection skipped");
+                self.publish(InjectionStatus::Failed {
+                    error: e.to_string(),
+                });
+                Err(e)
             }
             Err(e) => {
                 error!(error = %e, "Injection failed");
@@ -188,12 +212,18 @@ impl InjectionPipeline {
         info!(mods = ?mods, "Arming the patcher before the game starts");
 
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Arming aborted: DLL hash mismatch or missing");
+            error!(error = %e, "Arming aborted: an injector file is missing or not signed by its publisher");
             self.publish(InjectionStatus::Failed {
-                error: format!("DLL validation error: {e}"),
+                error: format!("injector validation error: {e}"),
             });
             return Err(e);
         }
+        info!(
+            publisher = crate::trust::LTK_PUBLISHER,
+            host = %self.config.ltk_host_exe.display(),
+            dll = %self.config.ltk_dll_path.display(),
+            "Injector files verified by their publisher signature"
+        );
 
         let build = match self.build_overlay(mods, self.config.build_timeout).await {
             Ok(build) => build,
@@ -238,10 +268,14 @@ impl InjectionPipeline {
                     error = %e,
                     exit_code = ?exit,
                     exit_code_hex = ?exit.map(exit_code_hex),
+                    closed_by_another_program = exit.is_some_and(crate::ltk_host::closed_by_another_program),
                     "The patcher never reported that it is watching for the game; the skin will not load"
                 );
-                self.publish(InjectionStatus::Failed {
-                    error: format!("patcher failed to arm: {e}"),
+                self.publish(match exit {
+                    Some(code) => InjectionStatus::PatcherExited { code },
+                    None => InjectionStatus::Failed {
+                        error: format!("patcher failed to arm: {e}"),
+                    },
                 });
                 Err(e)
             }
@@ -285,14 +319,10 @@ impl InjectionPipeline {
                     warn!(
                         exit_code = code,
                         exit_code_hex = %exit_code_hex(code),
+                        closed_by_another_program = crate::ltk_host::closed_by_another_program(code),
                         "The patcher exited before confirming the hook; the overlay is not active"
                     );
-                    return InjectionStatus::Failed {
-                        error: format!(
-                            "the patcher exited with code {code} ({}) before hooking",
-                            exit_code_hex(code)
-                        ),
-                    };
+                    return InjectionStatus::PatcherExited { code };
                 }
 
                 warn!(

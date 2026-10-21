@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use dekan_wad::hash::prop_key_hash;
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
+use tracing::{debug, warn};
 
 use crate::error::ClassicError;
 
@@ -309,7 +310,15 @@ pub fn drive_by_parts(
     }
     match highest {
         Some(index) if usize::from(index) < drivers.len() => {}
-        _ => return Ok(None),
+        Some(index) => {
+            warn!(
+                highest_gear_index = index,
+                drivers = drivers.len(),
+                "Material gear drivers left as the game ships them; the skin names more gears than it has forms"
+            );
+            return Ok(None);
+        }
+        None => return Ok(None),
     }
     let mut total = 0;
     for (at, mut fields) in parsed {
@@ -323,6 +332,7 @@ pub fn drive_by_parts(
         }
     }
     if total == 0 {
+        debug!("Material gear drivers found but none needed rewriting");
         return Ok(None);
     }
     serialize_prop_file(&file)

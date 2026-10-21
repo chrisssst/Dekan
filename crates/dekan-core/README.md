@@ -20,7 +20,7 @@ known list of places that could have caused it.
 | --- | --- |
 | `runtime/state/mod.rs` | `AppState`, its sender/receiver types and the named transitions that change it |
 | `runtime/phase.rs` | `GamePhase`: turns the client's gameflow phases (lobby, champ select, game start, reconnect, end of game…) into one enum |
-| `runtime/supervisor.rs` | `Supervisor`: every background task is started here with a cancellation token, so shutdown is orderly and a crashed task is noticed |
+| `runtime/supervisor.rs` | `Supervisor`: every background task is started here with a cancellation token, so shutdown is orderly and a crashed task is noticed; `spawn_essential` marks a task whose early exit is logged as an error instead of a warning |
 | `runtime/selection.rs` | Champion, skin and chroma id types and the base-skin check; champion aliases, companion characters and skin forms are not tabled here, they are read from the installed game by `dekan-classic` |
 | `domain/skins/historic.rs` | The last skin used on each champion, so it can be selected again automatically |
 | `domain/skins/presets.rs` | Skin presets pinned per champion, grouped in named profiles with one active at a time |
@@ -29,7 +29,7 @@ known list of places that could have caused it.
 | `domain/mods/scan.rs` | Scans the custom mod folders into the catalog: folders, archives and their descriptions |
 | `domain/skins/library.rs` | The skin library on disk and how an entry is found for a champion and skin |
 | `domain/play/overlay.rs` | Messages exchanged between Dekan and its selection window |
-| `domain/play/party.rs` | Checks the skins announced by party members against the real team roster |
+| `domain/play/party.rs` | Checks the skins announced by party members against the real team roster, and decides which lobby party (if any) Dekan should share a room with (`LobbyParty`, `lobby_room`, `may_ask_to_share`) |
 | `env.rs` | The only list of `DEKAN_*` environment variables Dekan reads |
 | `error.rs` | Error types shared across crates |
 

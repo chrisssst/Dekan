@@ -50,7 +50,7 @@ Each crate also has its own README with its files and responsibilities: [dekan-c
 ## Checking a change
 
 ```powershell
-cargo xtask check    # error-handling sweep, rustfmt, clippy -D warnings, all tests
+cargo xtask check    # error-handling sweep, no comments, file sizes, rustfmt, clippy -D warnings, all tests
 cargo deny check     # advisories, licenses, banned crates, sources
 ```
 
