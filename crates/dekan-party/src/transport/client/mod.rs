@@ -16,7 +16,7 @@ use crate::error::PartyError;
 use crate::protocol::{Announcement, ClientMessage, RelayMessage, open_member};
 use crate::token::PartyToken;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -149,7 +149,7 @@ impl PartyClient {
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_MESSAGE_BYTES))
             .max_frame_size(Some(MAX_MESSAGE_BYTES));
-        let connect = tokio_tungstenite::connect_async_with_config(url, Some(config), false);
+        let connect = super::connection::connect(url, config);
         let connected = tokio::select! {
             () = cancel.cancelled() => return Ok(SessionEnd::Cancelled),
             connected = tokio::time::timeout(CONNECT_TIMEOUT, connect) => connected,

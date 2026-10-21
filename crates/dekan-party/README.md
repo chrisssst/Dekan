@@ -30,6 +30,7 @@ each other directly. They exchange encrypted messages through a relay, and the r
 | `security/crypto.rs` | Room id derivation and the room cipher |
 | `transport/protocol.rs` | Messages exchanged with the relay and the size limits of the encrypted payload |
 | `transport/client/mod.rs` | Connection to the relay: join, announce, receive members, reconnect |
+| `transport/connection/` | System connection and bounded HTTPS DNS recovery for the default relay |
 | `transport/config.rs` | Which relay to use: `DEKAN_RELAY_URL`, then `party.json` in Dekan's state folder, then the built-in default |
 | `error.rs` | Error type |
 
@@ -39,6 +40,12 @@ each other directly. They exchange encrypted messages through a relay, and the r
   Saved preferences using the previous default migrate automatically; custom relay URLs and environment
   overrides are preserved.
 - `dekan-relay` is a Rust server that speaks the same protocol, for anyone who wants to host their own.
+
+If a network connection to the default relay fails, Dekan automatically asks Google Public DNS and Cloudflare
+over HTTPS for current IPv4 addresses, then tries up to four addresses. The original relay hostname is retained
+for TLS verification and the WebSocket handshake. No fixed relay IP, hosts-file change, administrator access or
+user DNS change is required. Custom relays keep using the system resolver. See
+[`docs/party-connectivity.md`](../../docs/party-connectivity.md) for limits, privacy and verification.
 
 Encryption fails instead of panicking when the operating system's random generator fails, so nothing is sent.
 Reconnects back off with jitter to spread them out. Member ids are random, non-zero and fit in 53 bits, so they

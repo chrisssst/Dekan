@@ -1109,6 +1109,7 @@ dependencies = [
  "chacha20poly1305",
  "dekan-core",
  "futures-util",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2",
@@ -1117,6 +1118,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
