@@ -259,3 +259,6 @@ fn open(links: PanelLinks) {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod theme_tests;

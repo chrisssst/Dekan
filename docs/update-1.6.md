@@ -27,6 +27,9 @@ label and hostname are not embedded in the application.
 Passed:
 
 - `cargo fmt --all -- --check` and `git diff --check`.
+- Actual xtask static sweep modules run through a native harness: all discarded Results justified, no code
+  comments, no source file above 400 lines and no source directory above five code files. Panel theme
+  regression tests live separately from the main panel tests to meet the same limit enforced by Windows CI.
 - `cargo test -p dekan-core -p dekan-wad -p dekan-classic --target x86_64-unknown-linux-gnu --locked`:
   237 tests passed, none failed.
 - Clippy with `-D warnings` for those three crates, all targets, on the Linux host target.
