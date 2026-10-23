@@ -24,7 +24,8 @@ only by macOS platform modules for native process and filesystem APIs. This impo
 component into Windows builds and avoids a separate FFI crate. Windows remains the shipped application target;
 the portable macOS gate does not imply a macOS Dekan installer.
 
-Update Tokio to 1.54.1 using Cargo's lockfile resolution. Keep theme assets, preference files, Discord identity,
+Update Tokio to 1.54.1 and ctutils to 0.4.4 using Cargo's lockfile resolution. The latter addresses
+RUSTSEC-2026-0385 detected by the dependency gate after integration; it does not change the party protocol. Keep theme assets, preference files, Discord identity,
 relay URL and HTTPS DNS recovery, and the Ed25519 update public key byte-identical to Dekan 1.9.
 
 ## Consequences
