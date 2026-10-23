@@ -43,7 +43,7 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `injector/overlay_process/mod.rs` | Starts the host, reads its output without blocking (host lines are decoded as lossy UTF-8), and kills it if Dekan drops it; a `Hooked` signal that arrives while waiting for `Armed` satisfies the wait |
 | `pipeline/mod.rs` | Orchestrates build → arm → confirm |
 | `pipeline/overlay.rs` | Builds the overlay for a pipeline run and records it in the overlay cache, unless stray WADs from an earlier build could not be removed |
-| `injector/trust/mod.rs` | Accepts an injector file only when its Authenticode signature is valid and from League Toolkit's publisher; reads the game-build limit compiled into the DLL |
+| `injector/trust/mod.rs` | Accepts an injector file signed by League Toolkit's publisher or carrying no signature at all, and refuses a foreign or broken signature; reads the game-build limit compiled into the DLL |
 | `injector/dll_validator.rs` | SHA-256 helpers used to tell installed and published DLLs apart |
 
 ## Rules the builder follows
@@ -66,7 +66,7 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 - **A cache is never recorded over doubt.** A stray overlay WAD that cannot be removed, or a game WAD that
   exists but cannot be read, leaves the overlay without a fingerprint so the next match rebuilds it; an index
   of the game's WADs that skipped unreadable files is not saved.
-- **Every third-party binary is verified first.** If the injector is not signed by League Toolkit's publisher, it is refused. If a
+- **Every third-party binary is verified first.** An injector signed by anyone other than League Toolkit's publisher, or with a broken signature, is refused; an unsigned file from an official LTK Manager release is accepted. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 
 ## No suspension

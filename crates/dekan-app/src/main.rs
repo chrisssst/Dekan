@@ -12,11 +12,21 @@ mod trigger;
 
 const INSTANCE_NAME: &str = "dekan";
 
-#[tokio::main]
-async fn main() -> Result<()> {
+const BLOCKING_TASKS_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn main() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let outcome = runtime.block_on(run());
+    runtime.shutdown_timeout(BLOCKING_TASKS_GRACE);
+    outcome
+}
+
+async fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some(dekan_app::injector_install::INSTALL_FLAG) {
-        std::process::exit(boot::injector::install_injector_elevated(&args[2..]));
+        std::process::exit(boot::injector::install_injector_elevated(&args[2..]).await);
     }
 
     let state_dir_resolved = state_dir();
@@ -71,7 +81,6 @@ async fn main() -> Result<()> {
     }
 
     let mut paths = trigger::ResolvedPaths::discover();
-
     if boot::injector::injector_unusable(&paths, &state_dir_path).await {
         return Ok(());
     }
@@ -82,7 +91,6 @@ async fn main() -> Result<()> {
     let mut supervisor = dekan_core::supervisor::Supervisor::new(shutdown_token.clone());
 
     let discord_state = state_rx.clone();
-
     supervisor.spawn("discord-presence", move |child_token| {
         dekan_app::discord_presence::run(discord_state, child_token)
     });
@@ -90,7 +98,6 @@ async fn main() -> Result<()> {
     let pending_update = dekan_app::self_update::PendingUpdate::default();
 
     boot::reports::remove_retired_files(&state_dir_path);
-
     let lcu_observer = dekan_lcu::observer::LcuObserver::new(state_tx.clone(), None);
     supervisor.spawn_essential("lcu-observer", move |child_token| async move {
         lcu_observer.run(child_token).await;
@@ -115,7 +122,7 @@ async fn main() -> Result<()> {
 
     let custom_mods_notice = dekan_app::mod_repair::CustomModsNotice::default();
     let (custom_mods_tx, custom_mods_rx) =
-        std::sync::mpsc::channel::<dekan_app::mod_repair::ScanSummary>();
+        tokio::sync::oneshot::channel::<dekan_app::mod_repair::ScanSummary>();
     boot::library::spawn_prewarm(
         &paths,
         &state_dir_path,
@@ -256,7 +263,7 @@ async fn main() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
-            install_tx,
+            install_tx: install_tx.clone(),
         };
 
         supervisor.spawn_essential("tray-events", move |child_token| async move {
@@ -292,7 +299,7 @@ async fn main() -> Result<()> {
             );
             boot::tasks::spawn_ltk_check(
                 &mut supervisor,
-                &tray_controller,
+                install_tx,
                 &state_dir_path,
                 &paths.ltk_dll_path,
                 &installed_dll,

@@ -16,7 +16,7 @@ const LTK_API: &str = "https://api.github.com/repos/LeagueToolkit/ltk-manager";
 const RESOURCES_PATH: &str = "src-tauri/resources";
 const USER_AGENT: &str = concat!("Dekan/", env!("CARGO_PKG_VERSION"), " (injector check)");
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(60);
-const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const CHECK_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const BUSY_RETRY: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINARY_BYTES: usize = 16 * 1024 * 1024;
@@ -207,7 +207,10 @@ impl Verdicts {
 }
 
 fn fingerprint() -> String {
-    format!("signed-by {}", dekan_inject::trust::LTK_PUBLISHER)
+    format!(
+        "signed-by {} or unsigned, any host",
+        dekan_inject::trust::LTK_PUBLISHER
+    )
 }
 
 #[must_use]
@@ -314,7 +317,7 @@ pub fn remember_notified(state_dir: &Path, version: &str) {
 mod fetch;
 mod watch;
 
-pub use fetch::{compatible_version, download_injector};
+pub use fetch::{compatible_version, download_injector, is_release_version};
 use fetch::{http_client, refresh};
 pub use watch::{LtkCheck, LtkNotice, run};
 

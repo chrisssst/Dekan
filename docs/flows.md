@@ -182,8 +182,8 @@ mode has not been proven with several players in one real match.
 ## 5. Startup and patches
 
 ```text
-Dekan starts → finds the game → checks the injector files (missing or not signed by the publisher: the user is
-offered the signed LTK Manager release, otherwise its page opens and Dekan stops) → reads the game build
+Dekan starts → finds the game → checks the injector files (missing, or with a foreign or broken signature: the user
+is offered the newest LTK Manager release, otherwise its page opens and Dekan stops) → reads the game build
   · new build? cached overlays and locale data are discarded; the archive index revalidates
     itself by file size and modification time
   · once the archive index is ready, at background priority and only while no champion select or match is

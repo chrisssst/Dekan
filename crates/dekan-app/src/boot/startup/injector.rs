@@ -30,21 +30,21 @@ pub async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<Strin
 
 pub const STARTUP_LTK_LOOKUP: std::time::Duration = std::time::Duration::from_secs(10);
 
-pub fn install_injector_elevated(args: &[String]) -> i32 {
-    let [staging, tools] = args else {
+pub async fn install_injector_elevated(args: &[String]) -> i32 {
+    let [version, tools] = args else {
         return 2;
     };
+    if !dekan_app::ltk_release::is_release_version(version) {
+        return 2;
+    }
     let tools = std::path::PathBuf::from(tools);
-    let install_dir = dekan_platform::paths::install_dir().ok();
     let exe = std::env::current_exe().ok();
-    if !dekan_app::injector_install::is_dekan_tools_folder(
-        &tools,
-        install_dir.as_deref(),
-        exe.as_deref(),
-    ) {
+    let redirected =
+        std::fs::symlink_metadata(&tools).is_ok_and(|meta| meta.file_type().is_symlink());
+    if redirected || !dekan_app::injector_install::is_dekan_tools_folder(&tools, exe.as_deref()) {
         return 3;
     }
-    match dekan_app::injector_install::install(std::path::Path::new(staging), &tools) {
+    match dekan_app::injector_install::install_release(version, &tools).await {
         Ok(()) => 0,
         Err(e) => e.exit_code(),
     }
@@ -72,7 +72,7 @@ pub async fn install_injector_automatically(
         Ok(()) => AutoInstall::Installed,
         Err(InstallError::Denied) => {
             info!(tools = %tools.display(), "Asking Windows for permission to copy the injector into the tools folder");
-            let parameters = elevated_parameters(&staging, tools);
+            let parameters = elevated_parameters(version, tools);
             let elevated = match std::env::current_exe() {
                 Ok(exe) => tokio::task::spawn_blocking(move || run_elevated(&exe, &parameters))
                     .await
@@ -119,7 +119,7 @@ pub async fn injector_unusable(
                 warn!(
                     file = %file.display(),
                     error = %error,
-                    "Dekan stopped at startup: an injector file is not signed by its publisher"
+                    "Dekan stopped at startup: an injector file carries a foreign or broken signature"
                 );
             }
             (text.broken_tools_title, text.broken_tools_body)
@@ -128,7 +128,7 @@ pub async fn injector_unusable(
     let compatible = compatible_ltk_version(state_dir).await;
     info!(
         compatible = compatible.as_deref().unwrap_or("unknown"),
-        "Pointing the user at the newest LTK Manager release with a signed injector"
+        "Pointing the user at the newest LTK Manager release with a usable injector"
     );
     let mut failure = None;
     if let Some(version) = compatible.as_deref() {
@@ -189,12 +189,16 @@ pub async fn install_from_panel(
     let text = dekan_platform::i18n::text();
     let Some(version) = notice.status().and_then(|s| s.compatible) else {
         warn!(
-            "Injector install requested, but no LTK Manager release with a signed injector is known yet"
+            "Injector install requested, but no LTK Manager release with a usable injector is known yet"
         );
         return;
     };
     info!(version = %version, "Installing the injector requested from the control panel");
-    match install_injector_automatically(tools, state_dir, &version).await {
+    let outcome = install_injector_automatically(tools, state_dir, &version).await;
+    if matches!(outcome, AutoInstall::Installed | AutoInstall::Declined) {
+        dekan_app::ltk_release::remember_notified(state_dir, &version);
+    }
+    match outcome {
         AutoInstall::Installed => {
             info!(version = %version, tools = %tools.display(), "Injector installed from the LTK Manager release on GitHub");
             tray.notify(

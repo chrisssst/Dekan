@@ -12,6 +12,9 @@ fn reference_offsets_in_value(
         )));
     }
     match kind {
+        FIELD_HASH if cursor.value_size(kind) == Some(8) => {
+            cursor.take(8, "wide hash")?;
+        }
         FIELD_HASH | FIELD_LINK => {
             let at = cursor.at;
             cursor.take(4, "reference")?;
@@ -71,7 +74,8 @@ fn reference_offsets_in_fields(
 
 fn reference_offsets(body: &[u8]) -> Result<Vec<usize>, WadError> {
     let mut out = Vec::new();
-    reference_offsets_in_fields(&mut Cursor { data: body, at: 0 }, 0, &mut out)?;
+    let wide = tree::hash_widths(body)?;
+    reference_offsets_in_fields(&mut Cursor::new(body, &wide), 0, &mut out)?;
     Ok(out)
 }
 

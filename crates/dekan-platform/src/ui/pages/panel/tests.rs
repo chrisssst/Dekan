@@ -295,7 +295,7 @@ fn long_diagnostic_lines_never_run_under_the_hint_below_them() {
         "OK",
         "waiting for the client to open",
         "accepts the current patch; refuses game builds made 0 day(s) from now or later",
-        "LTK Manager 1.27.0 ships a newer injector signed by League Toolkit",
+        "LTK Manager 1.27.0 ships a newer injector",
         "running as administrator",
     ];
     let state = PanelSnapshot {

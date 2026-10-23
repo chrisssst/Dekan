@@ -11,17 +11,18 @@ pub struct FieldValue<'a> {
 impl FieldValue<'_> {
     #[must_use]
     pub fn as_u32(&self) -> Option<u32> {
-        matches!(self.kind, FIELD_U32 | 0x84 | 17 | 6)
-            .then(|| self.bytes.get(..4))
-            .flatten()
-            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        let b: [u8; 4] = self.bytes.try_into().ok()?;
+        matches!(self.kind, FIELD_U32 | 0x84 | 17 | 6).then(|| u32::from_le_bytes(b))
     }
 }
 
-fn find_in_fields<'a>(
-    cursor: &mut Cursor<'a>,
-    path: &[u32],
-) -> Result<Option<FieldValue<'a>>, WadError> {
+struct Found {
+    kind: u8,
+    start: usize,
+    end: usize,
+}
+
+fn find_in_fields(cursor: &mut Cursor<'_>, path: &[u32]) -> Result<Option<Found>, WadError> {
     let Some((&wanted, rest)) = path.split_first() else {
         return Ok(None);
     };
@@ -34,16 +35,13 @@ fn find_in_fields<'a>(
         if name != wanted {
             continue;
         }
-        let bytes = cursor
-            .data
-            .get(start..cursor.at)
-            .ok_or_else(|| WadError::InvalidProp("field value out of range".into()))?;
+        let end = cursor.at;
         if rest.is_empty() {
-            return Ok(Some(FieldValue { kind, bytes }));
+            return Ok(Some(Found { kind, start, end }));
         }
-        if matches!(kind, FIELD_POINTER | FIELD_EMBED) && bytes.len() > 8 {
-            let mut inner = Cursor { data: bytes, at: 8 };
-            return find_in_fields(&mut inner, rest);
+        if matches!(kind, FIELD_POINTER | FIELD_EMBED) && end - start > 8 {
+            cursor.at = start + 8;
+            return find_in_fields(cursor, rest);
         }
         debug!(
             field = format!("{wanted:08x}"),
@@ -55,7 +53,17 @@ fn find_in_fields<'a>(
 }
 
 pub fn field_value<'a>(body: &'a [u8], path: &[u32]) -> Result<Option<FieldValue<'a>>, WadError> {
-    find_in_fields(&mut Cursor { data: body, at: 0 }, path)
+    let wide = tree::hash_widths(body)?;
+    let Some(found) = find_in_fields(&mut Cursor::new(body, &wide), path)? else {
+        return Ok(None);
+    };
+    let bytes = body
+        .get(found.start..found.end)
+        .ok_or_else(|| WadError::InvalidProp("field value out of range".into()))?;
+    Ok(Some(FieldValue {
+        kind: found.kind,
+        bytes,
+    }))
 }
 
 pub fn set_int_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<bool, WadError> {
@@ -68,8 +76,9 @@ fn set_top_level_int(
     value: u32,
     kinds: &[u8],
 ) -> Result<bool, WadError> {
+    let wide = tree::hash_widths(body)?;
     let found = {
-        let mut cursor = Cursor { data: body, at: 0 };
+        let mut cursor = Cursor::new(body, &wide);
         let count = cursor.u16("field count")?;
         let mut found = None;
         for _ in 0..count {

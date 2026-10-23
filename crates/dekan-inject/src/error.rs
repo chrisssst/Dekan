@@ -13,6 +13,8 @@ pub enum InjectError {
     GameAlreadyLoading { age_ms: u64 },
     #[error("hook not confirmed after {timeout_ms}ms")]
     HookUnconfirmed { timeout_ms: u64 },
+    #[error("the patcher reported that the injection failed")]
+    HookFailed,
     #[error("process error: {0}")]
     Process(String),
     #[error("subprocess execution timed out after {timeout_secs}s: {command}")]

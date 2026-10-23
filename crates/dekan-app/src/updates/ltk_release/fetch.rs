@@ -36,11 +36,44 @@ pub(super) async fn get(
     {
         return Err(format!("{url} is larger than {MAX_BINARY_BYTES} bytes"));
     }
-    let body = response.bytes().await.map_err(|e| e.to_string())?;
-    if body.len() > MAX_BINARY_BYTES {
-        return Err(format!("{url} is larger than {MAX_BINARY_BYTES} bytes"));
+    let mut response = response;
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if body.len() + chunk.len() > MAX_BINARY_BYTES {
+            return Err(format!("{url} is larger than {MAX_BINARY_BYTES} bytes"));
+        }
+        body.extend_from_slice(&chunk);
     }
-    Ok(body.to_vec())
+    Ok(body)
+}
+
+#[must_use]
+pub fn is_release_version(version: &str) -> bool {
+    (1..=32).contains(&version.len())
+        && version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+}
+
+pub(super) async fn release_commit(
+    client: &reqwest::Client,
+    version: &str,
+) -> Result<String, String> {
+    if !is_release_version(version) {
+        return Err(format!("{version:?} is not an LTK Manager release version"));
+    }
+    let body = get(
+        client,
+        &format!("{LTK_API}/commits/v{version}"),
+        "application/vnd.github.sha",
+    )
+    .await?;
+    let commit = String::from_utf8_lossy(&body).trim().to_owned();
+    if commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Ok(commit)
+    } else {
+        Err(format!("release {version} did not resolve to a commit"))
+    }
 }
 
 pub(super) async fn release_versions(client: &reqwest::Client) -> Result<Vec<String>, String> {
@@ -55,19 +88,21 @@ pub(super) async fn release_versions(client: &reqwest::Client) -> Result<Vec<Str
 
 pub(super) async fn resource(
     client: &reqwest::Client,
-    version: &str,
+    commit: &str,
     file: &str,
 ) -> Result<Vec<u8>, String> {
-    let url = format!("{LTK_API}/contents/{RESOURCES_PATH}/{file}?ref=v{version}");
+    let url = format!("{LTK_API}/contents/{RESOURCES_PATH}/{file}?ref={commit}");
     get(client, &url, "application/vnd.github.raw").await
 }
 
 pub async fn download_injector(version: &str) -> Result<Vec<(&'static str, Vec<u8>)>, String> {
     let client = http_client()?;
+    let commit = release_commit(&client, version).await?;
     let mut files = Vec::with_capacity(INJECTOR_FILES.len());
     for name in INJECTOR_FILES {
-        files.push((name, resource(&client, version, name).await?));
+        files.push((name, resource(&client, &commit, name).await?));
     }
+    info!(version, commit = %commit, "Injector downloaded from the commit the LTK Manager release tag points at");
     Ok(files)
 }
 
@@ -89,10 +124,18 @@ async fn inspect_files(
     version: &str,
     dir: &Path,
 ) -> Result<Injector, String> {
+    let commit = match release_commit(client, version).await {
+        Ok(commit) => commit,
+        Err(e) if e.contains(NOT_FOUND_MARK) => {
+            warn!(version, error = %e, "An LTK Manager release has no tag to read the injector from; it is treated as untrusted");
+            return Ok(Injector::Untrusted);
+        }
+        Err(e) => return Err(format!("release {version}: {e}")),
+    };
     let mut dll_sha256 = String::new();
     let mut trusted = true;
     for name in INJECTOR_FILES {
-        let bytes = match resource(client, version, name).await {
+        let bytes = match resource(client, &commit, name).await {
             Ok(bytes) => bytes,
             Err(e) if e.contains(NOT_FOUND_MARK) => {
                 warn!(version, file = name, error = %e, "An LTK Manager release lacks an injector file; it is treated as untrusted");
@@ -102,11 +145,28 @@ async fn inspect_files(
         };
         let path = dir.join(name);
         std::fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
-        if let Err(e) = dekan_inject::trust::verify_injector_file(&path) {
-            warn!(version, file = name, reason = %e, "An LTK Manager release carries an injector Dekan does not trust");
-            trusted = false;
+        match dekan_inject::trust::verify_injector_file(&path) {
+            Ok(dekan_inject::trust::Provenance::Signed) => {}
+            Ok(dekan_inject::trust::Provenance::Unsigned) => {
+                info!(
+                    version,
+                    file = name,
+                    "An LTK Manager release ships this injector file without a signature; it is accepted as published by the official repository"
+                );
+            }
+            Err(e) => {
+                warn!(version, file = name, reason = %e, "An LTK Manager release carries an injector with a foreign or broken signature; Dekan does not use it");
+                trusted = false;
+            }
         }
         if name == INJECTOR_FILES[1] {
+            if dekan_inject::trust::dll_refuses_other_hosts(&bytes) {
+                warn!(
+                    version,
+                    "An LTK Manager release ships a patcher DLL that refuses any host but LTK Manager; Dekan does not use it"
+                );
+                return Ok(Injector::Untrusted);
+            }
             dll_sha256 = dekan_inject::dll_validator::compute_sha256(&bytes);
         }
     }

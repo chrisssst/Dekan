@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::ComponentHandle;
-use slint::winit_030::{WinitWindowAccessor, winit};
-use tracing::{debug, error, warn};
+use slint::winit_030::winit;
+use tracing::{debug, error};
 use windows::Win32::Graphics::Gdi::GetUpdateRect;
 use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_PAINT};
 
@@ -19,13 +19,7 @@ thread_local! {
     static REPAINT_PENDING: Cell<bool> = const { Cell::new(false) };
 }
 
-pub(crate) fn run_on_ui(job: impl FnOnce() + Send + 'static) -> Result<(), PlatformError> {
-    start()?;
-    slint::invoke_from_event_loop(job)
-        .map_err(|e| PlatformError::Window(format!("the interface thread is gone: {e}")))
-}
-
-fn start() -> Result<(), PlatformError> {
+pub(super) fn start() -> Result<(), PlatformError> {
     UI_THREAD
         .get_or_init(|| {
             let (ready_tx, ready_rx) = mpsc::channel();
@@ -78,36 +72,6 @@ pub(crate) fn hwnd_of(window: &winit::window::Window) -> Option<isize> {
             debug!(error = %e, "The window handle is unavailable");
             None
         }
-    }
-}
-
-pub(crate) fn hwnd_now(window: &slint::Window) -> Option<isize> {
-    window.with_winit_window(hwnd_of).flatten()
-}
-
-pub(crate) fn image(bytes: &[u8]) -> Option<slint::Image> {
-    slint::Image::load_from_data(bytes, None).ok()
-}
-
-pub(crate) fn when_created<C: ComponentHandle + 'static>(
-    component: &C,
-    then: impl FnOnce(&C, isize) + 'static,
-) {
-    let weak = component.as_weak();
-    let spawned = slint::spawn_local(async move {
-        let Some(component) = weak.upgrade() else {
-            return;
-        };
-        match component.window().winit_window().await {
-            Ok(window) => match hwnd_of(&window) {
-                Some(hwnd) => then(&component, hwnd),
-                None => warn!("A window was created but its native handle could not be read"),
-            },
-            Err(e) => warn!(error = %e, "A window closed before it was created"),
-        }
-    });
-    if let Err(e) = spawned {
-        debug!(error = %e, "Could not wait for a window to be created");
     }
 }
 

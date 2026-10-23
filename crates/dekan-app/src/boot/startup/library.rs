@@ -73,7 +73,7 @@ pub fn spawn_prewarm(
     state_rx: &dekan_core::state::StateReceiver,
     shutdown_token: &CancellationToken,
     custom_mods_notice: &dekan_app::mod_repair::CustomModsNotice,
-    custom_mods_tx: std::sync::mpsc::Sender<dekan_app::mod_repair::ScanSummary>,
+    custom_mods_tx: tokio::sync::oneshot::Sender<dekan_app::mod_repair::ScanSummary>,
 ) {
     if paths.game_dir.is_dir() {
         dekan_inject::overlay_builder::persist_game_index_in(state_dir_path);

@@ -20,6 +20,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 
+const SEND_TIMEOUT: Duration = Duration::from_secs(10);
+
 const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 
 const CLOSE_REPLACED: u16 = 4000;
@@ -170,13 +172,15 @@ impl PartyClient {
             Ok(Message::Text(serde_json::to_string(message)?.into()))
         };
 
-        write
-            .send(send(&ClientMessage::Join {
+        deliver(
+            &mut write,
+            send(&ClientMessage::Join {
                 summoner_id: self.member_id,
                 summoner_name: String::new(),
-            })?)
-            .await
-            .map_err(|e| PartyError::Relay(e.to_string()))?;
+            })?,
+            SEND_TIMEOUT,
+        )
+        .await?;
         if std::mem::take(announce_connection) {
             info!(member_id = self.member_id, "Party: connected to the room");
         } else {
@@ -200,10 +204,12 @@ impl PartyClient {
                     Some(a) => Some(a.seal(cipher)?),
                     None => None,
                 };
-                write
-                    .send(send(&ClientMessage::Skin { skin })?)
-                    .await
-                    .map_err(|e| PartyError::Relay(e.to_string()))?;
+                deliver(
+                    &mut write,
+                    send(&ClientMessage::Skin { skin })?,
+                    SEND_TIMEOUT,
+                )
+                .await?;
                 info!(
                     champion_id = ?current.as_ref().map(|a| a.champion_id),
                     skin_id = ?current.as_ref().map(|a| a.skin_id),
@@ -219,21 +225,18 @@ impl PartyClient {
                     if let Ok(leave) = send(&ClientMessage::Leave) {
 
                         // ignore-ok: leaving on shutdown; a failed send means the socket is already gone
-                        let _ = write.send(leave).await;
+                        let _ = deliver(&mut write, leave, SEND_TIMEOUT).await;
                     }
 
                     // ignore-ok: same as above, the close handshake is courtesy
-                    let _ = write.close().await;
+                    let _ = tokio::time::timeout(SEND_TIMEOUT, write.close()).await;
                     return Ok(SessionEnd::Cancelled);
                 }
                 _ = ping.tick() => {
                     if last_heard.elapsed() > PING_INTERVAL * 2 {
                         return Err(PartyError::Relay("the relay stopped answering".into()));
                     }
-                    write
-                        .send(Message::Text("ping".into()))
-                        .await
-                        .map_err(|e| PartyError::Relay(e.to_string()))?;
+                    deliver(&mut write, Message::Text("ping".into()), SEND_TIMEOUT).await?;
                 }
                 changed = state_rx.changed() => {
                     if changed.is_err() {
@@ -374,6 +377,19 @@ fn announcement(state: &AppState, member_id: u64) -> Option<Announcement> {
         return None;
     }
     Some(announcement)
+}
+
+async fn deliver<S>(write: &mut S, message: Message, within: Duration) -> Result<(), PartyError>
+where
+    S: futures_util::Sink<Message> + Unpin,
+    S::Error: std::fmt::Display,
+{
+    match tokio::time::timeout(within, write.send(message)).await {
+        Ok(sent) => sent.map_err(|e| PartyError::Relay(e.to_string())),
+        Err(_) => Err(PartyError::Relay(
+            "the relay did not take a message in time".into(),
+        )),
+    }
 }
 
 #[cfg(test)]

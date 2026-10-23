@@ -20,12 +20,27 @@ impl Language {
     #[must_use]
     pub fn of_windows() -> Self {
         static CACHED: OnceLock<Language> = OnceLock::new();
-        *CACHED.get_or_init(|| {
-            let lang_id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
-            Self::from_primary_lang_id(lang_id & 0x3ff)
-        })
+        *CACHED.get_or_init(Self::of_system)
     }
 
+    #[cfg(windows)]
+    fn of_system() -> Self {
+        let lang_id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+        Self::from_primary_lang_id(lang_id & 0x3ff)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn of_system() -> Self {
+        std::process::Command::new("/usr/bin/defaults")
+            .args(["read", "-g", "AppleLocale"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| Self::from_locale(String::from_utf8_lossy(&output.stdout).trim()))
+            .unwrap_or(Self::English)
+    }
+
+    #[cfg(windows)]
     fn from_primary_lang_id(primary: u16) -> Self {
         match primary {
             0x09 => Self::English,
@@ -176,8 +191,6 @@ pub struct Text {
     pub panel_ltk_new_line: &'static str,
     pub panel_ltk_untrusted_line: &'static str,
     pub panel_ltk_download: &'static str,
-    pub ltk_new_title: &'static str,
-    pub ltk_new_body: &'static str,
     pub ltk_version_unknown: &'static str,
     pub panel_mark_problem: &'static str,
     pub panel_mark_problem_hint: &'static str,

@@ -13,23 +13,7 @@ use windows::Win32::System::Ioctl::{
 };
 use windows::core::{HSTRING, PCWSTR};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiskKind {
-    SolidState,
-    Rotational,
-    Unknown,
-}
-
-impl DiskKind {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SolidState => "ssd",
-            Self::Rotational => "hdd",
-            Self::Unknown => "unknown",
-        }
-    }
-}
+use super::DiskKind;
 
 #[must_use]
 pub fn disk_kind(path: &Path) -> DiskKind {

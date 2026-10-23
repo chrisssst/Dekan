@@ -2,6 +2,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum PlatformError {
+    #[cfg(windows)]
     #[error("Win32 error: {0}")]
     Win32(#[from] windows::core::Error),
 

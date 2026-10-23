@@ -17,7 +17,8 @@ mod support;
 use arm::{arm_key, arming};
 use arm_key::{
     ArmDecision, ArmKey, ArmRequest, WantedSkin, arm_decision, arms_in_lobby, build_key,
-    is_classic, lobby_mods_fingerprint, party_skins, should_disarm, wanted_skin_when,
+    is_classic, lobby_mods_fingerprint, lobby_overlay_serves, party_skins, should_disarm,
+    wanted_skin_when,
 };
 use arming::{ArmedPatcher, Arming, next_armed, resume_for_reconnect};
 pub use paths::{ResolvedPaths, ToolsSource, required_tool_files, tools_ready};
@@ -164,7 +165,7 @@ impl InjectionTrigger {
                     let reconnecting = state.phase == GamePhase::Reconnect;
                     if state.phase.is_in_game() && !reconnecting && !injected_session {
                         injected_session = true;
-                        pending_arm = None;
+                        let last_second = pending_arm.take();
 
                         if !dekan_platform::preferences::INJECTION.is_enabled() {
                             if let Some(abandoned) = arming.take() {
@@ -177,6 +178,9 @@ impl InjectionTrigger {
                             continue;
                         }
 
+                        if arming.is_none() {
+                            arming = self.arm_last_second_pick(last_second, &mut armed).await;
+                        }
                         if let Some(in_flight) = arming.take() {
 
                             warn!(
@@ -233,11 +237,6 @@ impl InjectionTrigger {
                             failed_arm = None;
                         }
 
-                        let current = armed
-                            .as_ref()
-                            .map(|a| a.key)
-                            .or_else(|| arming.as_ref().map(|a| a.key));
-
                         if armed.as_ref().is_some_and(|a| should_disarm(wanted, a.key)) {
                             if let Some(stale) = armed.take() {
                                 info!(
@@ -282,6 +281,7 @@ impl InjectionTrigger {
                             }
                         }
 
+                        let current = armed.as_ref().map(|a| a.key).or_else(|| arming.as_ref().map(|a| a.key));
                         match arm_decision(wanted, current) {
                             ArmDecision::Settled => pending_arm = None,
                             ArmDecision::Schedule(request) if failed_arm == Some(request.key) => {
@@ -310,6 +310,7 @@ impl InjectionTrigger {
                             || injection_off_reported
                             || armed.is_some()
                             || arming.is_some()
+                            || active_overlay.is_some()
                             || pending_arm.is_some())
                     {
                         debug!("Resetting injection session state for next match");

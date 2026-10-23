@@ -41,7 +41,7 @@ impl InjectionTrigger {
         let armed_in_lobby = armed
             .as_ref()
             .map(|a| a.key)
-            .filter(|key| key.lobby && key.covers(champ_id));
+            .filter(|key| key.lobby && lobby_overlay_serves(key, lobby.as_ref(), &mods, champ_id));
         if let Some(armed_key) = armed_in_lobby {
             info!(
                 champ_id,
@@ -118,10 +118,8 @@ impl InjectionTrigger {
             }
 
             warn!(
-                armed_entry = ?armed.key.entry_id,
-                entry_id = ?entry_id,
-                armed_mods = armed.key.mods,
-                mods = key.mods,
+                armed_key = ?armed.key,
+                live_key = ?key,
                 "The armed patcher was built for another selection; rebuilding against the running game"
             );
             armed.overlay.shutdown().await;

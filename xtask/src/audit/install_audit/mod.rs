@@ -75,7 +75,7 @@ pub fn audit_files(
                 checks.push(check(
                     verdict.is_ok(),
                     format!(
-                        "{} is signed by {} ({})",
+                        "{} is signed by {} or unsigned ({})",
                         path.display(),
                         dekan_inject::trust::LTK_PUBLISHER,
                         verdict.err().unwrap_or_else(|| "verified".to_owned())
@@ -293,7 +293,9 @@ pub(crate) fn run_install_audit(args: &[String]) {
         }
     }
     let trusted = |path: &std::path::Path| -> Result<(), String> {
-        dekan_inject::trust::verify_injector_file(path).map_err(|e| e.to_string())
+        dekan_inject::trust::verify_injector_file(path)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     };
     let mut checks = audit_files(&layout, phase, &tools, &trusted);
     checks.extend(audit_registry(

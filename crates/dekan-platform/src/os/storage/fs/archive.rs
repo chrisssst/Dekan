@@ -1,14 +1,12 @@
 use std::fs::File;
 use std::io::{Read, Seek, Write};
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use zip::ZipArchive;
 
 use tracing::{debug, error, warn};
 
+use super::{MAX_PATH_CHARS, path_units};
 use crate::error::PlatformError;
-
-pub const MAX_PATH_CHARS: usize = 259;
 
 #[derive(Debug, Clone)]
 pub struct ExtractLimits {
@@ -173,7 +171,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
         let clean_relative = validate_archive_path(Path::new(&raw_name))?;
         let target_file_path = dest_dir.join(&clean_relative);
 
-        let path_len = target_file_path.as_os_str().encode_wide().count();
+        let path_len = path_units(&target_file_path);
         if path_len > limits.max_path_len {
             warn!(
                 entry = %clean_relative.display(),

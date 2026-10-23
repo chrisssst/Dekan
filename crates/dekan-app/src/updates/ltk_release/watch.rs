@@ -63,7 +63,7 @@ pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationTo
                         latest = %status.latest,
                         latest_trusted = status.latest_trusted,
                         compatible = status.compatible.as_deref().unwrap_or("none"),
-                        "LTK Manager releases checked against the publisher's signature"
+                        "LTK Manager releases checked"
                     );
                     check.notice.set(status.clone());
                 }
@@ -82,7 +82,6 @@ pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationTo
                             }
                         }
                         (check.notify)(version);
-                        remember_notified(&check.state_dir, version);
                     }
                 }
             }

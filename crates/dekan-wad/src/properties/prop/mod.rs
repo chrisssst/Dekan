@@ -23,7 +23,7 @@ pub fn parse_prop_links(data: &[u8]) -> Result<Vec<String>, WadError> {
 }
 
 pub fn parse_prop_header(data: &[u8]) -> Result<PropHeader, WadError> {
-    let mut cursor = Cursor { data, at: 0 };
+    let mut cursor = Cursor::new(data, &[]);
     let has_ptch_header = data.get(0..4) == Some(PTCH_SIGNATURE.as_slice());
     if has_ptch_header {
         cursor.take(12, "PTCH header")?;
@@ -99,9 +99,21 @@ pub struct PropFile {
 struct Cursor<'a> {
     data: &'a [u8],
     at: usize,
+    wide: &'a [usize],
 }
 
 impl<'a> Cursor<'a> {
+    fn new(data: &'a [u8], wide: &'a [usize]) -> Self {
+        Self { data, at: 0, wide }
+    }
+
+    fn value_size(&self, kind: u8) -> Option<usize> {
+        if kind == FIELD_HASH && self.wide.binary_search(&self.at).is_ok() {
+            return Some(8);
+        }
+        fixed_field_size(kind)
+    }
+
     fn take(&mut self, len: usize, what: &str) -> Result<&'a [u8], WadError> {
         let end = self
             .at
@@ -178,7 +190,7 @@ fn fixed_field_size(kind: u8) -> Option<usize> {
 }
 
 fn skip_field_value(cursor: &mut Cursor<'_>, kind: u8) -> Result<(), WadError> {
-    if let Some(size) = fixed_field_size(kind) {
+    if let Some(size) = cursor.value_size(kind) {
         cursor.take(size, "field value")?;
         return Ok(());
     }
@@ -224,7 +236,7 @@ const MAX_FIELD_DEPTH: usize = 64;
 const MAX_EMPTY_ITEMS: usize = u16::MAX as usize;
 
 pub fn parse_prop_file(data: &[u8]) -> Result<PropFile, WadError> {
-    let mut cursor = Cursor { data, at: 0 };
+    let mut cursor = Cursor::new(data, &[]);
     if data.get(0..4) == Some(PTCH_SIGNATURE.as_slice()) {
         cursor.take(12, "PTCH header")?;
         debug!("PTCH header dropped; serializing this file again writes a plain PROP");

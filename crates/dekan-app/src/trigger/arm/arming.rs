@@ -22,6 +22,16 @@ pub(crate) fn resume_for_reconnect(
     Option<ArmedPatcher>,
     Option<dekan_inject::overlay_process::OverlayProcess>,
 ) {
+    let running = running.and_then(|mut overlay| match overlay.ready_for_next_game() {
+        Ok(()) => Some(overlay),
+        Err(exit_code) => {
+            warn!(
+                exit_code,
+                "The patcher exited with the game; the reconnect will build a new one"
+            );
+            None
+        }
+    });
     match (running, wanted) {
         (Some(overlay), WantedSkin::Skin(key)) => (
             Some(ArmedPatcher {
@@ -44,6 +54,39 @@ pub(crate) async fn next_armed(arming: &mut Option<Arming<'_>>) -> Option<ArmedP
 }
 
 impl InjectionTrigger {
+    pub(crate) async fn arm_last_second_pick(
+        &self,
+        pending: Option<ArmRequest>,
+        armed: &mut Option<ArmedPatcher>,
+    ) -> Option<Arming<'_>> {
+        let request = pending?;
+        if armed
+            .as_ref()
+            .is_some_and(|a| a.key.same_own_pick(&request.key))
+        {
+            debug!(
+                entry_id = ?request.key.entry_id,
+                "Only teammate picks changed in the last second; keeping the armed patcher"
+            );
+            return None;
+        }
+        if !tools_ready(&self.paths) {
+            return None;
+        }
+        info!(
+            champ_id = request.key.champ_id,
+            entry_id = ?request.key.entry_id,
+            "The pick changed in the last second before the game; arming it now without the debounce"
+        );
+        if let Some(previous) = armed.take() {
+            previous.overlay.shutdown().await;
+        }
+        Some(Arming {
+            key: request.key(),
+            task: Box::pin(self.arm_patcher(request)),
+        })
+    }
+
     pub(crate) async fn arm_patcher(&self, request: ArmRequest) -> Option<ArmedPatcher> {
         let key = request.key();
         let ArmKey {

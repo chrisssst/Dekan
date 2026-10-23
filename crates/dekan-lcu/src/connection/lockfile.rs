@@ -219,18 +219,10 @@ impl Lockfile {
             }
         }
 
-        let default_roots = [
-            r"C:\Riot Games\League of Legends",
-            r"D:\Riot Games\League of Legends",
-            r"E:\Riot Games\League of Legends",
-            r"C:\Program Files\Riot Games\League of Legends",
-            r"C:\Program Files (x86)\Riot Games\League of Legends",
-        ];
-
-        for root in &default_roots {
-            let candidate = Path::new(root).join("lockfile");
+        for install in dekan_platform::paths::riot_league_installs() {
+            let candidate = install.join("lockfile");
             if candidate.is_file() {
-                debug!(path = %candidate.display(), source = "default-root", "Lockfile located");
+                debug!(path = %candidate.display(), source = "riot-client-installs", "Lockfile located");
                 return Some(candidate);
             }
         }

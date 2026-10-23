@@ -6,13 +6,21 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Windows platform abstractions: process detection, paths, atomic writes, elevation"
+description = "Platform abstractions: process detection, paths, atomic writes, elevation"
 
 [dependencies]
 dekan-core = { path = "../dekan-core" }
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+zip.workspace = true
+slint.workspace = true
+raw-window-handle.workspace = true
+uuid.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_System_Threading",
@@ -41,12 +49,9 @@ windows = { workspace = true, features = [
     "Win32_Globalization",
     "Win32_System_Registry",
 ] }
-zip.workspace = true
-slint.workspace = true
-raw-window-handle.workspace = true
-uuid.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 i-slint-backend-testing.workspace = true

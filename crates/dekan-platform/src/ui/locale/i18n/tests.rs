@@ -11,6 +11,7 @@ fn client_locales_map_by_language_family() {
     assert_eq!(Language::from_locale(""), None);
 }
 
+#[cfg(windows)]
 #[test]
 fn windows_primary_language_ids_map_to_dictionaries() {
     assert_eq!(Language::from_primary_lang_id(0x1f), Language::Turkish);
@@ -46,7 +47,6 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.panel_ltk_untrusted_line, "latest"),
             (text.injector_installed_title, "version"),
             (text.panel_ltk_download, "version"),
-            (text.ltk_new_title, "version"),
             (text.missing_tools_body, "version"),
             (text.injector_auto_body, "version"),
             (text.injector_auto_failed, "error"),

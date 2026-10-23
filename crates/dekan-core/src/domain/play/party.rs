@@ -54,6 +54,8 @@ pub enum PeerRejection {
     ChampionMismatch { real: ChampionId },
 
     BaseSkin,
+
+    Disputed,
 }
 
 pub type VerifiedParty = (Vec<(ChampionId, u32)>, Vec<(u64, PeerRejection)>);
@@ -70,6 +72,13 @@ pub fn verified_party_skins(
     for peer in peers {
         if local_puuid.is_some_and(|me| me == peer.puuid) {
             rejected.push((peer.member_id, PeerRejection::Ourselves));
+            continue;
+        }
+        if peers
+            .iter()
+            .any(|other| other.member_id != peer.member_id && other.puuid == peer.puuid)
+        {
+            rejected.push((peer.member_id, PeerRejection::Disputed));
             continue;
         }
         let Some(teammate) = team.iter().find(|t| t.puuid == peer.puuid) else {
@@ -198,6 +207,10 @@ mod tests {
                 puuid: "other".into(),
                 champion_id: 1,
             },
+            TeamMember {
+                puuid: "plain".into(),
+                champion_id: 2,
+            },
         ]
     }
 
@@ -208,7 +221,7 @@ mod tests {
             peer(2, "me", 238, 238_001),
             peer(3, "stranger", 99, 99_002),
             peer(4, "other", 103, 103_010),
-            peer(5, "other", 1, 1_000),
+            peer(5, "plain", 2, 2_000),
         ];
         let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
 
@@ -217,6 +230,49 @@ mod tests {
         assert!(rejected.contains(&(3, PeerRejection::NotATeammate)));
         assert!(rejected.contains(&(4, PeerRejection::ChampionMismatch { real: 1 })));
         assert!(rejected.contains(&(5, PeerRejection::BaseSkin)));
+    }
+
+    #[test]
+    fn two_members_claiming_one_teammate_are_both_refused() {
+        let peers = vec![
+            peer(1, "friend", 103, 103_015),
+            peer(7, "friend", 103, 103_002),
+        ];
+        let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
+
+        assert!(accepted.is_empty());
+        assert!(rejected.contains(&(1, PeerRejection::Disputed)));
+        assert!(rejected.contains(&(7, PeerRejection::Disputed)));
+    }
+
+    #[test]
+    fn a_dispute_refuses_only_the_claimants_and_spares_the_rest() {
+        let peers = vec![
+            peer(1, "friend", 103, 103_015),
+            peer(7, "friend", 103, 103_002),
+            peer(5, "other", 1, 1_002),
+            peer(2, "me", 238, 238_001),
+            peer(8, "me", 238, 238_003),
+        ];
+        let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
+
+        assert_eq!(accepted, vec![(1, 1_002)]);
+        assert!(rejected.contains(&(1, PeerRejection::Disputed)));
+        assert!(rejected.contains(&(7, PeerRejection::Disputed)));
+        assert!(rejected.contains(&(2, PeerRejection::Ourselves)));
+        assert!(rejected.contains(&(8, PeerRejection::Ourselves)));
+    }
+
+    #[test]
+    fn a_member_repeating_its_own_claim_is_not_a_dispute() {
+        let peers = vec![
+            peer(1, "friend", 103, 103_015),
+            peer(1, "friend", 103, 103_015),
+        ];
+        let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
+
+        assert_eq!(accepted, vec![(103, 103_015)]);
+        assert!(rejected.is_empty());
     }
 
     #[test]

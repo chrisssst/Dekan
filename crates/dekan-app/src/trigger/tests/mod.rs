@@ -376,6 +376,7 @@ fn test_a_teammate_pick_change_keeps_the_armed_patcher_until_its_replacement() {
     assert!(should_disarm(WantedSkin::Skin(own_changed), armed));
 }
 
+mod extract;
 mod files;
 mod lobby;
 

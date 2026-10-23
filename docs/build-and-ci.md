@@ -197,9 +197,10 @@ The second form works offline with the Sigstore bundle published next to the ins
   also asks the linker for the PE checksum.
 - The LTK injector is **not** packaged. Its license does not allow other projects to redistribute League
   Toolkit's signed binaries, so users copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` from an official
-  LTK Manager release into `Program Files\Dekan\tools`. Dekan only accepts them when both carry a valid
-  signature from League Toolkit's publisher (`dekan_inject::trust`); `cargo xtask install-audit` runs the same
-  check.
+  LTK Manager release into `Program Files\Dekan\tools`. Dekan checks both files through `dekan_inject::trust`, accepts valid publisher signatures or unsigned
+  official releases, and rejects foreign/broken signatures and host-restricted DLLs. The official release
+  download and protected tools folder anchor unsigned-file provenance; `cargo xtask install-audit` uses the
+  same signature rules. See ADR-031 and `docs/security.md`.
 - `cargo xtask installer` passes the workspace version to Inno Setup (`installer/dekan.iss`) and produces
   `Dekan-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `dist\dekan.exe` already there instead
   of rebuilding it, so the release can sign the binary before it goes into the installer.

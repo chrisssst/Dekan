@@ -14,6 +14,8 @@ pub const TOPIC_CHAMP_SELECT: &str = "OnJsonApiEvent_lol-champ-select_v1_session
 
 pub const TOPIC_LOBBY: &str = "OnJsonApiEvent_lol-lobby_v2_lobby";
 
+const LOBBY_URI: &str = "/lol-lobby/v2/lobby";
+
 #[derive(Debug, Clone)]
 pub struct BackoffManager {
     initial: Duration,
@@ -180,6 +182,10 @@ pub fn dispatch_event_to_state(state_tx: &StateSender, event: &LcuEvent) {
             }
         }
         TOPIC_LOBBY => {
+            if event.payload.uri.trim_end_matches('/') != LOBBY_URI {
+                debug!(uri = %event.payload.uri, "A lobby sub-resource event was skipped; only the whole lobby is read");
+                return;
+            }
             if event.payload.data.is_null() || event.payload.event_type == "Delete" {
                 crate::lobby::apply_lobby_to_state(state_tx, None);
                 return;
@@ -247,6 +253,54 @@ mod tests {
         let event = LcuEvent::parse(deleted).expect("frame").expect("event");
         dispatch_event_to_state(&tx, &event);
         assert!(rx.borrow().lobby.is_none());
+    }
+
+    #[test]
+    fn a_lobby_sub_resource_event_leaves_the_lobby_party_alone() {
+        let (tx, rx) = new_state_channel();
+        set_phase(&tx, GamePhase::Lobby);
+        let lobby = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby", "eventType": "Update",
+            "data": {"gameConfig": {"queueId": 440, "gameMode": "CLASSIC", "mapId": 11},
+                     "partyId": "party-1", "members": [{}, {}]}}]"#;
+        let event = LcuEvent::parse(lobby).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        let party = rx.borrow().lobby_party.clone();
+        assert_eq!(party.as_ref().map(|p| p.members), Some(2));
+
+        for uri in [
+            "/lol-lobby/v2/lobby/matchmaking/search-state",
+            "/lol-lobby/v2/lobby/countdown",
+            "/lol-lobby/v2/lobby/members/localMember",
+        ] {
+            let frame = format!(
+                r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {{"uri": "{uri}", "eventType": "Update", "data": {{"errors": []}}}}]"#
+            );
+            let event = LcuEvent::parse(&frame).expect("frame").expect("event");
+            dispatch_event_to_state(&tx, &event);
+            assert_eq!(rx.borrow().lobby_party, party, "{uri}");
+            assert_eq!(
+                rx.borrow().queue.as_ref().map(|q| q.queue_id),
+                Some(440),
+                "{uri}"
+            );
+        }
+
+        let deleted = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby", "eventType": "Delete", "data": null}]"#;
+        let event = LcuEvent::parse(deleted).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        assert!(rx.borrow().lobby_party.is_none());
+    }
+
+    #[test]
+    fn a_lobby_event_with_a_trailing_slash_is_still_the_whole_lobby() {
+        let (tx, rx) = new_state_channel();
+        set_phase(&tx, GamePhase::Lobby);
+        let lobby = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby/", "eventType": "Update",
+            "data": {"gameConfig": {"queueId": 440, "gameMode": "CLASSIC", "mapId": 11},
+                     "partyId": "party-1", "members": [{}, {}, {}]}}]"#;
+        let event = LcuEvent::parse(lobby).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        assert_eq!(rx.borrow().lobby_party.as_ref().map(|p| p.members), Some(3));
     }
 
     #[test]
