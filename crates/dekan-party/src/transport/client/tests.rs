@@ -126,3 +126,70 @@ fn test_a_stable_session_restarts_the_reconnect_backoff() {
         Duration::from_secs(8)
     );
 }
+
+struct StalledRelay;
+
+impl futures_util::Sink<Message> for StalledRelay {
+    type Error = std::convert::Infallible;
+
+    fn poll_ready(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Pending
+    }
+
+    fn start_send(self: std::pin::Pin<&mut Self>, _: Message) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Pending
+    }
+
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Pending
+    }
+}
+
+#[tokio::test]
+async fn a_relay_that_stops_taking_messages_ends_the_session_instead_of_hanging_it() {
+    let sent = deliver(
+        &mut StalledRelay,
+        Message::Text("ping".into()),
+        Duration::from_millis(50),
+    )
+    .await;
+    assert!(matches!(sent, Err(PartyError::Relay(_))));
+}
+
+#[tokio::test]
+async fn a_relay_that_takes_the_message_is_a_delivery() {
+    let sent = deliver(
+        &mut futures_util::sink::drain(),
+        Message::Text("ping".into()),
+        Duration::from_millis(50),
+    )
+    .await;
+    assert!(sent.is_ok());
+}
+
+#[tokio::test]
+async fn a_relay_that_rejects_the_message_reports_why() {
+    let mut closed = Box::pin(futures_util::sink::unfold((), |(), _: Message| async {
+        Err::<(), _>("closed")
+    }));
+    let sent = deliver(
+        &mut closed,
+        Message::Text("ping".into()),
+        Duration::from_millis(50),
+    )
+    .await;
+    assert!(matches!(sent, Err(PartyError::Relay(reason)) if reason == "closed"));
+}

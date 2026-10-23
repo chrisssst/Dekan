@@ -147,6 +147,18 @@ pub(crate) fn lobby_arm_key(state: &dekan_core::state::AppState) -> Option<ArmKe
     })
 }
 
+pub(crate) fn lobby_overlay_serves(
+    key: &ArmKey,
+    lobby: Option<&dekan_core::lobby::LobbyPicks>,
+    mods: &dekan_core::mods::ModSelection,
+    champ_id: u32,
+) -> bool {
+    key.covers(champ_id)
+        || (key.mods != 0
+            && mods.fingerprint(Some(champ_id)) != 0
+            && lobby.is_some_and(|lobby| lobby.champions().contains(&champ_id)))
+}
+
 pub(crate) fn party_skins(state: &dekan_core::state::AppState) -> dekan_core::party::VerifiedParty {
     dekan_core::party::verified_party_skins(
         &state.party_peers,

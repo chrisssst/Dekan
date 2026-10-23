@@ -74,7 +74,7 @@ fn ltk_row<'a>(snapshot: &'a PanelSnapshot, text: &Text) -> &'a PanelCheck {
 }
 
 #[test]
-fn test_the_ltk_check_names_the_signed_release_the_installed_dll_matches() {
+fn test_the_ltk_check_names_the_release_the_installed_dll_matches() {
     let text = Language::English.text();
     let unchecked = snapshot(&facts(), text);
     let row = ltk_row(&unchecked, text);
@@ -97,7 +97,7 @@ fn test_the_ltk_check_names_the_signed_release_the_installed_dll_matches() {
 }
 
 #[test]
-fn test_a_newer_signed_injector_offers_the_install_button() {
+fn test_a_newer_usable_injector_offers_the_install_button() {
     let text = Language::English.text();
     let shown = snapshot(
         &Facts {
@@ -119,7 +119,7 @@ fn test_a_newer_signed_injector_offers_the_install_button() {
 }
 
 #[test]
-fn test_an_unsigned_latest_release_warns_without_a_button() {
+fn test_a_refused_latest_release_warns_without_a_button() {
     let text = Language::English.text();
     let shown = snapshot(
         &Facts {
@@ -137,7 +137,7 @@ fn test_an_unsigned_latest_release_warns_without_a_button() {
 }
 
 #[test]
-fn test_missing_tools_offer_the_newest_signed_release() {
+fn test_missing_tools_offer_the_newest_usable_release() {
     let text = Language::English.text();
     let missing = snapshot(
         &Facts {

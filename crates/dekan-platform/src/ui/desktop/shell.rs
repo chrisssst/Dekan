@@ -7,6 +7,8 @@ use windows::core::{HSTRING, w};
 
 use crate::error::PlatformError;
 
+pub use super::is_web_page;
+
 pub fn open_folder(dir: &Path) -> Result<(), PlatformError> {
     if !dir.is_dir() {
         return Err(PlatformError::Path(format!(
@@ -34,17 +36,6 @@ pub fn open_folder(dir: &Path) -> Result<(), PlatformError> {
         )));
     }
     Ok(())
-}
-
-#[must_use]
-pub fn is_web_page(url: &str) -> bool {
-    url.strip_prefix("https://").is_some_and(|rest| {
-        !rest.is_empty()
-            && !rest.starts_with('/')
-            && url
-                .chars()
-                .all(|c| c.is_ascii_graphic() && c != '"' && c != '\\')
-    })
 }
 
 pub fn open_web_page(url: &str) -> Result<(), PlatformError> {

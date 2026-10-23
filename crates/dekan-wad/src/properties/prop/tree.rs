@@ -1,6 +1,6 @@
 use super::{
     Cursor, FIELD_EMBED, FIELD_LIST, FIELD_LIST2, FIELD_MAP, FIELD_OPTION, FIELD_POINTER,
-    FIELD_STRING, MAX_FIELD_DEPTH, fixed_field_size,
+    FIELD_STRING, MAX_FIELD_DEPTH,
 };
 use crate::error::WadError;
 
@@ -128,7 +128,7 @@ fn read_value(cursor: &mut Cursor<'_>, kind: u8, depth: usize) -> Result<Value, 
     if depth > MAX_FIELD_DEPTH {
         return Err(depth_error());
     }
-    if let Some(size) = fixed_field_size(kind) {
+    if let Some(size) = cursor.value_size(kind) {
         return Ok(Value::Raw {
             kind,
             bytes: cursor.take(size, "field value")?.to_vec(),
@@ -255,7 +255,8 @@ fn read_fields(cursor: &mut Cursor<'_>, depth: usize) -> Result<Vec<Field>, WadE
 }
 
 pub fn parse_fields(body: &[u8]) -> Result<Vec<Field>, WadError> {
-    let mut cursor = Cursor { data: body, at: 0 };
+    let wide = hash_widths(body)?;
+    let mut cursor = Cursor::new(body, &wide);
     let fields = read_fields(&mut cursor, 0)?;
     if cursor.at != body.len() {
         return Err(WadError::InvalidProp(format!(
@@ -347,8 +348,10 @@ pub fn write_fields(fields: &[Field]) -> Result<Vec<u8>, WadError> {
 }
 
 mod shapes;
+mod widths;
 
 pub use shapes::{FIELD_FILE, FieldShapes};
+pub use widths::hash_widths;
 
 #[cfg(test)]
 mod tests;

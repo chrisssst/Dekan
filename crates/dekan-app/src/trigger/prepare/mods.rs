@@ -304,30 +304,50 @@ pub(crate) fn extracted_mod_is_complete(mod_dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
+const SOURCE_STAMP: &str = ".dekan-source";
+
+fn source_stamp(archive_path: &Path) -> std::io::Result<String> {
+    let meta = std::fs::metadata(archive_path)?;
+    let modified = meta
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    Ok(format!("{}:{modified}", meta.len()))
+}
+
 pub(crate) fn prepare_mod_directory(archive_path: &Path, target_dir: &Path) -> std::io::Result<()> {
+    let stamp = source_stamp(archive_path)?;
     if target_dir.exists() {
-        if extracted_mod_is_complete(target_dir) {
+        let same_source =
+            std::fs::read_to_string(target_dir.join(SOURCE_STAMP)).is_ok_and(|kept| kept == stamp);
+        if same_source && extracted_mod_is_complete(target_dir) {
             return Ok(());
         }
-
-        warn!(
+        info!(
             mod_dir = %target_dir.display(),
-            "Extracted mod directory has no WAD; discarding it and extracting again"
+            "The extracted mod is incomplete or its archive changed; extracting it again"
         );
         std::fs::remove_dir_all(target_dir)?;
     }
 
-    if archive_path.is_dir() {
-        dekan_platform::fs::mirror_tree(archive_path, target_dir).map_err(std::io::Error::other)?;
-        return Ok(());
+    let mut staging = target_dir.as_os_str().to_owned();
+    staging.push(".partial");
+    let staging = std::path::PathBuf::from(staging);
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)?;
     }
 
-    let file = std::fs::File::open(archive_path)?;
-    dekan_platform::fs::safe_extract_zip(
-        std::io::BufReader::new(file),
-        target_dir,
-        &dekan_platform::fs::ExtractLimits::default(),
-    )
-    .map_err(std::io::Error::other)?;
-    Ok(())
+    if archive_path.is_dir() {
+        dekan_platform::fs::mirror_tree(archive_path, &staging).map_err(std::io::Error::other)?;
+    } else {
+        let file = std::fs::File::open(archive_path)?;
+        dekan_platform::fs::safe_extract_zip(
+            std::io::BufReader::new(file),
+            &staging,
+            &dekan_platform::fs::ExtractLimits::default(),
+        )
+        .map_err(std::io::Error::other)?;
+    }
+    std::fs::write(staging.join(SOURCE_STAMP), stamp)?;
+    std::fs::rename(&staging, target_dir)
 }

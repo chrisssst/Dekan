@@ -6,23 +6,16 @@ use crate::boot::panel::tray_status;
 pub fn spawn_custom_mods_notice(
     supervisor: &mut dekan_core::supervisor::Supervisor,
     notice_tray: dekan_platform::tray::TrayController,
-    custom_mods_rx: std::sync::mpsc::Receiver<dekan_app::mod_repair::ScanSummary>,
+    custom_mods_rx: tokio::sync::oneshot::Receiver<dekan_app::mod_repair::ScanSummary>,
 ) {
     supervisor.spawn("custom-mods-notice", move |child_token| async move {
         let received = tokio::select! {
             _ = child_token.cancelled() => return,
-            received = tokio::task::spawn_blocking(move || custom_mods_rx.recv()) => received,
+            received = custom_mods_rx => received,
         };
-        let summary = match received {
-            Ok(Ok(summary)) => summary,
-            Ok(Err(_)) => {
-                debug!("The custom mods scan ended without a report");
-                return;
-            }
-            Err(e) => {
-                warn!(error = %e, "The custom mods notice could not wait for the scan");
-                return;
-            }
+        let Ok(summary) = received else {
+            debug!("The custom mods scan ended without a report");
+            return;
         };
         let text = dekan_platform::i18n::text();
         let mut lines = Vec::new();
@@ -93,25 +86,29 @@ pub fn spawn_update_check(
 
 pub fn spawn_ltk_check(
     supervisor: &mut dekan_core::supervisor::Supervisor,
-    tray_controller: &dekan_platform::tray::TrayController,
+    install_tx: tokio::sync::mpsc::UnboundedSender<()>,
     state_dir_path: &std::path::Path,
     ltk_dll_path: &std::path::Path,
     installed_dll: &dekan_app::ltk_release::InstalledDllCache,
     ltk_notice: &dekan_app::ltk_release::LtkNotice,
     state_rx: &dekan_core::state::StateReceiver,
 ) {
-    let ltk_tray = tray_controller.clone();
     let ltk_check = dekan_app::ltk_release::LtkCheck {
         state_dir: state_dir_path.to_path_buf(),
         installed_dll: ltk_dll_path.to_path_buf(),
         installed: installed_dll.clone(),
         notice: ltk_notice.clone(),
         notify: Box::new(move |version| {
-            let text = dekan_platform::i18n::text();
-            ltk_tray.notify(
-                &dekan_platform::i18n::fill(text.ltk_new_title, "version", version),
-                text.ltk_new_body,
+            info!(
+                version,
+                "A newer LTK injector was found; installing it automatically"
             );
+            if install_tx.send(()).is_err() {
+                warn!(
+                    version,
+                    "The injector install task is gone; the newer injector stays offered in the control panel"
+                );
+            }
         }),
     };
     let state_rx_ltk = state_rx.clone();

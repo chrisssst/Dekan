@@ -1,6 +1,5 @@
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
@@ -12,8 +11,20 @@ use tracing::{debug, error, info, warn};
 use crate::error::PlatformError;
 
 mod archive;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(windows)]
+mod windows;
 
-pub use archive::{ExtractLimits, MAX_PATH_CHARS, safe_extract_zip, validate_archive_path};
+pub use archive::{ExtractLimits, safe_extract_zip, validate_archive_path};
+#[cfg(target_os = "macos")]
+use macos::path_units;
+#[cfg(target_os = "macos")]
+pub use macos::{MAX_PATH_CHARS, get_disk_free_space};
+#[cfg(windows)]
+use windows::path_units;
+#[cfg(windows)]
+pub use windows::{MAX_PATH_CHARS, get_disk_free_space};
 
 pub fn atomic_write(target_path: &Path, content: &[u8], sync: bool) -> Result<(), PlatformError> {
     let parent = target_path.parent().ok_or_else(|| {
@@ -200,7 +211,7 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
             let from = entry.path();
             let to = to_dir.join(entry.file_name());
 
-            let path_len = to.as_os_str().encode_wide().count();
+            let path_len = path_units(&to);
             if path_len > MAX_PATH_CHARS {
                 warn!(
                     from = %from.display(),
@@ -258,40 +269,6 @@ pub fn mirror_tree(src: &Path, dst: &Path) -> Result<MirrorStats, PlatformError>
         debug!(src = %src.display(), linked = stats.linked, "Mirror built with hard links");
     }
     Ok(stats)
-}
-
-pub fn get_disk_free_space(path: &Path) -> Result<u64, PlatformError> {
-    let mut path_buf = path.to_path_buf();
-    if !path_buf.exists() {
-        if let Some(parent) = path.parent() {
-            path_buf = parent.to_path_buf();
-        }
-    }
-
-    let wide_path: Vec<u16> = path_buf
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-
-    let mut free_bytes: u64 = 0;
-    let mut total_bytes: u64 = 0;
-    let mut total_free: u64 = 0;
-
-    unsafe {
-        windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
-            windows::core::PCWSTR(wide_path.as_ptr()),
-            Some(&mut free_bytes),
-            Some(&mut total_bytes),
-            Some(&mut total_free),
-        )
-    }
-    .map_err(|e| PlatformError::Io {
-        context: format!("failed to get disk free space for '{}'", path.display()),
-        source: std::io::Error::from_raw_os_error(e.code().0),
-    })?;
-
-    Ok(free_bytes)
 }
 
 #[cfg(test)]

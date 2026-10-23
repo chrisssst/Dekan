@@ -82,7 +82,7 @@ fn thousands_of_damaged_wads_are_refused_or_read_without_a_panic() {
 }
 
 #[test]
-fn random_property_trees_round_trip_and_every_truncation_is_refused() {
+fn random_property_trees_round_trip_and_every_truncation_is_refused_or_lossless() {
     let mut rng = Rng(0x5EED_0003);
     for _ in 0..600 {
         let tree = fields(&mut rng, 0);
@@ -91,11 +91,14 @@ fn random_property_trees_round_trip_and_every_truncation_is_refused() {
         assert_eq!(parsed, tree);
         assert_eq!(write_fields(&parsed).expect("rewrite"), bytes);
         for cut in 0..bytes.len() {
-            assert!(
-                parse_fields(&bytes[..cut]).is_err(),
-                "a body cut at {cut} of {} bytes was accepted",
-                bytes.len()
-            );
+            if let Ok(fields) = parse_fields(&bytes[..cut]) {
+                assert_eq!(
+                    write_fields(&fields).expect("rewrite"),
+                    &bytes[..cut],
+                    "a body cut at {cut} of {} bytes was read with loss",
+                    bytes.len()
+                );
+            }
         }
         let mut damaged = bytes.clone();
         for _ in 0..4 {

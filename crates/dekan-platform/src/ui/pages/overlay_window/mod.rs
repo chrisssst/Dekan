@@ -10,10 +10,6 @@ use slint::winit_030::{WinitWindowAccessor, winit};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{debug, info, warn};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{
-    HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetWindowPos, ShowWindow,
-};
 
 use super::overlay_model as model;
 use super::runtime;
@@ -244,6 +240,7 @@ pub(crate) fn parse_color(color: Option<&str>) -> slint::Color {
     }
 }
 
+mod native;
 mod placement;
 mod render;
 mod view;

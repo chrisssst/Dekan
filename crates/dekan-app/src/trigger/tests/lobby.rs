@@ -1,4 +1,4 @@
-use super::arm_key::{WantedSkin, lobby_arm_key};
+use super::arm_key::{WantedSkin, lobby_arm_key, lobby_overlay_serves};
 use super::*;
 use super::{champ_select_state, target};
 
@@ -126,4 +126,41 @@ fn turning_injection_off_disarms_every_pick_and_schedules_nothing() {
             ArmDecision::Settled
         ));
     }
+}
+
+#[test]
+fn a_lobby_overlay_with_a_map_mod_serves_whichever_lobby_champion_the_match_gives() {
+    use dekan_core::phase::GamePhase;
+    let mut state = swiftplay_state(GamePhase::Matchmaking, vec![target(238, 238_012)]);
+    state.mods = dekan_core::mods::ModSelection {
+        map: Some("dekan:maps/Winter".into()),
+        ..Default::default()
+    };
+    let WantedSkin::Skin(key) = wanted_skin(&state) else {
+        panic!("a lobby skin with a map mod must arm");
+    };
+    let lobby = state.lobby.as_ref();
+    assert!(!key.covers(103));
+    assert!(lobby_overlay_serves(&key, lobby, &state.mods, 103));
+    assert!(lobby_overlay_serves(&key, lobby, &state.mods, 238));
+    assert!(!lobby_overlay_serves(&key, lobby, &state.mods, 1));
+
+    let without_mods = dekan_core::mods::ModSelection::default();
+    let skin_only = swiftplay_state(GamePhase::Matchmaking, vec![target(238, 238_012)]);
+    let WantedSkin::Skin(skin_key) = wanted_skin(&skin_only) else {
+        panic!("one lobby skin must arm");
+    };
+    assert!(!lobby_overlay_serves(
+        &skin_key,
+        skin_only.lobby.as_ref(),
+        &without_mods,
+        103
+    ));
+
+    assert!(!lobby_overlay_serves(&key, None, &state.mods, 103));
+    assert!(lobby_overlay_serves(&key, None, &state.mods, 238));
+    assert!(
+        !lobby_overlay_serves(&key, lobby, &without_mods, 103),
+        "mods cleared after arming no longer serve another lobby champion"
+    );
 }

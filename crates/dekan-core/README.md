@@ -51,7 +51,10 @@ known list of places that could have caused it.
 
 `domain/play/party.rs` decides whether a teammate's announced skin can be trusted. An announcement is only accepted when
 the player's champion matches the one the League client reports for that player's slot. A party member cannot
-make you load a skin for a champion they are not playing, and a spoofed message has no effect.
+make you load a skin for a champion they are not playing. The announcement's player id is not authenticated beyond
+the room key, so anyone holding the key can claim to be a teammate and choose that teammate's skin; when two room
+members claim the same player, both are refused. The worst a key holder can do is pick the cosmetic skin shown for
+a teammate's real champion.
 
 ## Testing
 

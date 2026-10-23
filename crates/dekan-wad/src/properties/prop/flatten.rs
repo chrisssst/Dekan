@@ -126,7 +126,8 @@ fn flatten_fields_at(
 
 pub fn flatten_fields(body: &[u8]) -> Result<Vec<FlatField>, WadError> {
     let mut out = Vec::new();
-    flatten_fields_at(&mut Cursor { data: body, at: 0 }, "", 0, &mut out)?;
+    let wide = tree::hash_widths(body)?;
+    flatten_fields_at(&mut Cursor::new(body, &wide), "", 0, &mut out)?;
     Ok(out)
 }
 

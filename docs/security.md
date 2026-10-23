@@ -21,18 +21,32 @@ through replaced files.
 - Showing an unowned skin's name on the loading screen would require writing to game memory, so Dekan does
   not do it.
 
-## The publisher's signature is the trust anchor
+## The official release is the trust anchor
 
-Both injector files are checked before they touch the game: their **Authenticode signature** must be valid
-(`WinVerifyTrust`) and the signer must be League Toolkit's publisher, `Natoken LLC`
-(`dekan_inject::trust::LTK_PUBLISHER`). Changing a single byte breaks the signature, so a patched or tampered
-build is refused; the byte-patched "2040" DLL that failed in a real match is unsigned and refused the same way.
-Revocation is not fetched online (`WTD_REVOKE_NONE`), so the check works offline and never stalls champion
-select.
+Both injector files are checked before they touch the game (`dekan_inject::trust::verify_injector_file`):
 
-The signature replaced a list of audited SHA-256 hashes. League Toolkit now publishes a DLL per game
+- signed by League Toolkit's publisher, `Natoken LLC` (`dekan_inject::trust::LTK_PUBLISHER`), with a valid
+  Authenticode signature (`WinVerifyTrust`): accepted;
+- carrying no signature at all (`TRUST_E_NOSIGNATURE`): accepted, because League Toolkit has shipped official
+  releases with an unsigned DLL (LTK Manager 1.29.1 and 1.29.2);
+- signed by anyone else, with a broken or tampered signature, or not a binary Windows can read: refused. Changing a
+  byte of a signed file breaks its signature, so a patched signed build is still refused.
+
+Dekan downloads the files only from the tag of a published (not draft, not pre-release) release of
+`LeagueToolkit/ltk-manager`, over HTTPS from the GitHub API. Without a signature, that origin and the ACL of the
+`tools` folder (administrator-only under Program Files) are what protect the files. The tag is resolved to its
+commit once, and every file is read at that commit. A copy outside Program Files may fall back to `tools` folders
+the user can write; a program already running as that user can replace them, which gains it nothing it could not
+already do as that user, but it is the residual risk of an unsigned file. Revocation is not fetched
+online (`WTD_REVOKE_NONE`), so the check works offline and never stalls champion select.
+
+League Toolkit also runs a separate delivery service for its own manager, which registers only builds attested by
+League Toolkit's release workflow. Dekan does not use it and does not present itself as LTK Manager.
+
+Reading the official release replaced a list of audited SHA-256 hashes. League Toolkit now publishes a DLL per game
 patch; with fixed hashes every patch needed a Dekan release before users could inject again, while the
-publisher's signature accepts each new official build the day it ships. The game-build limit is not a
+official release accepts each new build the day it ships; Dekan checks for one every 30 minutes and installs it by
+itself outside ready check, champion select and the match. The game-build limit is not a
 constant either: it is read from the DLL's own build comparison (`dekan_inject::trust::dll_build_limit`) and
 treated as unknown when the pattern is absent or ambiguous.
 
@@ -45,10 +59,10 @@ to the workflow and the commit that produced it.
   than the timestamp compiled into it (read from the DLL; `0x6ad46e70`, 2026-10-18 07:00 UTC, for the LTK Manager
   1.27.0 build). The limit applies to the game build, not to the clock. Its bytes are never modified and its signature is never stripped.
 - They are not included in the installer or in `dekan.exe`. Dekan can download them at the user's request
-  from the official LTK Manager repository at the newest release tag whose files carry the publisher's
-  signature (`updates/injector_install.rs`); users can also take them from an LTK Manager release or the convenience
-  mirror linked in the README. Either way, only files signed by the publisher are accepted, so a tampered
-  download is refused.
+  from the official LTK Manager repository at the newest usable release tag
+  (`updates/injector_install.rs`). Valid publisher signatures and official unsigned releases are accepted;
+  foreign or broken signatures and DLLs restricted to LTK Manager are refused. The elevated installer resolves
+  the tag to its commit and downloads both files itself.
 - None of them may be loaded from another product's folder. If one is missing, the user is told the exact
   path Dekan expected.
 
@@ -59,10 +73,14 @@ to the workflow and the commit that produced it.
   entry that would be written through a symlink or junction already in the destination, and
   limits total size and entry count to stop zip bombs.
 - Dekan runs unelevated. The one exception is the injector copy: when Windows denies writing to the
-  `tools` folder, Dekan starts itself elevated with `--install-injector <staging> <tools>`. That instance
-  writes the staged files next to their targets as `.partial`, verifies the publisher's signature on exactly
-  those files, accepts only Dekan's own `tools` folders as the target, renames them into place (restoring the previous files if a rename fails) and exits; a
-  refused file leaves the old ones untouched. It never starts
+  `tools` folder, Dekan starts itself elevated with `--install-injector <version> <tools>`. That instance trusts
+  nothing the user can write: it accepts only a release version made of digits and dots, resolves the release
+  tag to its commit and downloads both files itself at that commit, so the files it checks are the files it
+  installs even if the tag moves. The target must be the `tools` folder beside its own executable (never a
+  path from an environment variable) and must not be a link or junction. It writes the files next to their
+  targets as `.partial`, verifies the publisher's signature on exactly those files, renames them into place
+  (restoring the previous files if a rename fails) and exits; a refused file leaves the old ones untouched.
+  It never starts
   the app. External resources are released by owning guards.
 - The only file Dekan changes in the League install is one key of `Config/LeagueClientSettings.yaml`
   (`install.crash_reporting.enabled: false`), and only while **Light match loading** is on.

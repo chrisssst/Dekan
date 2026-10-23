@@ -16,11 +16,7 @@ use crate::error::PlatformError;
 
 const ELEVATED_WAIT_MS: u32 = 120_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ElevatedRun {
-    Finished(u32),
-    Declined,
-}
+pub use super::ElevatedRun;
 
 pub fn run_elevated(exe: &Path, parameters: &str) -> Result<ElevatedRun, PlatformError> {
     let file = HSTRING::from(exe.as_os_str());

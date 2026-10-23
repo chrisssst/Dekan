@@ -16,9 +16,10 @@ Files and responsibilities: `README.md`. Trust model: `docs/security.md` and ADR
 
 ## Injector
 
-- Third-party binaries come only from Dekan's own `tools` folder and only with a valid Authenticode signature from
-  `LTK_PUBLISHER` (`trust/mod.rs`). The signature survives LTK's per-patch DLLs; any changed byte breaks it and is
-  refused. No version or hash is hardcoded. Changing the publisher needs a new ADR and the README's "Installation" step 2.
+- Third-party binaries come only from Dekan's own `tools` folder, downloaded from an official LTK Manager release
+  tag. `trust/mod.rs` accepts a valid Authenticode signature from `LTK_PUBLISHER` or no signature at all (LTK
+  shipped unsigned DLLs in 1.29.1/1.29.2), and refuses a foreign or broken signature. No version or hash is
+  hardcoded. Changing this rule needs a new ADR and the README's "Installation" step 2.
 - Never patch the DLL bytes or strip its signature, and never bundle the binaries: the LTK Patcher License forbids
   redistributing them outside an official LTK Manager release. Their absence is told to the user.
 - LTK Manager itself installs to `C:\Program Files\LTK Manager`; Dekan never loads from there, it copies into its

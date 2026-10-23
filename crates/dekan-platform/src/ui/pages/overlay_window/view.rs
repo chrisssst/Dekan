@@ -18,15 +18,7 @@ pub(super) fn create(
 }
 
 pub(super) fn finish(view: &views::OverlayWindow, hwnd: isize) {
-    view.window()
-        .with_winit_window(|window: &winit::window::Window| {
-            use winit::platform::windows::WindowExtWindows;
-            window.set_skip_taskbar(true);
-        });
-    let target = HWND(hwnd as *mut _);
-    unsafe {
-        let _ = ShowWindow(target, SW_HIDE); // ignore-ok: returns the previous visibility, not an error
-    }
+    native::prepare(view.window(), hwnd);
     view.window().on_winit_window_event(|_, event| {
         if let winit::event::WindowEvent::Resized(size) = event {
             let (width, height) = (size.width as i32, size.height as i32);

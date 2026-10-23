@@ -277,3 +277,5 @@ fn test_an_unknown_field_type_is_refused() {
     field(&mut body, 1, 0x7F, &[0; 4]);
     assert!(set_int_field(&mut body, 0x8722_5880, 1).is_err());
 }
+
+mod hash_width;

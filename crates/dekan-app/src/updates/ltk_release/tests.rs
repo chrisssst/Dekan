@@ -31,7 +31,7 @@ fn published_versions_come_newest_first_without_drafts_or_prereleases() {
 }
 
 #[test]
-fn the_compatible_version_is_the_newest_release_signed_by_the_publisher() {
+fn the_compatible_version_is_the_newest_release_dekan_accepts() {
     let mut verdicts = Verdicts::default();
     verdicts.insert("1.28.0", Injector::Untrusted);
     verdicts.insert("1.27.0", trusted(DLL_A));
@@ -127,11 +127,11 @@ fn a_new_injector_is_announced_once() {
 
 #[tokio::test]
 #[ignore = "downloads LTK Manager releases from GitHub"]
-async fn the_newest_signed_release_is_found_online() {
+async fn the_newest_usable_release_is_found_online() {
     let dir = std::env::temp_dir().join(format!("dekan_ltk_online_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
-    let version = compatible_version(&dir).await.expect("a signed release");
+    let version = compatible_version(&dir).await.expect("a usable release");
     let verdicts = load_verdicts(&dir);
     assert!(matches!(
         verdicts.get(&version),
@@ -147,4 +147,40 @@ fn pages_point_at_the_ltk_manager_releases() {
         format!("{LTK_REPOSITORY}/releases/tag/v1.27.0")
     );
     assert_eq!(release_page(None), format!("{LTK_REPOSITORY}/releases"));
+}
+
+#[test]
+fn only_dotted_numbers_pass_as_a_release_version_for_the_elevated_install() {
+    for good in ["1.29.3", "2.0", "10"] {
+        assert!(is_release_version(good), "{good}");
+    }
+    for bad in [
+        "",
+        "1..2",
+        "1.2?ref=main",
+        "../1.2",
+        "v1.2",
+        "1.2 3",
+        "1.2.3.4.5.6.7.8.9.10.11.12.13.14.15",
+        "1.",
+        ".1",
+    ] {
+        assert!(!is_release_version(bad), "{bad}");
+    }
+    assert!(is_release_version(&"1".repeat(32)));
+    assert!(!is_release_version(&"1".repeat(33)));
+}
+
+#[test]
+fn verdicts_cached_before_the_host_check_are_checked_again() {
+    let dir = std::env::temp_dir().join(format!("dekan_ltk_host_era_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let signed_only = format!(
+        "signed-by {}\n1.30.1 trusted {DLL_A}\n",
+        dekan_inject::trust::LTK_PUBLISHER
+    );
+    std::fs::write(dir.join(VERDICTS_FILE), signed_only).expect("write");
+    assert_eq!(load_verdicts(&dir), Verdicts::default());
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
 }

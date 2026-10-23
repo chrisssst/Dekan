@@ -9,6 +9,8 @@ pub use os::{
     activation, authenticode, autostart, disk, elevation, fs, preferences, process,
     single_instance, user_profile, version,
 };
+#[cfg(target_os = "macos")]
+pub use ui::run_interface_on_main_thread;
 pub use ui::{
     clipboard, dialog, hotkey, i18n, overlay_window, panel, party_dialog, shell, tray, welcome,
 };

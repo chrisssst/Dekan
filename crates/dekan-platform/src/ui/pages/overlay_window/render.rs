@@ -42,30 +42,17 @@ impl Overlay {
     }
 
     pub(super) fn show_at(&self, rect: WindowRect) {
-        let target = HWND(self.hwnd as *mut _);
-        let (x, y, width, height) = (rect.left, rect.top, rect.width(), rect.height());
-        unsafe {
-            match SetWindowPos(
-                target,
-                Some(HWND_TOPMOST),
-                x,
-                y,
-                width,
-                height,
-                SWP_NOACTIVATE,
-            ) {
-                Ok(()) => {
-                    if REPOSITION_FAILED.swap(false, Ordering::Relaxed) {
-                        debug!("Overlay window repositioned after a refusal");
-                    }
-                }
-                Err(e) => {
-                    if !REPOSITION_FAILED.swap(true, Ordering::Relaxed) {
-                        warn!(error = %e, "Overlay window could not be repositioned; retrying on the next tracking tick");
-                    }
+        match native::show_at(self.view.window(), self.hwnd, rect) {
+            Ok(()) => {
+                if REPOSITION_FAILED.swap(false, Ordering::Relaxed) {
+                    debug!("Overlay window repositioned after a refusal");
                 }
             }
-            let _ = ShowWindow(target, SW_SHOWNOACTIVATE); // ignore-ok: returns the previous visibility, not an error
+            Err(e) => {
+                if !REPOSITION_FAILED.swap(true, Ordering::Relaxed) {
+                    warn!(error = %e, "Overlay window could not be repositioned; retrying on the next tracking tick");
+                }
+            }
         }
     }
 
@@ -94,9 +81,7 @@ impl Overlay {
             self.toggle_collapsed();
         }
         self.hide_preview();
-        unsafe {
-            let _ = ShowWindow(HWND(self.hwnd as *mut _), SW_HIDE); // ignore-ok: returns the previous visibility, not an error
-        }
+        native::hide(self.view.window(), self.hwnd);
     }
 
     pub(super) fn set_catalog(&mut self, catalog: Catalog) {

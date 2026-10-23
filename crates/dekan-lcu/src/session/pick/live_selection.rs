@@ -105,6 +105,9 @@ pub async fn resolve_live_selection(
 ) -> Result<LiveSelection, LcuError> {
     match client.get_champ_select_session().await {
         Ok(session) => match session.local_selection() {
+            Ok((0, _)) => {
+                debug!("Champ select session has no champion yet; falling back to gameflow")
+            }
             Ok((champion_id, skin_id)) => {
                 debug!(
                     champion_id,

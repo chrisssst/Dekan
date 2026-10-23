@@ -67,7 +67,7 @@ the 400-line limit per code file.
 3. **Logging.** A non-blocking daily log file starts in `%LOCALAPPDATA%\Dekan\logs`.
 4. **Discovery.** The game install (from Riot's metadata or the running process, WeGame layouts included) and
    the injector tools (from Dekan's own folder, signature-checked) are located. When the tools are missing or
-   not signed by League Toolkit, Dekan offers to download them from the newest signed LTK Manager release and copies them
+   carry a foreign or broken signature, Dekan offers to download them from the newest LTK Manager release and copies them
    with a verified, elevated copy of itself; otherwise it opens the download page and stops.
 5. **Warm-up.** One prewarm thread loads the index of the game's archives from `game_index.bin` in the state
    folder (rebuilt from the WADs' tables of contents only when a WAD's size or modification time changed),

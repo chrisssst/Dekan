@@ -42,10 +42,10 @@ impl InstallError {
 #[must_use]
 pub fn exit_reason(code: i32) -> &'static str {
     match code {
-        2 => "the elevated copy received the wrong arguments",
+        2 => "the elevated copy received the wrong arguments or no release version",
         3 => "the target is not Dekan's own tools folder",
         EXIT_DENIED => "Windows denied writing to the tools folder even when elevated",
-        EXIT_NOT_TRUSTED => "a staged injector file is not signed by its publisher",
+        EXIT_NOT_TRUSTED => "a staged injector file carries a foreign or broken signature",
         EXIT_FAILED => "reading, writing or replacing the injector files failed",
         _ => "unknown",
     }
@@ -61,6 +61,7 @@ fn io_error(context: &str, e: &std::io::Error) -> InstallError {
 
 fn verify(name: &'static str, path: &Path) -> Result<(), InstallError> {
     dekan_inject::trust::verify_injector_file(path)
+        .map(|_| ())
         .map_err(|e| InstallError::NotTrusted(name, e.to_string()))
 }
 
@@ -85,6 +86,17 @@ pub fn install(staging: &Path, tools: &Path) -> Result<(), InstallError> {
             std::fs::read(staging.join(name)).map_err(|e| io_error("reading a staged file", &e))?;
         files.push((name, bytes));
     }
+    install_files(files, tools)
+}
+
+pub async fn install_release(version: &str, tools: &Path) -> Result<(), InstallError> {
+    let files = download_injector(version)
+        .await
+        .map_err(InstallError::Failed)?;
+    install_files(files, tools)
+}
+
+fn install_files(files: Vec<(&'static str, Vec<u8>)>, tools: &Path) -> Result<(), InstallError> {
     std::fs::create_dir_all(tools).map_err(|e| io_error("creating the tools folder", &e))?;
     let mut partials = Vec::with_capacity(files.len());
     let staged = files.into_iter().try_for_each(|(name, bytes)| {
@@ -161,20 +173,14 @@ fn roll_back(done: &[(PathBuf, Option<PathBuf>)]) -> Option<String> {
 }
 
 #[must_use]
-pub fn elevated_parameters(staging: &Path, tools: &Path) -> String {
-    format!(
-        "{INSTALL_FLAG} \"{}\" \"{}\"",
-        staging.display(),
-        tools.display()
-    )
+pub fn elevated_parameters(version: &str, tools: &Path) -> String {
+    format!("{INSTALL_FLAG} \"{version}\" \"{}\"", tools.display())
 }
 
 #[must_use]
-pub fn is_dekan_tools_folder(tools: &Path, install_dir: Option<&Path>, exe: Option<&Path>) -> bool {
-    [install_dir, exe.and_then(Path::parent)]
-        .into_iter()
-        .flatten()
-        .any(|dir| dir.join("tools") == tools)
+pub fn is_dekan_tools_folder(tools: &Path, exe: Option<&Path>) -> bool {
+    exe.and_then(Path::parent)
+        .is_some_and(|dir| dir.join("tools") == tools)
 }
 
 #[cfg(test)]
@@ -190,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn unsigned_staged_files_are_refused_and_leave_nothing_in_the_tools_folder() {
+    fn unverifiable_staged_files_are_refused_and_leave_nothing_in_the_tools_folder() {
         let root = fixture("unsigned");
         let staging = root.join("staging");
         std::fs::write(staging.join(INJECTOR_FILES[0]), b"host").expect("host");
@@ -221,6 +227,35 @@ mod tests {
     }
 
     #[test]
+    fn unsigned_binaries_replace_the_tools_and_leave_no_partial_behind() {
+        let root = fixture("unsigned_pe");
+        let staging = root.join("staging");
+        let pe = std::env::current_exe().expect("test binary");
+        for name in INJECTOR_FILES {
+            std::fs::copy(&pe, staging.join(name)).expect("copy");
+        }
+        let tools = root.join("tools");
+        std::fs::create_dir_all(&tools).expect("tools");
+        std::fs::write(tools.join(INJECTOR_FILES[1]), b"old dll").expect("old");
+
+        install(&staging, &tools).expect("install");
+        let mut left: Vec<String> = std::fs::read_dir(&tools)
+            .expect("list")
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        let mut expected = INJECTOR_FILES.map(str::to_owned).to_vec();
+        expected.sort();
+        assert_eq!(left, expected);
+        assert_ne!(
+            std::fs::read(tools.join(INJECTOR_FILES[1])).expect("dll"),
+            b"old dll"
+        );
+        let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
+    }
+
+    #[test]
     #[ignore = "needs the LTK injector in Dekan's tools folder"]
     fn signed_files_replace_the_tools_and_leave_no_partial_behind() {
         let installed = Path::new(r"C:\Program Files\Dekan\tools");
@@ -236,15 +271,17 @@ mod tests {
     }
 
     #[test]
-    fn only_dekans_own_tools_folders_are_accepted_as_a_target() {
-        let install_dir = Path::new(r"C:\Program Files\Dekan");
-        let exe = Path::new(r"D:\Portable\Dekan\dekan.exe");
-        let accepts =
-            |tools: &str| is_dekan_tools_folder(Path::new(tools), Some(install_dir), Some(exe));
+    fn only_the_running_copys_own_tools_folder_is_accepted_as_a_target() {
+        let exe = Path::new(r"C:\Program Files\Dekan\dekan.exe");
+        let accepts = |tools: &str| is_dekan_tools_folder(Path::new(tools), Some(exe));
         assert!(accepts(r"C:\Program Files\Dekan\tools"));
-        assert!(accepts(r"D:\Portable\Dekan\tools"));
+        assert!(!accepts(r"D:\Portable\Dekan\tools"));
         assert!(!accepts(r"C:\Windows\System32"));
         assert!(!accepts(r"C:\Program Files\Dekan"));
+        assert!(!is_dekan_tools_folder(
+            Path::new(r"C:\Program Files\Dekan\tools"),
+            None
+        ));
     }
 
     #[test]
@@ -259,13 +296,10 @@ mod tests {
     }
 
     #[test]
-    fn the_elevated_command_line_quotes_both_paths() {
+    fn the_elevated_command_line_carries_the_release_version_not_a_folder_to_copy_from() {
         assert_eq!(
-            elevated_parameters(
-                Path::new(r"C:\Users\A B\staging"),
-                Path::new(r"C:\Program Files\Dekan\tools")
-            ),
-            r#"--install-injector "C:\Users\A B\staging" "C:\Program Files\Dekan\tools""#
+            elevated_parameters("1.29.3", Path::new(r"C:\Program Files\Dekan\tools")),
+            r#"--install-injector "1.29.3" "C:\Program Files\Dekan\tools""#
         );
     }
 }

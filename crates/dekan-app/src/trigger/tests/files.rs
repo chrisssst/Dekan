@@ -37,6 +37,23 @@ fn test_a_half_extracted_mod_directory_is_rebuilt_not_trusted() {
     );
     assert!(target.join("WAD").join("Ezreal.wad.client").is_file());
 
+    {
+        let file = std::fs::File::create(&archive_path).expect("updated archive");
+        let mut writer = zip::ZipWriter::new(file);
+        let options: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
+        writer
+            .start_file("WAD/Ezreal.en_US.wad.client", options)
+            .expect("wad");
+        std::io::Write::write_all(&mut writer, b"RW\x03\x04 updated").expect("wad body");
+        writer.finish().expect("finish archive");
+    }
+    prepare_mod_directory(&archive_path, &target).expect("refresh");
+    assert!(
+        target.join("WAD").join("Ezreal.en_US.wad.client").is_file()
+            && !target.join("WAD").join("Ezreal.wad.client").exists(),
+        "an updated archive replaces the old extraction"
+    );
+
     let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
 }
 

@@ -60,8 +60,39 @@ fn an_unknown_or_ambiguous_limit_is_not_guessed() {
     assert_eq!(dll_build_limit(&same), Some(0x6ad4_6e70));
 }
 
+fn untrusted(code: u32) -> Result<String, SignatureError> {
+    Err(SignatureError::Untrusted {
+        path: "x.dll".to_owned(),
+        code,
+    })
+}
+
 #[test]
-fn an_unsigned_injector_file_is_refused_with_its_path() {
+fn the_publishers_signature_and_an_unsigned_release_are_both_accepted() {
+    assert_eq!(judge(Ok(LTK_PUBLISHER.to_owned())), Ok(Provenance::Signed));
+    assert_eq!(
+        judge(untrusted(TRUST_E_NOSIGNATURE)),
+        Ok(Provenance::Unsigned)
+    );
+}
+
+#[test]
+fn a_foreign_signer_or_a_broken_signature_is_refused() {
+    let foreign = judge(Ok("Someone Else".to_owned())).expect_err("foreign signer");
+    assert!(foreign.contains("Someone Else"));
+    for code in [0x8009_6010, 0x800b_0003, 0x800b_0111] {
+        assert!(judge(untrusted(code)).is_err(), "{code:#x}");
+    }
+    assert!(
+        judge(Err(SignatureError::NoSigner {
+            path: "x.dll".to_owned()
+        }))
+        .is_err()
+    );
+}
+
+#[test]
+fn a_file_windows_cannot_read_as_a_binary_is_refused_with_its_path() {
     let path = std::env::temp_dir().join(format!("dekan_trust_{}.dll", std::process::id()));
     std::fs::write(&path, b"MZ unsigned").expect("fixture");
     match verify_injector_file(&path) {
@@ -77,8 +108,25 @@ fn an_unsigned_injector_file_is_refused_with_its_path() {
 #[ignore = "needs the LTK injector in Dekan's tools folder"]
 fn the_installed_injector_is_trusted_and_names_its_limit() {
     let tools = Path::new(r"C:\Program Files\Dekan\tools");
-    verify_injector_file(&tools.join("ltk_patcher_host.exe")).expect("host trusted");
-    verify_injector_file(&tools.join("ltk_patcher_dll.dll")).expect("dll trusted");
+    verify_injector_file(&tools.join("ltk_patcher_host.exe")).expect("host accepted");
+    verify_injector_file(&tools.join("ltk_patcher_dll.dll")).expect("dll accepted");
     let dll = std::fs::read(tools.join("ltk_patcher_dll.dll")).expect("dll");
     assert!(dll_build_limit(&dll).is_some());
+}
+
+#[test]
+fn a_dll_that_only_serves_ltk_manager_is_recognised() {
+    let mut dll = vec![0x90; 64];
+    dll.extend_from_slice(b"host verification failed, refusing overlay: ");
+    assert!(dll_refuses_other_hosts(&dll));
+    assert!(!dll_refuses_other_hosts(&[0x90; 64]));
+}
+
+#[test]
+fn an_unsigned_binary_on_disk_is_accepted_as_unsigned() {
+    let exe = std::env::current_exe().expect("test binary");
+    assert!(matches!(
+        verify_injector_file(&exe),
+        Ok(Provenance::Unsigned)
+    ));
 }

@@ -90,9 +90,10 @@ impl Supervisor {
         info!("Supervisor: initiating shutdown");
         self.token.cancel();
 
+        let deadline = tokio::time::Instant::now() + grace;
         for supervised in self.handles {
             let abort = supervised.watcher.abort_handle();
-            match tokio::time::timeout(grace, supervised.watcher).await {
+            match tokio::time::timeout_at(deadline, supervised.watcher).await {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {
                     error!(task = supervised.name, error = %e, "Supervisor watch failed during shutdown");
@@ -173,6 +174,19 @@ mod tests {
         });
         supervisor.shutdown_within(Duration::from_millis(50)).await;
         assert_eq!(finished.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_stuck_tasks_share_one_grace_instead_of_one_each() {
+        let mut supervisor = Supervisor::new(CancellationToken::new());
+        for name in ["stuck-a", "stuck-b", "stuck-c", "stuck-d"] {
+            supervisor.spawn(name, |_token| async {
+                tokio::time::sleep(Duration::from_secs(3600)).await;
+            });
+        }
+        let started = std::time::Instant::now();
+        supervisor.shutdown_within(Duration::from_millis(200)).await;
+        assert!(started.elapsed() < Duration::from_millis(600));
     }
 
     #[test]

@@ -92,7 +92,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
+async fn test_pipeline_aborts_before_building_on_an_injector_windows_cannot_verify() {
     let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_hash");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -107,7 +107,7 @@ async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
 
     assert!(
         matches!(result, Err(InjectError::UntrustedInjector { .. })),
-        "an injector without the publisher's signature must stop the pipeline"
+        "an injector Windows cannot read as a binary must stop the pipeline"
     );
     assert!(matches!(
         rx.borrow().injection,
@@ -115,6 +115,35 @@ async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
     ));
 
     std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[tokio::test]
+async fn test_a_dll_that_only_serves_ltk_manager_stops_the_pipeline() {
+    let dir = std::env::temp_dir().join(format!("dekan_test_host_lock_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let pe =
+        std::fs::read(std::env::current_exe().expect("test binary")).expect("read test binary");
+    let host = dir.join("ltk_patcher_host.exe");
+    std::fs::write(&host, &pe).expect("host");
+    let mut dll = pe;
+    dll.extend_from_slice(b"host verification failed");
+    std::fs::write(dir.join("ltk_patcher_dll.dll"), dll).expect("dll");
+
+    let (tx, rx) = new_state_channel();
+    let pipeline = InjectionPipeline::new(temp_config(&dir, host), Some(tx));
+    let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
+
+    assert!(
+        matches!(&result, Err(InjectError::UntrustedInjector { reason, .. }) if reason.contains("only serves LTK Manager")),
+        "{:?}",
+        result.err()
+    );
+    assert!(matches!(
+        rx.borrow().injection,
+        InjectionStatus::Failed { .. }
+    ));
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
 }
 
 async fn fake_host(
@@ -201,6 +230,29 @@ async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
         InjectionStatus::PatcherExited { code: 0 },
         "an overlay process that died cannot be reported as merely unconfirmed"
     );
+}
+
+#[tokio::test]
+async fn test_a_patcher_reporting_failure_is_failed_not_unconfirmed() {
+    let budget = Duration::from_secs(10);
+    let (pipeline, mut overlay) = fake_host(
+        "failed",
+        &[
+            "echo status 0.01 injecting scanning",
+            "echo status 1.00 failed DLL never attached",
+            STALL,
+        ],
+        budget,
+    )
+    .await;
+
+    assert_eq!(
+        pipeline.confirm_hook(&mut overlay, budget).await,
+        InjectionStatus::Failed {
+            error: InjectError::HookFailed.to_string()
+        }
+    );
+    overlay.shutdown().await;
 }
 
 #[tokio::test]

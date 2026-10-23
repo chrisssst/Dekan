@@ -15,6 +15,8 @@ pub enum PatcherSignal {
     Armed,
 
     Hooked,
+
+    Failed,
 }
 
 pub struct OverlayProcess {
@@ -139,6 +141,7 @@ impl OverlayProcess {
                         self.hooked = true;
                         return Ok(());
                     }
+                    Some(PatcherSignal::Failed) => return Err(InjectError::HookFailed),
                     Some(signal) if signal == wanted => return Ok(()),
                     Some(_) => {}
                     None => {
@@ -152,6 +155,15 @@ impl OverlayProcess {
         tokio::time::timeout(timeout, wait)
             .await
             .unwrap_or_else(|_| Err(unconfirmed()))
+    }
+
+    pub fn ready_for_next_game(&mut self) -> Result<(), i32> {
+        if let Some(code) = self.exited() {
+            return Err(code);
+        }
+        self.hooked = false;
+        while self.signals.try_recv().is_ok() {}
+        Ok(())
     }
 
     pub fn exited(&mut self) -> Option<i32> {
@@ -301,7 +313,7 @@ async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSende
                     } else {
                         error!(target: "overlay::ltk", reason = %message, "Injection failed; the skin will not load");
                     }
-                    None
+                    Some(PatcherSignal::Failed)
                 }
             },
             HostEvent::DllLog { level, message } => {
@@ -311,6 +323,8 @@ async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSende
                     info!(target: "overlay::dll", reason = %message, "The patcher reported status c0000229, expected with the default hook flags");
                 } else if ltk_host::joined_too_late(message) {
                     warn!(target: "overlay::dll", reason = %message, "The patcher DLL reached the game after it had started loading and stood down; the stock skin loads this match");
+                } else if ltk_host::refused_this_host(message) {
+                    error!(target: "overlay::dll", reason = %message, "The patcher DLL only serves LTK Manager and refused the overlay; the stock skin loads this match. Install the injector the control panel offers");
                 } else if let Some(wad) = ltk_host::redirected_wad(message) {
                     info!(target: "overlay::dll", wad = %wad, "The game opened this archive from the overlay");
                 } else if ltk_host::is_dll_failure(level, message) {

@@ -183,3 +183,11 @@ fn test_only_the_terminated_externally_code_blames_another_program() {
     assert!(!closed_by_another_program(0));
     assert!(!closed_by_another_program(-1_073_741_819));
 }
+
+#[test]
+fn test_a_host_refusal_is_told_apart_from_other_lines() {
+    assert!(refused_this_host(
+        "ltk_patcher_dll::verify: host verification failed, refusing overlay: [VRF00000008] (27888,ltk-manager.exe)"
+    ));
+    assert!(!refused_this_host("init done"));
+}

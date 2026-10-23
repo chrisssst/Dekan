@@ -177,6 +177,11 @@ pub fn joined_too_late(message: &str) -> bool {
     message.contains("joined too late")
 }
 
+#[must_use]
+pub fn refused_this_host(message: &str) -> bool {
+    message.contains("host verification failed")
+}
+
 const TERMINATED_EXTERNALLY: u32 = 0x4001_0004;
 
 #[must_use]
