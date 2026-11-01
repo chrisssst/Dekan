@@ -10,7 +10,7 @@
     "test": "node --test \"test/*.test.ts\""
   },
   "devDependencies": {
-    "wrangler": "^4.142.0",
+    "wrangler": "^4.155.0",
     "@cloudflare/workers-types": "^5.20260923.1",
     "typescript": "^7.0.2"
   }
