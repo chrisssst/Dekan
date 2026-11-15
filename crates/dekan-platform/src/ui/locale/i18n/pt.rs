@@ -63,7 +63,7 @@ pub(super) static PORTUGUESE: Text = Text {
     check_client: "Cliente do League",
     check_privileges: "Privilégios do Dekan",
     detail_ok: "OK",
-    detail_injector_missing: "bullet-br.exe ou bullet-br.dll ausente",
+    detail_injector_missing: "arquivos do motor do Dekan ausentes",
     detail_game_missing: "pasta do jogo não encontrada",
     detail_client_connected: "conectado",
     detail_client_waiting: "aguardando o cliente abrir",
@@ -95,9 +95,9 @@ Não: continua nesta versão; dá para atualizar depois pela página de download
     panel_export_diagnostics: "Exportar diagnóstico",
 
     missing_tools_title: "Dekan — Motor nativo ausente",
-    missing_tools_body: "O motor nativo do Dekan (bullet-br.exe e bullet-br.dll) não está na pasta 'tools' do Dekan.\n\nReinstale o Dekan para restaurá-lo.",
+    missing_tools_body: "Os arquivos do motor não foram encontrados na pasta 'tools' do Dekan.\n\nInstale uma versão oficial do Dekan que inclua o motor.",
     broken_tools_title: "Dekan — Motor nativo inválido",
-    broken_tools_body: "Um arquivo do motor nativo (bullet-br.exe ou bullet-br.dll) não está assinado pelo editor do Dekan.\n\nReinstale o Dekan a partir da versão oficial.",
+    broken_tools_body: "Não foi possível verificar a assinatura digital do motor do Dekan.\n\nInstale uma versão oficial do Dekan que inclua o motor.",
 
     already_running_title: "Dekan já está aberto",
     already_running_body: "O Dekan já está em execução em segundo plano.\n\nProcure o ícone do Dekan na \

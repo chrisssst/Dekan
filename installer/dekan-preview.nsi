@@ -22,7 +22,7 @@ VIAddVersionKey "LegalCopyright" "See LICENSE.txt for copyright and MIT notices.
 !define MUI_UNICON "../assets/dekan.ico"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "Dekan 2.1 Kurulumu"
-!define MUI_WELCOMEPAGE_TEXT "Dekan 2.1 uygulama önizlemesini kurar.$\r$\n$\r$\nBu paket, mevcut Dekan kurulumunun üzerine yazmaz. Oyun özellikleri için yetkili motor ve GitHub giriş yapılandırması gerekir."
+!define MUI_WELCOMEPAGE_TEXT "Dekan 2.1 uygulama önizlemesini kurar.$\r$\n$\r$\nGitHub giriş ayarı dahildir. Oyun özellikleri için bu pakette bulunmayan yetkili motor gerekir."
 !insertmacro MUI_PAGE_WELCOME
 !define MUI_PAGE_HEADER_TEXT "Dekan 2.1 Kurulum Koşulları"
 !define MUI_PAGE_HEADER_SUBTEXT "Dekan 2.1 kurulumuna devam etmeden önce aşağıdaki bilgileri okuyun."
