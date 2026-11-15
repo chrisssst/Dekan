@@ -17,12 +17,12 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <a href="https://discord.gg/dekan"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/e2dH2nUjd9"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/chrisssst/Dekan/releases/latest"><b>Download</b></a> ·
-  <a href="https://discord.gg/dekan"><b>Discord community</b></a> ·
+  <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
   <a href="https://github.com/chrisssst/Dekan/issues"><b>Report a bug</b></a>
 </p>
 
@@ -43,7 +43,6 @@ it, and when the game starts it reads that copy instead of its own. The game ins
 ## Features
 
 - **Every skin and chroma**, including form skins, chosen in champion select and loaded when the game starts.
-- **Dekan features**: Classic, Crimson and Obsidian themes, Discord Rich Presence and your existing preferences.
 - **Random skin and history**: roll one, or reuse the last skin you played on each champion.
 - **Custom mods**: `.fantome`, `.zip` and `.modpkg`, checked and adjusted against the current patch before use.
 - **Classic Rift**: legacy champion models, generated from your installed game.
@@ -53,7 +52,7 @@ it, and when the game starts it reads that copy instead of its own. The game ins
 - **Safe by design**: runs without administrator rights, never writes to the game folder, verifies every binary
   and collects no telemetry.
 - **Updates you approve**, verified against the release's signed checksum list.
-- Turkish (default) and English. **Free and open source**: if you paid for it, you were scammed.
+- English, Portuguese and Spanish. **Free and open source**: if you paid for it, you were scammed.
 
 ## Installation
 
@@ -68,20 +67,12 @@ it, and when the game starts it reads that copy instead of its own. The game ins
    The script checks the installer against the release's `SHA256SUMS` and its Authenticode signature before
    installing.
 
-2. **Add the injector.** Dekan uses two files from League Toolkit, `ltk_patcher_host.exe` and
-   `ltk_patcher_dll.dll`, which are not bundled. On first start Dekan offers to download them from the newest usable
-   [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) release, refuses any file with a foreign or broken signature and copies them
-   into `C:\Program Files\Dekan\tools` (Windows asks for permission only for that copy). To copy them by hand
-   from an installed LTK Manager, in PowerShell **as administrator**:
-
-   ```powershell
-   Copy-Item "$env:ProgramFiles\LTK Manager\ltk_patcher_host.exe", "$env:ProgramFiles\LTK Manager\ltk_patcher_dll.dll" "$env:ProgramFiles\Dekan\tools" -Force
-   ```
-
-   Dekan accepts the files signed by League Toolkit's publisher (Natoken LLC) or published unsigned in an official
-   LTK Manager release, refuses a foreign or broken signature, refuses DLLs restricted to LTK Manager, and installs a compatible injector after a patch.
+2. **Preview scope.** The local Dekan 2.1 installer contains the rebuilt app only. It requires a configured Dekan GitHub OAuth client and an authorized, signed compatible engine before game startup can proceed. See [BUILD.md](BUILD.md).
 
 3. **Start Dekan** from the Start menu, normally (not as administrator). It lives in the system tray.
+   On the first start Dekan asks you to sign in with GitHub: it shows a code, opens github.com and you enter the
+   code there. Dekan then checks that your account starred this repository. The check repeats on every start; while
+   offline, a check from the last 7 days is accepted. The sign-in is stored for your Windows account only.
 
 ## Usage
 
@@ -93,16 +84,14 @@ Custom mods go into the category folders under `%LOCALAPPDATA%\Dekan\custom_mods
 **Mods** tab. Party rooms are created from the tray, or offered automatically when friends running Dekan share
 your lobby. Optional settings are listed in [`.env.example`](.env.example).
 
-How it works, step by step: [docs/flows.md](docs/flows.md).
-
 ## Troubleshooting
 
 Logs are in `%LOCALAPPDATA%\Dekan\logs` (the tray opens the folder); `DEKAN_LOG=debug` adds detail. **Export
 diagnostics** in the control panel zips everything needed for a report. If a skin or mod breaks match loading,
-turn off **Inject skins** in the control panel. Close LTK Manager while Dekan runs: two injectors conflict.
+turn off **Inject skins** in the control panel. Close other skin tools while Dekan runs: two injectors conflict.
 
 Attach the log when you open an [issue](https://github.com/chrisssst/Dekan/issues), or ask on
-[Discord](https://discord.gg/dekan). Security issues go through a
+[Discord](https://discord.gg/e2dH2nUjd9). Security issues go through a
 [private advisory](https://github.com/chrisssst/Dekan/security/advisories/new).
 
 ## Building from source
@@ -113,13 +102,12 @@ cargo xtask package
 cargo xtask installer
 ```
 
-The crates, CI/CD and release flow are described in [docs/](docs/README.md) and
-[docs/build-and-ci.md](docs/build-and-ci.md). Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## Acknowledgements
 
 Dekan was inspired by [Rose](https://github.com/Alban1911/Rose) and built by studying the open projects listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Dekan is maintained by **chrisssst**.
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Maintained by **Dekan** — [Dekan community](https://discord.gg/dekan).
 
 ## Disclaimer
 
@@ -133,7 +121,13 @@ affiliated with or endorsed by Riot Games; League of Legends is a trademark of R
   <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
 </p>
 
-## License
+## License & Intellectual Property
 
-[MIT](LICENSE). The LTK patcher binaries are not part of this repository and are governed by the LTK Patcher
-License; every third-party license is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **Public Repository:** The source code in this repository is licensed under the [MIT License](LICENSE).
+- **Proprietary Native Engine & DLL:** The native injector host `bullet-br.exe`, native DLL `bullet-br.dll`,
+  and native IPC protocols are **closed-source proprietary software** owned exclusively by Dekan and maintained in
+  a private repository. They are NOT covered by the MIT license.
+  - **No Commercial Use:** Commercialization, monetization, sale, or paid distribution of the native binaries is strictly prohibited.
+  - **No Reverse Engineering:** Decompilation, disassembly, protocol extraction, or reverse engineering by any person, automated
+    tool, or AI agent/model is strictly prohibited.
+- **Third-Party Components:** Licensed under their respective terms as listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

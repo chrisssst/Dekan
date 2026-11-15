@@ -1,15 +1,5 @@
 use super::*;
-use std::path::PathBuf;
-
-async fn signals_of(output: &str) -> Vec<PatcherSignal> {
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    read_host_stdout(output.as_bytes(), tx).await;
-    let mut signals = Vec::new();
-    while let Ok(signal) = rx.try_recv() {
-        signals.push(signal);
-    }
-    signals
-}
+use tokio::process::Command;
 
 fn idle(signals: mpsc::UnboundedReceiver<PatcherSignal>) -> OverlayProcess {
     OverlayProcess {
@@ -23,48 +13,7 @@ fn idle(signals: mpsc::UnboundedReceiver<PatcherSignal>) -> OverlayProcess {
 }
 
 #[tokio::test]
-async fn a_missing_host_is_reported_not_swallowed() {
-    let res = OverlayProcess::spawn_ltk_host(
-        &PathBuf::from(r"C:\definitely\not\here.exe"),
-        &PathBuf::from(r"C:\overlay"),
-        0,
-        HostLogLevel::Info,
-    )
-    .await;
-    assert!(matches!(res, Err(InjectError::Process(_))));
-}
-
-#[tokio::test]
-async fn a_full_host_session_yields_armed_then_hooked_and_nothing_else() {
-    let output = "ok 0.00 config loglevel\r\n\
-                  status 0.01 injecting scanning for the game\r\n\
-                  dll 3.10 1234 5678 INFO ltk_patcher_dll: redirected wad: Zed.wad.client\r\n\
-                  dll 3.20 1234 5678 ERROR ltk_patcher_dll::verify: WAD scan failed status with c0000229\r\n\
-                  error 3.30 something odd\r\n\
-                  noise that is not the host protocol\r\n\
-                  status 3.40 injected dll attached\r\n\
-                  status 9.00 waiting for exit\r\n\
-                  status 60.0 exited game closed\r\n";
-    assert_eq!(
-        signals_of(output).await,
-        vec![
-            PatcherSignal::Armed,
-            PatcherSignal::Hooked,
-            PatcherSignal::Hooked
-        ]
-    );
-}
-
-#[tokio::test]
-async fn a_failed_injection_never_reads_as_hooked_and_ends_the_wait() {
-    let output = "status 0.01 injecting scanning\n\
-                  status 60.0 failed DLL never attached after 60s\n\
-                  status 60.1 exited\n";
-    assert_eq!(
-        signals_of(output).await,
-        vec![PatcherSignal::Armed, PatcherSignal::Failed]
-    );
-
+async fn a_failed_injection_ends_the_wait() {
     let (tx, rx) = mpsc::unbounded_channel();
     let mut overlay = idle(rx);
     tx.send(PatcherSignal::Armed).expect("send");
@@ -73,12 +22,6 @@ async fn a_failed_injection_never_reads_as_hooked_and_ends_the_wait() {
         .wait_for(PatcherSignal::Hooked, Duration::from_secs(30))
         .await;
     assert!(matches!(waited, Err(InjectError::HookFailed)));
-}
-
-#[tokio::test]
-async fn legacy_status_text_is_not_a_signal() {
-    let output = "Status: Waiting for exit\nStatus: Waiting for league match to start\n";
-    assert!(signals_of(output).await.is_empty());
 }
 
 #[tokio::test]
@@ -126,16 +69,6 @@ async fn a_hook_before_the_armed_line_counts_as_armed_and_stays_known() {
 }
 
 #[tokio::test]
-async fn output_that_is_not_utf8_does_not_stop_the_reader() {
-    let mut output =
-        b"dll 3.10 1 2 INFO ltk_patcher_dll: redirected wad: Usu\xe1rios.wad.client\n".to_vec();
-    output.extend_from_slice(b"status 3.40 injected dll attached\n");
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    read_host_stdout(output.as_slice(), tx).await;
-    assert_eq!(rx.try_recv().ok(), Some(PatcherSignal::Hooked));
-}
-
-#[tokio::test]
 async fn a_reconnect_waits_for_a_new_hook_instead_of_the_first_games_one() {
     let (tx, rx) = mpsc::unbounded_channel();
     let mut overlay = idle(rx);
@@ -154,13 +87,6 @@ async fn a_reconnect_waits_for_a_new_hook_instead_of_the_first_games_one() {
         reconnect,
         Err(InjectError::HookUnconfirmed { .. })
     ));
-}
-
-#[tokio::test]
-async fn a_dll_refusing_this_host_is_not_read_as_hooked() {
-    let output = "status 0.01 injecting scanning\n\
-                  dll 5.20 1234 5678 ERROR ltk_patcher_dll::verify: host verification failed, refusing overlay: [VRF00000008]\n";
-    assert_eq!(signals_of(output).await, vec![PatcherSignal::Armed]);
 }
 
 #[tokio::test]

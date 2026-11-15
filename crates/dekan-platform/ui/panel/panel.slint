@@ -15,8 +15,6 @@ export component ControlPanel inherits Window {
     in property <bool> auto-accept;
     in property <bool> autostart;
     in property <string> update-line;
-    in property <string> ltk-line;
-    in property <string> ltk-download;
     in property <int> attention;
     in property <[PanelCheckRow]> checks;
     in-out property <int> tab;
@@ -143,18 +141,13 @@ export component ControlPanel inherits Window {
                             action: root.labels.update-download;
                             activated => { root.action(PanelAction.open-release); }
                         }
-                        if root.ltk-line != "": Notice {
-                            line: root.ltk-line;
-                            action: root.ltk-download;
-                            activated => { root.action(PanelAction.install-injector); }
-                        }
                         if root.attention > 0: Notice {
                             warning: true;
                             line: root.labels.attention + " " + root.attention;
                             action: root.labels.see-diagnostics;
                             activated => { root.tab = 3; }
                         }
-                        if root.update-line == "" && root.ltk-line == "" && root.attention == 0: Text {
+                        if root.update-line == "" && root.attention == 0: Text {
                             text: root.labels.all-clear;
                             color: Theme.muted;
                             font-size: Theme.text-base;
@@ -313,7 +306,7 @@ export component ControlPanel inherits Window {
             if -scroll.content-y + scroll.visible-height < scroll.content-height - 2px: Rectangle {
                 y: parent.height - self.height;
                 height: 36px;
-                background: @linear-gradient(180deg, Theme.bg-0.with-alpha(0) 0%, Theme.bg-0.with-alpha(0.95) 100%);
+                background: @linear-gradient(180deg, #060a1200 0%, #060a12f2 100%);
             }
         }
         Rectangle {

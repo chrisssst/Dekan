@@ -1,5 +1,5 @@
 use crate::dekan_data_dir;
-use crate::package::USER_SUPPLIED_TOOLS;
+use crate::package::SHIPPED_TOOLS;
 
 use std::path::{Path, PathBuf};
 
@@ -75,9 +75,9 @@ pub fn audit_files(
                 checks.push(check(
                     verdict.is_ok(),
                     format!(
-                        "{} is signed by {} or unsigned ({})",
+                        "{} is signed by Dekan's publisher {} ({})",
                         path.display(),
-                        dekan_inject::trust::LTK_PUBLISHER,
+                        dekan_inject::trust::NATIVE_PUBLISHER.unwrap_or("not pinned in this build"),
                         verdict.err().unwrap_or_else(|| "verified".to_owned())
                     ),
                 ));
@@ -280,24 +280,10 @@ pub(crate) fn run_install_audit(args: &[String]) {
         program_dir,
         data_dir: dekan_data_dir(),
     };
-    let tools_dir = layout.program_dir.join("tools");
-    let mut tools = Vec::with_capacity(USER_SUPPLIED_TOOLS.len());
-    for name in USER_SUPPLIED_TOOLS {
-        if tools_dir.join(name).is_file() {
-            tools.push(name);
-        } else {
-            println!(
-                "  [INFO] {name} not in {} yet (the user supplies it)",
-                tools_dir.display()
-            );
-        }
-    }
     let trusted = |path: &std::path::Path| -> Result<(), String> {
-        dekan_inject::trust::verify_injector_file(path)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        dekan_inject::trust::verify_native_file(path).map_err(|e| e.to_string())
     };
-    let mut checks = audit_files(&layout, phase, &tools, &trusted);
+    let mut checks = audit_files(&layout, phase, &SHIPPED_TOOLS, &trusted);
     checks.extend(audit_registry(
         phase,
         &layout.program_dir.join("dekan.exe"),

@@ -30,7 +30,10 @@ fn main() {
         res.set("ProductName", "Dekan")
             .set("FileDescription", "Dekan - League of Legends skin changer")
             .set("CompanyName", "Dekan")
-            .set("LegalCopyright", "Copyright (c) 2026 Dekan. MIT License.")
+            .set(
+                "LegalCopyright",
+                "See LICENSE.txt for copyright and MIT notices.",
+            )
             .set("InternalName", "dekan")
             .set("OriginalFilename", "dekan.exe")
             .set("Comments", "https://github.com/chrisssst/Dekan")
@@ -58,6 +61,11 @@ fn main() {
         }
         if let Err(e) = res.compile() {
             panic!("failed to compile Windows resources (icon, version info, manifest): {e}");
+        }
+        if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu") {
+            let out_dir = std::env::var_os("OUT_DIR").unwrap();
+            let resource = std::path::PathBuf::from(out_dir).join("resource.o");
+            println!("cargo:rustc-link-arg-bins={}", resource.display());
         }
     }
 }

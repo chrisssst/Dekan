@@ -18,6 +18,7 @@ name = "dekan"
 path = "src/main.rs"
 
 [dependencies]
+discord-rich-presence = "=1.1.0"
 dekan-core = { path = "../dekan-core" }
 dekan-platform = { path = "../dekan-platform" }
 dekan-wad = { path = "../dekan-wad" }
@@ -33,13 +34,13 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 futures-util = { workspace = true }
 zip.workspace = true
+uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest = { workspace = true }
 ring.workspace = true
 sha2.workspace = true
 thiserror = { workspace = true }
-discord-rich-presence = "1.1.0"
 
 [build-dependencies]
 winres = "0.1"

@@ -3,6 +3,8 @@ use std::sync::OnceLock;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
     Turkish,
+    Portuguese,
+    Spanish,
     English,
 }
 
@@ -12,6 +14,8 @@ impl Language {
         let language = locale.split(['_', '-']).next()?.to_ascii_lowercase();
         match language.as_str() {
             "tr" => Some(Self::Turkish),
+            "pt" => Some(Self::Portuguese),
+            "es" => Some(Self::Spanish),
             "en" => Some(Self::English),
             _ => None,
         }
@@ -43,20 +47,26 @@ impl Language {
     #[cfg(windows)]
     fn from_primary_lang_id(primary: u16) -> Self {
         match primary {
-            0x09 => Self::English,
-            _ => Self::Turkish,
+            0x1f => Self::Turkish,
+            0x16 => Self::Portuguese,
+            0x0a => Self::Spanish,
+            _ => Self::English,
         }
     }
 
     #[must_use]
     pub fn for_locale(locale: Option<&str>) -> Self {
-        locale.and_then(Self::from_locale).unwrap_or(Self::Turkish)
+        locale
+            .and_then(Self::from_locale)
+            .unwrap_or_else(Self::of_windows)
     }
 
     #[must_use]
     pub fn text(self) -> &'static Text {
         match self {
             Self::Turkish => &TURKISH,
+            Self::Portuguese => &PORTUGUESE,
+            Self::Spanish => &SPANISH,
             Self::English => &ENGLISH,
         }
     }
@@ -81,7 +91,7 @@ pub fn reset_active_language() {
 pub fn active_language() -> Language {
     match *ACTIVE_LANGUAGE.read().unwrap_or_else(|e| e.into_inner()) {
         Some(lang) => lang,
-        None => Language::Turkish,
+        None => Language::of_windows(),
     }
 }
 
@@ -92,6 +102,11 @@ pub fn text() -> &'static Text {
 
 #[derive(Debug)]
 pub struct Text {
+    pub panel_theme: &'static str,
+    pub panel_theme_classic: &'static str,
+    pub panel_theme_crimson: &'static str,
+    pub panel_theme_obsidian: &'static str,
+
     pub status_tools_missing: &'static str,
     pub status_waiting_league: &'static str,
     pub status_connected: &'static str,
@@ -131,10 +146,6 @@ pub struct Text {
     pub menu_open_panel: &'static str,
     pub menu_random_skin: &'static str,
     pub panel_section_options: &'static str,
-    pub panel_theme: &'static str,
-    pub panel_theme_classic: &'static str,
-    pub panel_theme_crimson: &'static str,
-    pub panel_theme_obsidian: &'static str,
     pub panel_section_diagnostics: &'static str,
     pub panel_tab_home: &'static str,
     pub panel_tab_party: &'static str,
@@ -151,17 +162,12 @@ pub struct Text {
     pub check_injector: &'static str,
     pub check_game: &'static str,
     pub check_client: &'static str,
-    pub check_dll: &'static str,
     pub check_privileges: &'static str,
     pub detail_ok: &'static str,
     pub detail_injector_missing: &'static str,
     pub detail_game_missing: &'static str,
     pub detail_client_connected: &'static str,
     pub detail_client_waiting: &'static str,
-    pub detail_dll_days_left: &'static str,
-    pub detail_dll_past_limit: &'static str,
-    pub detail_dll_refused: &'static str,
-    pub detail_dll_unknown: &'static str,
     pub detail_elevated: &'static str,
     pub detail_not_elevated: &'static str,
     pub update_available_title: &'static str,
@@ -172,7 +178,6 @@ pub struct Text {
     pub update_failed_body: &'static str,
     pub panel_update_line: &'static str,
     pub panel_update_download: &'static str,
-    pub check_ltk: &'static str,
     pub folder_restore_mods: &'static str,
     pub custom_mods_restore_busy: &'static str,
     pub check_custom_mods: &'static str,
@@ -183,25 +188,10 @@ pub struct Text {
     pub custom_mods_restored_title: &'static str,
     pub custom_mods_restored_body: &'static str,
     pub custom_mods_restore_failed: &'static str,
-    pub detail_ltk_current: &'static str,
-    pub detail_ltk_unchecked: &'static str,
-    pub detail_ltk_new: &'static str,
-    pub detail_ltk_untrusted: &'static str,
-    pub panel_ltk_missing_line: &'static str,
-    pub panel_ltk_new_line: &'static str,
-    pub panel_ltk_untrusted_line: &'static str,
-    pub panel_ltk_download: &'static str,
-    pub ltk_version_unknown: &'static str,
     pub panel_mark_problem: &'static str,
     pub panel_mark_problem_hint: &'static str,
     pub panel_export_diagnostics: &'static str,
 
-    pub injector_auto_title: &'static str,
-    pub injector_auto_body: &'static str,
-    pub injector_auto_failed: &'static str,
-    pub injector_installed_title: &'static str,
-    pub injector_installed_body: &'static str,
-    pub injector_install_declined: &'static str,
     pub missing_tools_title: &'static str,
     pub missing_tools_body: &'static str,
     pub broken_tools_title: &'static str,
@@ -313,6 +303,22 @@ pub struct Text {
     pub about_educational: &'static str,
     pub about_quote: &'static str,
     pub about_dismiss: &'static str,
+
+    pub star_gate_title: &'static str,
+    pub star_gate_intro: &'static str,
+    pub star_gate_sign_in: &'static str,
+    pub star_gate_open_repo: &'static str,
+    pub star_gate_recheck: &'static str,
+    pub star_gate_quit: &'static str,
+    pub star_gate_code_hint: &'static str,
+    pub star_gate_waiting: &'static str,
+    pub star_gate_checking: &'static str,
+    pub star_gate_missing_star: &'static str,
+    pub star_gate_granted: &'static str,
+    pub star_gate_denied: &'static str,
+    pub star_gate_expired: &'static str,
+    pub star_gate_unreachable: &'static str,
+    pub star_gate_unconfigured: &'static str,
 }
 
 #[must_use]
@@ -321,10 +327,15 @@ pub fn fill(template: &str, key: &str, value: &str) -> String {
 }
 
 mod en;
-mod tr;
+mod es;
+mod pt;
 
 use en::ENGLISH;
-use tr::TURKISH;
+use es::SPANISH;
+use pt::PORTUGUESE;
 
 #[cfg(test)]
 mod tests;
+
+mod tr;
+use tr::TURKISH;

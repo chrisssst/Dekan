@@ -164,7 +164,8 @@ fn test_import_archive_wrong_extension() {
     let err = import_archive(&root.0, ModCategory::Map, None, &source_file).unwrap_err();
     assert_eq!(err, ImportRefusal::UnsupportedExtension);
     for language in [
-        dekan_platform::i18n::Language::Turkish,
+        dekan_platform::i18n::Language::Portuguese,
+        dekan_platform::i18n::Language::Spanish,
         dekan_platform::i18n::Language::English,
     ] {
         assert!(err.describe(language.text()).contains(".fantome"));

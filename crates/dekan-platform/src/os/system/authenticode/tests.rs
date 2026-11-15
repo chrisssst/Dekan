@@ -26,10 +26,10 @@ fn a_missing_file_is_untrusted_not_a_panic() {
 }
 
 #[test]
-#[ignore = "needs a signed LTK injector in Dekan's tools folder"]
+#[ignore = "needs a signed native engine in Dekan's tools folder"]
 fn the_installed_injector_is_signed_by_its_publisher_and_a_flipped_byte_breaks_it() {
-    let dll = std::path::Path::new(r"C:\Program Files\Dekan\tools\ltk_patcher_dll.dll");
-    assert_eq!(signer(dll).expect("signed"), "Natoken LLC");
+    let dll = std::path::Path::new(r"C:\Program Files\Dekan\tools\bullet-br.dll");
+    assert!(!signer(dll).expect("signed").is_empty());
     let mut bytes = std::fs::read(dll).expect("read");
     let middle = bytes.len() / 2;
     bytes[middle] ^= 0xff;

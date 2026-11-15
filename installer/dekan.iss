@@ -9,9 +9,9 @@
 #endif
 #define MyAppPublisher "Dekan"
 #define MyAppDescription "League of Legends skin changer for Windows"
-#define MyAppCopyright "Copyright (c) 2026 Dekan. MIT License."
+#define MyAppCopyright "See LICENSE.txt for copyright and MIT notices."
 #define MyAppURL "https://github.com/chrisssst/Dekan"
-#define MyPublisherURL "https://github.com/chrisssst/Dekan"
+#define MyPublisherURL "https://discord.gg/dekan"
 #define MyAppExeName "dekan.exe"
 
 [Setup]
@@ -42,20 +42,22 @@ DisableProgramGroupPage=yes
 OutputDir=..\dist\installer
 OutputBaseFilename=Dekan-Setup-{#MyAppVersion}-x64
 SetupIconFile=..\assets\dekan.ico
-LicenseFile=..\LICENSE
+LicenseFile=dekan-kurulum-kosullari.txt
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
+AppMutex=Local\Dekan_SingleInstance_dekan
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
+Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -63,10 +65,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 
 [InstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Programs\Dekan"
-Type: files; Name: "{app}\tools\*.orig"
-Type: files; Name: "{app}\tools\*.bak"
-Type: files; Name: "{app}\tools\cloudflared.exe"
-Type: files; Name: "{app}\tools\tools.zip"
+Type: filesandordirs; Name: "{app}\tools\*"
 Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 
 [Dirs]
@@ -76,6 +75,8 @@ Name: "{localappdata}\Dekan\library"
 
 [Files]
 Source: "..\dist\dekan.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\tools\bullet-br.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\bullet-br.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\assets\dekan.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -102,15 +103,16 @@ Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 Type: filesandordirs; Name: "{localappdata}\Dekan\overlay"
 Type: filesandordirs; Name: "{localappdata}\Dekan\mods"
 Type: filesandordirs; Name: "{localappdata}\Dekan\tools"
-Type: files; Name: "{app}\tools\ltk_patcher_host.exe"
-Type: files; Name: "{app}\tools\ltk_patcher_dll.dll"
+Type: files; Name: "{app}\tools\bullet-br.exe"
+Type: files; Name: "{app}\tools\bullet-br.dll"
 Type: dirifempty; Name: "{app}\tools"
 Type: dirifempty; Name: "{app}\assets"
 Type: dirifempty; Name: "{app}"
 
 [CustomMessages]
-turkish.DeleteUserContent=Dekan tarafından kaydedilen özel skinler ve modlar da kaldırılsın mı?%n%n%1%n%nSaklamak için "Hayır" seçeneğini seçin.
+brazilianportuguese.DeleteUserContent=Remover também as skins e os mods personalizados salvos pelo Dekan?%n%n%1%n%nEscolha "Não" para mantê-los.
 english.DeleteUserContent=Also remove the skins and custom mods saved by Dekan?%n%n%1%n%nChoose "No" to keep them.
+spanish.DeleteUserContent=¿Quitar también los aspectos y los mods personalizados guardados por Dekan?%n%n%1%n%nElige "No" para conservarlos.
 
 [Code]
 function ShouldRelaunch: Boolean;

@@ -124,10 +124,7 @@ pub(crate) fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-pub(crate) const USER_SUPPLIED_TOOLS: [&str; 2] = [
-    dekan_inject::ltk_host::HOST_EXE,
-    dekan_inject::ltk_host::DLL_FILE,
-];
+pub(crate) const SHIPPED_TOOLS: [&str; 2] = ["bullet-br.exe", "bullet-br.dll"];
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {
@@ -189,6 +186,20 @@ pub(crate) fn run_installer(args: &[String]) {
                 .map(|dir| PathBuf::from(dir).join("Inno Setup 6").join("ISCC.exe")),
         )
         .collect();
+
+    for name in SHIPPED_TOOLS {
+        if !workspace_root
+            .join("dist")
+            .join("tools")
+            .join(name)
+            .is_file()
+        {
+            eprintln!(
+                "[ERROR] dist/tools/{name} ausente; o instalador exige o motor nativo em dist/tools."
+            );
+            std::process::exit(1);
+        }
+    }
 
     let Some(iscc) = iscc_candidates.iter().find(|p| p.exists()) else {
         eprintln!("[ERROR] ISCC.exe não encontrado. Instale o Inno Setup 6.");

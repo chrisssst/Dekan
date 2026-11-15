@@ -163,7 +163,7 @@ fn footer_counts_entries_or_shows_the_quote_only_in_portuguese() {
 
 #[test]
 fn champion_label_and_initials_handle_missing_and_unicode_names() {
-    let text = Language::Turkish.text();
+    let text = Language::Portuguese.text();
     let mut ahri = ahri();
     assert_eq!(champion_label(&ahri, text), "Ahri");
     ahri.champion_name.clear();
@@ -288,7 +288,7 @@ fn import_offers_every_category_once_with_a_label_in_every_language() {
     sorted.sort();
     sorted.dedup();
     assert_eq!(sorted.len(), ModCategory::ALL.len());
-    for language in [Language::Turkish, Language::English] {
+    for language in [Language::Portuguese, Language::Spanish, Language::English] {
         for category in &categories {
             assert!(
                 !category_label(*category, language.text()).is_empty(),

@@ -52,7 +52,7 @@ fn layout(root: &Path) -> Layout {
     }
 }
 
-const TOOLS: [&str; 1] = ["ltk_patcher_host.exe"];
+const TOOLS: [&str; 2] = ["bullet-br.exe", "bullet-br.dll"];
 
 #[test]
 fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
@@ -61,7 +61,8 @@ fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
     let tools = layout.program_dir.join("tools");
     std::fs::create_dir_all(&tools).expect("dir");
     std::fs::write(layout.program_dir.join("dekan.exe"), b"exe").expect("exe");
-    std::fs::write(tools.join("ltk_patcher_host.exe"), b"signed").expect("host");
+    std::fs::write(tools.join("bullet-br.exe"), b"signed").expect("host");
+    std::fs::write(tools.join("bullet-br.dll"), b"signed").expect("dll");
     let checks = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker);
     assert!(checks.iter().all(|c| c.ok), "{checks:#?}");
 
@@ -75,7 +76,7 @@ fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
     assert!(failed[0].contains("cloudflared.exe"));
 
     std::fs::remove_file(tools.join("cloudflared.exe")).expect("rm stray");
-    std::fs::write(tools.join("ltk_patcher_host.exe"), b"patched").expect("patched");
+    std::fs::write(tools.join("bullet-br.dll"), b"patched").expect("patched");
     let failed: Vec<String> = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker)
         .into_iter()
         .filter(|c| !c.ok)

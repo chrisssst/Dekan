@@ -5,7 +5,7 @@ use slint::Model;
 
 #[test]
 fn about_differs_from_the_intro_and_skips_empty_rows() {
-    for language in [Language::Turkish, Language::English] {
+    for language in [Language::Portuguese, Language::Spanish, Language::English] {
         let text = language.text();
         let about = about_content(text);
         let welcome = welcome_content(text);

@@ -8,10 +8,11 @@ logic that decides **what** to inject and **when**.
 1. **Single instance.** If Dekan is already running, the new process brings it to the front and exits.
 2. **User and logging.** It resolves the signed-in desktop user and starts a daily rotating log in
    `%LOCALAPPDATA%\Dekan\logs`. Logging never blocks the app, and any lines dropped under pressure are counted.
-3. **Discovery.** It finds the game install and the injector tools and checks the tools' publisher signature.
+3. **Discovery.** It finds the game install and Dekan's native engine (`bullet-br.exe` and `bullet-br.dll`, shipped
+   by the installer in the `tools` folder) and checks the engine's publisher signature. A missing or unsigned engine
+   stops the start and asks the user to reinstall Dekan.
 4. **Game build.** It reads the installed game build. After a patch, cached overlays and locale data are thrown
-   away. If the injector DLL does not support this build, the user is told right away and not in the middle of
-   a match.
+   away.
 5. **Warm-up.** The index of the game's archives is built in the background, so champion select does not have
    to wait for it.
 6. **Services.** It starts the supervised tasks: the League client observer, the selection window session, party
@@ -34,10 +35,10 @@ logic that decides **what** to inject and **when**.
 | File | Purpose |
 | --- | --- |
 | `main.rs` | Startup, tray, lifecycle and shutdown |
-| `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and patcher DLL reports |
+| `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and native engine file reports |
 | `boot/startup/update.rs` | The update question (Yes/No, once per version), the fallback to the download page, and running the verified installer after shutdown |
-| `boot/startup/injector.rs` | The startup injector check and the automatic or panel-requested injector install |
-| `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions (including the "mark a problem" log marker and the diagnostics export), and the supervised tasks the tray starts (notices, update and LTK checks, activation) |
+| `boot/startup/injector.rs` | The startup native engine check: a missing or unsigned engine stops the start with a message that asks to reinstall Dekan |
+| `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions (including the "mark a problem" log marker and the diagnostics export), and the supervised tasks the tray starts (notices, Dekan's own update check, activation) |
 | `trigger/mod.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
 | `trigger/arm/arm_key.rs`, `trigger/arm/arming.rs`, `trigger/arm/game_start.rs` | What to arm (keys, wanted skin, decision), arming and registering the patcher, and the game-start confirmation and late injection |
 | `trigger/prepare/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
@@ -60,15 +61,11 @@ logic that decides **what** to inject and **when**.
 | `selection/skin_sync/mod.rs` | Optional download of a skin library from a GitHub repository the user names in `DEKAN_SKIN_SYNC` (`owner/repo`); there is no built-in source |
 | `game/live_game/mod.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
 | `game/live_game/data.rs`, `game/live_game/logs.rs` | Parsing the live data API, and the game log, screenshots and diagnostics exports after a match |
-| `updates/injector_install.rs` | Installs the injector on request (startup refusal or the panel's **Install injector**): downloads both files from the newest signed LTK Manager tag, verifies the publisher's signature, stages them under the state folder and copies them into `tools` as `.partial` files that are verified again before the rename; when Windows denies the copy, `main.rs` reruns `dekan.exe --install-injector <version> <tools>` elevated, which downloads the files itself from the commit the release tag points at, verifies them the same way and accepts only the `tools` folder beside its own executable |
-| `updates/ltk_release/mod.rs` | Lists the published LTK Manager releases every 30 minutes and inspects the injector files of each release it has not seen yet, newest first, until one is accepted (signed by League Toolkit's publisher or unsigned; a foreign or broken signature is refused). That release is the version the control panel and the startup refusal point at; when its DLL differs from the installed one it is installed automatically once per version, outside ready check, champion select and the match, and the panel keeps offering **Install injector**. Also reads the installed DLL's SHA-256 and game-build limit, cached by size and modification time. Verdicts are cached per release in `ltk_releases.txt` and reset when the acceptance rule changes. Off with `DEKAN_UPDATE_CHECK=0` |
-| `updates/ltk_release/watch.rs` | The supervised task behind that check: first run after a minute, then every 30 minutes, publishing the latest verdict (`LtkNotice`) that the panel and the tray read |
-| `updates/ltk_release/fetch.rs` | The GitHub requests: release list, injector download and signature inspection |
 | `updates/update_check.rs` | Reads the latest published release from GitHub 15 s after launch and every six hours, and hands a newer one to the update question once; the control panel shows it too. Off with `DEKAN_UPDATE_CHECK=0` |
 | `updates/self_update/mod.rs` | Verifies and stages an update: the release assets, the Ed25519 signature of `SHA256SUMS` against the embedded release key, the installer's SHA-256, staging under `state/update` |
 | `game/auto_accept.rs` | Accepts the ready check after a short delay when the option is on, only if the player has not answered meanwhile |
 | `game/game_log_trace/mod.rs` | Picks the animation, mesh and skin lines out of the game log for the debug trace after a match |
-| `diagnostics/startup.rs` | The startup injector check: a missing or unsigned tool file refuses the start and names the files |
+| `diagnostics/startup.rs` | The native engine verdict behind the startup check: a missing or unsigned engine file refuses the start and names the files |
 | `diagnostics/control_panel/mod.rs` | Turns the app state into the control panel's snapshot: status lines, party line, game and tools found |
 | `diagnostics/control_panel/export.rs`, `diagnostics/control_panel/redact.rs` | The diagnostics export: a zip of the last three days of logs, the overlay and generated-skin manifests and any screenshots, written as `.partial` then renamed; `redact.rs` masks the user's profile path, every `Users\<name>` folder and UUIDs in the text files before they are zipped |
 | `trigger/support.rs` | Helpers for the trigger: turns the League client's crash reporting off so the injector checks archives lazily, waits for the match to end, and logs a changed wanted skin once |

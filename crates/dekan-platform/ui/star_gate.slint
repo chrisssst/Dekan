@@ -1,0 +1,157 @@
+import { Theme, ExposeLayer, GoldButton, Wordmark, Halo, Surface } from "theme.slint";
+
+export component StarGateWindow inherits Window {
+    in property <bool> expose-flip;
+    in property <string> version;
+    in property <string> heading;
+    in property <string> intro;
+    in property <string> sign-in-label;
+    in property <string> open-repo-label;
+    in property <string> recheck-label;
+    in property <string> quit-label;
+    in property <string> code-hint;
+    in property <string> code;
+    in property <string> message;
+    in property <bool> is-error;
+    in property <bool> busy;
+    in property <bool> can-recheck;
+    callback sign-in();
+    callback recheck();
+    callback open-repo();
+    callback quit();
+    title: "Dekan";
+    icon: @image-url("assets/logo.png");
+    preferred-width: 520px;
+    preferred-height: 470px;
+    min-width: 460px;
+    min-height: 430px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+
+    VerticalLayout {
+        padding-left: 28px;
+        padding-right: 28px;
+        padding-top: 22px;
+        padding-bottom: 24px;
+        spacing: 14px;
+        Rectangle {
+            height: 72px;
+            Halo {
+                x: -72px;
+                y: -64px;
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                Image {
+                    source: @image-url("assets/logo-56.png");
+                    width: 56px;
+                    height: 56px;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 5px;
+                    Wordmark {
+                        version: root.version;
+                        size: 11px;
+                    }
+                    Text {
+                        text: root.heading;
+                        color: Theme.gold-bright;
+                        font-family: Theme.serif;
+                        font-size: 20px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        Surface {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding-top: 16px;
+                padding-bottom: 16px;
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 12px;
+                alignment: start;
+                Text {
+                    text: root.intro;
+                    color: Theme.text;
+                    font-size: Theme.text-base;
+                    wrap: word-wrap;
+                }
+                if root.code != "": VerticalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: root.code-hint;
+                        color: Theme.muted;
+                        font-size: Theme.text-sm;
+                        wrap: word-wrap;
+                    }
+                    Rectangle {
+                        height: 48px;
+                        vertical-stretch: 0;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.line-gold;
+                        background: Theme.input;
+                        Text {
+                            text: root.code;
+                            color: Theme.gold-bright;
+                            font-family: "Consolas";
+                            font-size: Theme.text-xl;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            accessible-role: text;
+                            accessible-label: root.code;
+                        }
+                    }
+                }
+                if root.message != "": Text {
+                    text: root.message;
+                    color: root.is-error ? Theme.danger-text : Theme.gold-bright;
+                    font-size: Theme.text-sm;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            GoldButton {
+                min-height: 40px;
+                primary: true;
+                enabled: !root.busy;
+                font-size: Theme.text-base;
+                text: root.sign-in-label;
+                clicked => { root.sign-in(); }
+            }
+            GoldButton {
+                min-height: 40px;
+                font-size: Theme.text-base;
+                text: root.open-repo-label;
+                clicked => { root.open-repo(); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            GoldButton {
+                min-height: 36px;
+                enabled: root.can-recheck && !root.busy;
+                text: root.recheck-label;
+                clicked => { root.recheck(); }
+            }
+            GoldButton {
+                min-height: 36px;
+                danger: true;
+                text: root.quit-label;
+                clicked => { root.quit(); }
+            }
+        }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}

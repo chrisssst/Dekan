@@ -1,132 +1,118 @@
 use std::fs::File;
 use std::io::{Read, Seek, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
+use tracing::{debug, error, warn};
 use zip::ZipArchive;
 
-use tracing::{debug, error, warn};
-
-use super::{MAX_PATH_CHARS, path_units};
+use super::path::{ExtractLimits, link_on_the_way, validate_archive_path};
 use crate::error::PlatformError;
+use crate::os::storage::fs::path_units;
 
-#[derive(Debug, Clone)]
-pub struct ExtractLimits {
-    pub max_total_bytes: u64,
+#[cfg(windows)]
+fn open_pinned_root(dest_dir: &Path, canonical_dest: &Path) -> Result<File, PlatformError> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_LIST_DIRECTORY: u32 = 0x0000_0001;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-    pub max_single_file_bytes: u64,
-
-    pub max_entries: usize,
-
-    pub max_path_len: usize,
+    let root_file = std::fs::OpenOptions::new()
+        .access_mode(FILE_LIST_DIRECTORY)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(dest_dir)
+        .map_err(|source| PlatformError::Io {
+            context: format!(
+                "failed to open pinned destination directory '{}'",
+                dest_dir.display()
+            ),
+            source,
+        })?;
+    verify_handle_within_root(&root_file, canonical_dest)?;
+    Ok(root_file)
 }
 
-impl Default for ExtractLimits {
-    fn default() -> Self {
-        Self {
-            max_total_bytes: 2 * 1024 * 1024 * 1024,
-            max_single_file_bytes: 500 * 1024 * 1024,
-            max_entries: 10_000,
-            max_path_len: MAX_PATH_CHARS,
-        }
-    }
+#[cfg(not(windows))]
+fn open_pinned_root(dest_dir: &Path, _canonical_dest: &Path) -> Result<File, PlatformError> {
+    File::open(dest_dir).map_err(|source| PlatformError::Io {
+        context: format!(
+            "failed to open destination directory '{}'",
+            dest_dir.display()
+        ),
+        source,
+    })
 }
 
-fn is_portable_segment(segment: &std::ffi::OsStr) -> bool {
-    const RESERVED: [&str; 22] = [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    ];
-    let Some(name) = segment.to_str() else {
-        return false;
+#[cfg(windows)]
+fn verify_handle_within_root(file: &File, canonical_dest: &Path) -> Result<(), PlatformError> {
+    use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::io::AsRawHandle;
+    use std::path::PathBuf;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS, GetFinalPathNameByHandleW,
+        VOLUME_NAME_DOS,
     };
-    let stem = name.split('.').next().unwrap_or(name).trim_end();
-    !name.is_empty()
-        && !name.ends_with(['.', ' '])
-        && !name
-            .chars()
-            .any(|c| c.is_control() || matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*'))
-        && !RESERVED
-            .iter()
-            .any(|device| stem.eq_ignore_ascii_case(device))
-}
 
-pub fn validate_archive_path(entry_path: &Path) -> Result<PathBuf, PlatformError> {
-    let mut clean_path = PathBuf::new();
-
-    for comp in entry_path.components() {
-        match comp {
-            Component::Normal(segment) if is_portable_segment(segment) => clean_path.push(segment),
-            Component::Normal(_) => {
-                warn!(
-                    entry = %entry_path.display(),
-                    "Refused an archive entry with a name Windows treats specially"
-                );
-                return Err(PlatformError::Security(format!(
-                    "archive entry has a reserved or unsafe name: '{}'",
-                    entry_path.display()
-                )));
-            }
-            Component::ParentDir => {
-                warn!(
-                    entry = %entry_path.display(),
-                    "Refused an archive entry with parent-directory traversal"
-                );
-                return Err(PlatformError::Security(format!(
-                    "archive entry contains parent directory traversal ('..'): '{}'",
-                    entry_path.display()
-                )));
-            }
-            Component::RootDir | Component::Prefix(_) => {
-                warn!(
-                    entry = %entry_path.display(),
-                    "Refused an archive entry with an absolute or drive-qualified path"
-                );
-                return Err(PlatformError::Security(format!(
-                    "archive entry specifies absolute or drive path: '{}'",
-                    entry_path.display()
-                )));
-            }
-            Component::CurDir => {}
-        }
-    }
-
-    if clean_path.as_os_str().is_empty() {
+    let handle = HANDLE(file.as_raw_handle() as _);
+    let mut buffer = [0u16; 1024];
+    let flags = GETFINALPATHNAMEBYHANDLE_FLAGS(FILE_NAME_NORMALIZED.0 | VOLUME_NAME_DOS.0);
+    let len = unsafe { GetFinalPathNameByHandleW(handle, &mut buffer, flags) };
+    if len == 0 || len as usize >= buffer.len() {
         return Err(PlatformError::Security(
-            "archive entry resolves to empty path".into(),
+            "could not resolve final path of created file to verify reparse point safety".into(),
         ));
     }
+    let final_os_str = std::ffi::OsString::from_wide(&buffer[..len as usize]);
+    let final_path = PathBuf::from(final_os_str);
 
-    Ok(clean_path)
-}
-
-fn link_on_the_way(dest_dir: &Path, relative: &Path) -> Result<Option<PathBuf>, PlatformError> {
-    let mut current = dest_dir.to_path_buf();
-    for component in relative.components() {
-        current.push(component);
-        match std::fs::symlink_metadata(&current) {
-            Ok(meta) if meta.file_type().is_symlink() => return Ok(Some(current)),
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => {
-                warn!(
-                    path = %current.display(),
-                    error = %e,
-                    "Refused an archive entry whose path could not be checked for links"
-                );
-                return Err(PlatformError::Io {
-                    context: format!("failed to check '{}' for links", current.display()),
-                    source: e,
-                });
-            }
-        }
+    if !final_path.starts_with(canonical_dest) {
+        return Err(PlatformError::Security(format!(
+            "created file '{}' escaped destination root '{}' via reparse point (TOCTOU violation)",
+            final_path.display(),
+            canonical_dest.display()
+        )));
     }
-    Ok(None)
+    Ok(())
 }
 
-fn discard_partial(file: File, path: &Path) {
+#[cfg(not(windows))]
+fn verify_handle_within_root(_file: &File, _canonical_dest: &Path) -> Result<(), PlatformError> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn discard_partial(file: File) {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        FILE_DISPOSITION_INFO, FileDispositionInfo, SetFileInformationByHandle,
+    };
+
+    let handle = HANDLE(file.as_raw_handle() as _);
+    let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+    let result = unsafe {
+        SetFileInformationByHandle(
+            handle,
+            FileDispositionInfo,
+            &mut disposition as *mut _ as *mut std::ffi::c_void,
+            std::mem::size_of::<FILE_DISPOSITION_INFO>() as u32,
+        )
+    };
+
+    if let Err(e) = result {
+        warn!(
+            error = %e,
+            "Could not mark partial file for deletion by handle; dropping handle without unsafe path removal fallback"
+        );
+    }
     drop(file);
-    if let Err(e) = std::fs::remove_file(path) {
-        warn!(path = %path.display(), error = %e, "A partially extracted file could not be removed");
-    }
+}
+
+#[cfg(not(windows))]
+fn discard_partial(file: File) {
+    drop(file);
 }
 
 pub fn safe_extract_zip<R: Read + Seek>(
@@ -134,6 +120,14 @@ pub fn safe_extract_zip<R: Read + Seek>(
     dest_dir: &Path,
     limits: &ExtractLimits,
 ) -> Result<usize, PlatformError> {
+    if let Some(link) = link_on_the_way(dest_dir, Path::new(""))? {
+        return Err(PlatformError::Security(format!(
+            "archive destination '{}' traverses the link '{}'",
+            dest_dir.display(),
+            link.display()
+        )));
+    }
+
     if !dest_dir.exists() {
         std::fs::create_dir_all(dest_dir).map_err(|e| PlatformError::Io {
             context: format!(
@@ -143,6 +137,15 @@ pub fn safe_extract_zip<R: Read + Seek>(
             source: e,
         })?;
     }
+
+    let canonical_dest = dest_dir.canonicalize().map_err(|e| PlatformError::Io {
+        context: format!(
+            "failed to canonicalize destination directory '{}'",
+            dest_dir.display()
+        ),
+        source: e,
+    })?;
+    let pinned_root = open_pinned_root(dest_dir, &canonical_dest)?;
 
     let mut archive = ZipArchive::new(reader)?;
 
@@ -232,13 +235,35 @@ pub fn safe_extract_zip<R: Read + Seek>(
             }
         }
 
-        let mut out_file = File::create(&target_file_path).map_err(|e| PlatformError::Io {
-            context: format!(
-                "failed to create output file '{}'",
-                target_file_path.display()
-            ),
-            source: e,
-        })?;
+        let mut open_opts = std::fs::OpenOptions::new();
+        open_opts.write(true).create_new(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_GENERIC_WRITE: u32 = 0x4000_0000;
+            const DELETE_ACCESS: u32 = 0x0001_0000;
+            open_opts
+                .access_mode(FILE_GENERIC_WRITE | DELETE_ACCESS)
+                .share_mode(0);
+        }
+
+        let out_file = open_opts
+            .open(&target_file_path)
+            .map_err(|e| PlatformError::Io {
+                context: format!(
+                    "failed to create output file '{}'",
+                    target_file_path.display()
+                ),
+                source: e,
+            })?;
+
+        if let Err(e) = verify_handle_within_root(&pinned_root, &canonical_dest)
+            .and_then(|()| verify_handle_within_root(&out_file, &canonical_dest))
+        {
+            discard_partial(out_file);
+            return Err(e);
+        }
+        let mut out_file = out_file;
 
         let mut buffer = [0u8; 64 * 1024];
         let mut entry_bytes: u64 = 0;
@@ -248,7 +273,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
             let bytes_read = match content.read(&mut buffer) {
                 Ok(read) => read,
                 Err(e) => {
-                    discard_partial(out_file, &target_file_path);
+                    discard_partial(out_file);
                     return Err(PlatformError::Io {
                         context: format!(
                             "read error while extracting '{}'",
@@ -273,7 +298,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
                     limit = limits.max_single_file_bytes,
                     "Refused an archive entry that exceeded the single-file limit"
                 );
-                discard_partial(out_file, &target_file_path);
+                discard_partial(out_file);
                 return Err(PlatformError::Security(format!(
                     "file entry '{}' exceeded single file limit of {} bytes",
                     clean_relative.display(),
@@ -289,15 +314,22 @@ pub fn safe_extract_zip<R: Read + Seek>(
                     limit = limits.max_total_bytes,
                     "Aborted extraction: cumulative size limit exceeded (zip bomb)"
                 );
-                discard_partial(out_file, &target_file_path);
+                discard_partial(out_file);
                 return Err(PlatformError::Security(format!(
                     "archive exceeded total size limit of {} bytes (zip bomb detected)",
                     limits.max_total_bytes
                 )));
             }
 
+            if let Err(e) = verify_handle_within_root(&pinned_root, &canonical_dest)
+                .and_then(|()| verify_handle_within_root(&out_file, &canonical_dest))
+            {
+                discard_partial(out_file);
+                return Err(e);
+            }
+
             if let Err(e) = out_file.write_all(&buffer[..bytes_read]) {
-                discard_partial(out_file, &target_file_path);
+                discard_partial(out_file);
                 return Err(PlatformError::Io {
                     context: format!(
                         "write error while extracting '{}'",
@@ -309,7 +341,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
         }
 
         if entry_bytes != declared_size {
-            discard_partial(out_file, &target_file_path);
+            discard_partial(out_file);
             return Err(PlatformError::Io {
                 context: format!(
                     "'{}' is truncated: {entry_bytes} of {declared_size} bytes",
@@ -317,6 +349,11 @@ pub fn safe_extract_zip<R: Read + Seek>(
                 ),
                 source: std::io::ErrorKind::UnexpectedEof.into(),
             });
+        }
+
+        if let Err(e) = verify_handle_within_root(&out_file, &canonical_dest) {
+            discard_partial(out_file);
+            return Err(e);
         }
 
         extracted_count += 1;

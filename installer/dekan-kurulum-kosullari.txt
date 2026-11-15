@@ -1,0 +1,11 @@
+﻿Dekan 2.1
+Yayıncı: Dekan
+Kurulum koşulları
+
+Bu sihirbaz Dekan 2.1 kurulum önizlemesini yükler. Mevcut Dekan 2.0 kurulumu ayrı kalır.
+
+Önizleme ana uygulamayı içerir. Oyun modu için Dekan'ın GitHub giriş ayarı ve uyumlu, yetkili imzalı motor gerekir.
+
+Yazılım ve beraberindeki bileşenlerin lisansları ile telif bildirimleri, uygulamayla gelen LICENSE.txt ve THIRD-PARTY-NOTICES.md dosyalarında yer alır.
+
+Devam etmek için Kabul ediyorum düğmesine tıkla.

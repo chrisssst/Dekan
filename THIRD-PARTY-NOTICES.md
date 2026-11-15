@@ -1,26 +1,20 @@
 # Third-party notices
 
-Dekan's own source code is licensed under the [MIT License](LICENSE). This file lists the third-party
+Dekan’s open-source application code is licensed under the [MIT License](LICENSE). This file lists the third-party
 components Dekan uses or depends on and the terms they come with.
 
-## LTK patcher (injector)
+## Bullet Native Engine & DLL (Proprietary Subsystem)
 
-`ltk_patcher_host.exe` and `ltk_patcher_dll.dll` are made by the League Toolkit organization and ship with
-[LTK Manager](https://github.com/LeagueToolkit/ltk-manager). They are **not** part of this repository, are
-**not** covered by Dekan's MIT license, and are **not** included in Dekan's installer. The README links an
-official way to get them (LTK Manager) and a convenience download mirror, which is not an official League
-Toolkit release.
+The Bullet Native Injector Engine `bullet-br.exe`, Bullet Native DLL `bullet-br.dll`,
+and associated native IPC protocols are **closed-source proprietary components** maintained in a private repository
+(`Isllanrx/bullet_dll`) and owned exclusively by Isllan Toso.
 
-They are governed by the
-[LTK Patcher License](https://github.com/LeagueToolkit/ltk-manager/blob/main/LTK-PATCHER-LICENSE.md), published by
-League Toolkit. In short, it allows using, studying and building software that uses the binaries. Anyone who
-redistributes them outside an unmodified official LTK Manager release must remove League Toolkit's code
-signature and may only sign them with their own certificate. The official way to get them is to copy both
-files from an LTK Manager release. Dekan only runs copies that carry a valid Authenticode signature from League Toolkit's publisher, whatever
-their source.
-
-For questions about these binaries or their license, use the contact published by League Toolkit in that
-license. Dekan is not affiliated with or endorsed by League Toolkit.
+1. **Not Open Source:** They are **NOT** covered by the open-source MIT License of this repository.
+2. **Commercial Restriction:** Under no circumstances may the native binaries, DLL, injector, or related protocols
+   be sold, relicensed, monetized, or bundled into commercial or paid products.
+3. **Anti-Reverse Engineering & AI Model Restriction:** Reverse engineering, decompilation, disassembly, dynamic
+   hooking, protocol extraction, or automated reconstruction of the native engine and DLL binaries by any human,
+   automated reverse-engineering suite, or AI model / agent pipeline is strictly prohibited.
 
 ## Rust crates
 
@@ -53,17 +47,17 @@ included in each crate's source, which is available from crates.io at the versio
 
 | Component | Use | License |
 | --- | --- | --- |
-| [Slint](https://slint.dev) (`slint`, `i-slint-*`) | Draws Dekan's windows; linked into `dekan.exe` | Slint Royalty-free License 2.0 (chosen from `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`); attribution is the "Made with Slint" badge on the project page |
+| [Slint](https://slint.dev) (`slint`, `i-slint-*`) | Draws Dekan’s windows; linked into `dekan.exe` | Slint Royalty-free License 2.0 (chosen from `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`); attribution is the "Made with Slint" badge on the project page |
 | [Inno Setup](https://jrsoftware.org/isinfo.php) | Builds the Windows installer | Inno Setup License (permissive) |
 | `relay-worker` dev tooling (`wrangler`, `typescript`, `@cloudflare/workers-types`) | Build and deploy only; not shipped to users | MIT / Apache-2.0 |
 
 ## Reference projects
 
-Dekan was built by studying the projects listed in the README's acknowledgements. No source code from them
-is included. Where a reference is GPL-licensed (for example LTK Manager), Dekan reimplements the behavior it
-needs independently.
+Bullet was built by studying the projects listed in the README's acknowledgements. No source code from them
+is included, and no third-party injector is used or shipped. Where a reference is GPL-licensed, Bullet
+reimplements the behavior it needs independently.
 
 ## Trademarks
 
-League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. Dekan is not
-affiliated with, endorsed or sponsored by Riot Games or League Toolkit.
+League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. Bullet is not
+affiliated with, endorsed or sponsored by Riot Games.

@@ -51,7 +51,7 @@ fn cancelling_answers_nothing_and_only_the_first_answer_counts() {
 
 #[test]
 fn the_created_dialog_is_read_only_without_cancel_and_confirms_the_code() {
-    let text = Language::Turkish.text();
+    let text = Language::Portuguese.text();
     let content = created_content(text, "BLT-7Q2M-X9KD");
     assert_eq!(content.inline, InlineAction::Copy);
     let (dialog, answers) = open(&content);
@@ -71,7 +71,7 @@ fn the_created_dialog_is_read_only_without_cancel_and_confirms_the_code() {
 
 #[test]
 fn every_language_fills_both_dialogs() {
-    for language in [Language::Turkish, Language::English] {
+    for language in [Language::Portuguese, Language::Spanish, Language::English] {
         let text = language.text();
         for content in [created_content(text, "X"), join_content(text, None)] {
             for value in [
@@ -134,7 +134,7 @@ fn closing_the_window_answers_nothing() {
 #[test]
 fn a_long_code_never_runs_under_the_inline_button() {
     use i_slint_backend_testing::{AccessibleRole, ElementRoot};
-    let text = Language::Turkish.text();
+    let text = Language::Portuguese.text();
     let code = "DEKAN1:AQAAAABqxLgJABIZ_75__ZlyDx7-Ja4WqQ26WNsR4D8nQkLmN0pQrStUvWxYz";
     let (dialog, _answers) = open(&created_content(text, code));
     let field = dialog
@@ -164,7 +164,7 @@ fn open_invite_for_test(text: &crate::i18n::Text) -> (PartyInvite, mpsc::Receive
 #[test]
 fn the_lobby_invite_answers_join_or_later_once_in_every_language() {
     i_slint_backend_testing::init_no_event_loop();
-    for language in [Language::Turkish, Language::English] {
+    for language in [Language::Portuguese, Language::English, Language::Spanish] {
         let text = language.text();
         let (invite, answers) = open_invite_for_test(text);
         assert_eq!(invite.get_heading(), text.party_invite_title);

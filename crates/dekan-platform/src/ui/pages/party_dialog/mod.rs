@@ -7,7 +7,7 @@ use slint::ComponentHandle;
 use tracing::{debug, warn};
 
 use super::runtime;
-use super::views::{PartyDialog, PartyInvite, Theme};
+use super::views::{PartyDialog, PartyInvite};
 use crate::error::PlatformError;
 
 const COPIED_FOR: Duration = Duration::from_millis(2200);
@@ -183,8 +183,8 @@ fn open(
     answer: Answer<Option<String>>,
 ) -> Result<(), slint::PlatformError> {
     let dialog = PartyDialog::new()?;
-    super::themes::follow(&dialog, |dialog, mode| {
-        dialog.global::<Theme>().set_mode(mode)
+    super::themes::follow(&dialog, |w, mode| {
+        w.global::<super::views::Theme>().set_mode(mode)
     });
     runtime::repaint_on_expose(&dialog, |d| d.set_expose_flip(!d.get_expose_flip()));
     wire(&dialog, content, answer);
@@ -223,8 +223,8 @@ pub(crate) fn wire_invite(invite: &PartyInvite, text: &crate::i18n::Text, answer
 
 fn open_invite(text: &crate::i18n::Text, answer: Answer<bool>) -> Result<(), slint::PlatformError> {
     let invite = PartyInvite::new()?;
-    super::themes::follow(&invite, |invite, mode| {
-        invite.global::<Theme>().set_mode(mode)
+    super::themes::follow(&invite, |w, mode| {
+        w.global::<super::views::Theme>().set_mode(mode)
     });
     runtime::repaint_on_expose(&invite, |i| i.set_expose_flip(!i.get_expose_flip()));
     wire_invite(&invite, text, answer);

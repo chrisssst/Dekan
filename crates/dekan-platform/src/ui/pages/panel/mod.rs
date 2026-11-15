@@ -30,8 +30,6 @@ pub struct PanelSnapshot {
     pub light_loading: bool,
     pub autostart: bool,
     pub update_line: Option<String>,
-    pub ltk_line: Option<String>,
-    pub ltk_download: Option<String>,
     pub checks: Vec<PanelCheck>,
 }
 
@@ -68,7 +66,6 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::OpenTools => TrayEvent::OpenTools,
         PanelAction::OpenLogs => TrayEvent::OpenLogs,
         PanelAction::OpenRelease => TrayEvent::OpenRelease,
-        PanelAction::InstallInjector => TrayEvent::InstallInjector,
         PanelAction::MarkProblem => TrayEvent::MarkProblem,
         PanelAction::ExportDiagnostics => TrayEvent::ExportDiagnostics,
         PanelAction::About => TrayEvent::About,
@@ -137,8 +134,6 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_auto_accept(state.auto_accept);
     window.set_autostart(state.autostart);
     window.set_update_line(state.update_line.as_deref().unwrap_or_default().into());
-    window.set_ltk_line(state.ltk_line.as_deref().unwrap_or_default().into());
-    window.set_ltk_download(state.ltk_download.as_deref().unwrap_or_default().into());
     let failing = state.checks.iter().filter(|check| !check.ok).count();
     window.set_attention(i32::try_from(failing).unwrap_or(i32::MAX));
     let checks: Vec<PanelCheckRow> = state
@@ -259,6 +254,3 @@ fn open(links: PanelLinks) {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod theme_tests;

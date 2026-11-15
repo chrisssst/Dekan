@@ -139,7 +139,7 @@ export component PowerCard inherits Rectangle {
     border-radius: 14px;
     border-width: 1px;
     border-color: root.checked ? Theme.gold-dim : Theme.surface-line;
-    background: root.checked ? Theme.card-fill-selected : Theme.card-fill;
+    background: root.checked ? @linear-gradient(180deg, #2a2619 0%, #18202b 60%, #131b27 100%) : @linear-gradient(180deg, #161f2d 0%, #111925 100%);
     animate border-color { duration: 200ms; }
     Rectangle {
         x: 0;
@@ -199,7 +199,7 @@ export component Notice inherits Rectangle {
     border-radius: 10px;
     border-width: 1px;
     border-color: root.warning ? Theme.danger : Theme.gold-dim;
-    background: root.warning ? Theme.danger.with-alpha(0.15) : Theme.card-fill;
+    background: root.warning ? #22161a : #1a1912;
     Rectangle {
         x: 0;
         width: 3px;

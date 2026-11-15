@@ -95,7 +95,7 @@ fn tools_fixture(tag: &str, files: &[&str]) -> PathBuf {
     dir
 }
 
-const BOTH_TOOLS: [&str; 2] = ["ltk_patcher_host.exe", "ltk_patcher_dll.dll"];
+const BOTH_TOOLS: [&str; 2] = ["bullet-br.exe", "bullet-br.dll"];
 
 #[test]
 fn test_first_candidate_folder_wins() {
@@ -112,25 +112,25 @@ fn test_first_candidate_folder_wins() {
 
 #[test]
 fn test_half_a_toolset_is_not_a_toolset() {
-    let partial = tools_fixture("partial", &["ltk_patcher_host.exe"]);
+    let partial = tools_fixture("partial", &["bullet-br.exe"]);
     let (_, source) = resolve_tools_dir(std::slice::from_ref(&partial));
     assert_eq!(source, ToolsSource::Missing);
     let _ = std::fs::remove_dir_all(&partial); // ignore-ok: test temp dir teardown
 }
 
 #[test]
-fn test_the_ltk_backend_is_the_toolset_and_another_injector_is_not() {
-    let ltk = tools_fixture("ltk_only", &["ltk_patcher_host.exe", "ltk_patcher_dll.dll"]);
-    let other = tools_fixture("other_only", &["other-injector.dll"]);
+fn test_the_native_engine_is_the_toolset_and_another_injector_is_not() {
+    let native = tools_fixture("native_only", &BOTH_TOOLS);
+    let other = tools_fixture("other_only", &["other-host.exe", "other-injector.dll"]);
     assert_eq!(
-        resolve_tools_dir(std::slice::from_ref(&ltk)).1,
+        resolve_tools_dir(std::slice::from_ref(&native)).1,
         ToolsSource::Own
     );
     assert_eq!(
         resolve_tools_dir(std::slice::from_ref(&other)).1,
         ToolsSource::Missing
     );
-    let _ = std::fs::remove_dir_all(&ltk); // ignore-ok: test temp dir teardown
+    let _ = std::fs::remove_dir_all(&native); // ignore-ok: test temp dir teardown
     let _ = std::fs::remove_dir_all(&other); // ignore-ok: test temp dir teardown
 }
 

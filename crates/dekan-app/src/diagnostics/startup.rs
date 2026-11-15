@@ -13,7 +13,7 @@ fn is_present(file: &Path) -> bool {
         Ok(meta) => meta.is_file(),
         Err(e) => {
             if e.kind() != std::io::ErrorKind::NotFound {
-                warn!(file = %file.display(), error = %e, "An injector file could not be inspected; it is treated as missing");
+                warn!(file = %file.display(), error = %e, "A native engine file could not be inspected; it is treated as missing");
             }
             false
         }
@@ -28,7 +28,7 @@ pub fn injector_refusal(host: &Path, dll: &Path) -> Option<InjectorRefusal> {
     let refused: Vec<(PathBuf, String)> = [host, dll]
         .into_iter()
         .filter_map(|file| {
-            dekan_inject::trust::verify_injector_file(file)
+            dekan_inject::trust::verify_native_file(file)
                 .err()
                 .map(|e| (file.to_path_buf(), e.to_string()))
         })
@@ -44,8 +44,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("dekan_startup_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
         std::fs::create_dir_all(&dir).expect("fixture dir");
-        let host_path = dir.join("ltk_patcher_host.exe");
-        let dll_path = dir.join("ltk_patcher_dll.dll");
+        let host_path = dir.join("bullet-br.exe");
+        let dll_path = dir.join("bullet-br.dll");
         if let Some(bytes) = host {
             std::fs::write(&host_path, bytes).expect("host");
         }
@@ -73,28 +73,20 @@ mod tests {
     }
 
     #[test]
-    fn test_unsigned_files_refuse_the_start_and_both_are_named() {
-        let (dir, host_path, dll_path) = tools("unsigned", Some(b"host"), Some(b"patched dll"));
-        match injector_refusal(&host_path, &dll_path) {
-            Some(InjectorRefusal::NotTrusted(files)) => {
-                let named: Vec<&PathBuf> = files.iter().map(|(file, _)| file).collect();
-                assert_eq!(named, vec![&host_path, &dll_path]);
+    fn test_present_files_follow_the_publisher_the_build_pins() {
+        let (dir, host_path, dll_path) = tools("unsigned", Some(b"host"), Some(b"dll"));
+        let refusal = injector_refusal(&host_path, &dll_path);
+        if dekan_inject::trust::NATIVE_PUBLISHER.is_some_and(|p| !p.is_empty()) {
+            match refusal {
+                Some(InjectorRefusal::NotTrusted(files)) => {
+                    let named: Vec<&PathBuf> = files.iter().map(|(file, _)| file).collect();
+                    assert_eq!(named, vec![&host_path, &dll_path]);
+                }
+                other => panic!("expected a refusal, got {other:?}"),
             }
-            other => panic!("expected a refusal, got {other:?}"),
+        } else {
+            assert_eq!(refusal, None);
         }
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
-    }
-
-    #[test]
-    #[ignore = "needs the LTK injector in Dekan's tools folder"]
-    fn test_the_publishers_signed_files_start() {
-        let tools = Path::new(r"C:\Program Files\Dekan\tools");
-        assert_eq!(
-            injector_refusal(
-                &tools.join("ltk_patcher_host.exe"),
-                &tools.join("ltk_patcher_dll.dll")
-            ),
-            None
-        );
     }
 }

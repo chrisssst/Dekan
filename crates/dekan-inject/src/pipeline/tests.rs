@@ -2,6 +2,132 @@ use super::overlay::measure_overlay;
 use super::*;
 use dekan_core::state::new_state_channel;
 
+#[tokio::test]
+async fn native_game_paths_reject_before_filesystem_or_process_work() {
+    let dir = std::env::temp_dir().join(format!("dekan_unavailable_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_host.exe"));
+    config.native_target = None;
+    let (tx, rx) = new_state_channel();
+    let pipeline = InjectionPipeline::new(config, Some(tx));
+    for arm in [false, true] {
+        let error = if arm {
+            pipeline
+                .arm(&[])
+                .await
+                .err()
+                .expect("native arm unsupported")
+        } else {
+            pipeline
+                .execute(&[], 0)
+                .await
+                .err()
+                .expect("native execute unsupported")
+        };
+        let message = error.to_string();
+        assert!(message.contains("NATIVE_GAME_TARGET_MISSING"), "{message}");
+        let InjectionStatus::Failed { error } = &rx.borrow().injection else {
+            panic!("unsupported integration must publish failure");
+        };
+        assert!(
+            !error.contains("Vanguard"),
+            "unattempted operation is not an OS rejection"
+        );
+        assert!(!dir.exists());
+    }
+}
+
+#[tokio::test]
+async fn configured_native_target_reaches_binary_validation() {
+    let dir = std::env::temp_dir().join(format!("dekan_native_target_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_host.exe"));
+    config.native_host_exe = Some(dir.join("missing_native_host.exe"));
+    config.native_dll_path = Some(dir.join("missing_native_dll.dll"));
+    config.native_target = Some(NativeWindowTarget {
+        window_title: "Owned Test Window".into(),
+        image_name: "owned-test.exe".into(),
+    });
+    let pipeline = InjectionPipeline::new(config, None);
+    let error = pipeline
+        .arm(&[])
+        .await
+        .err()
+        .expect("missing host must fail");
+    assert!(error.to_string().contains("Native host not found"));
+    assert!(!dir.exists());
+}
+
+#[tokio::test]
+async fn mock_pipeline_never_reaches_the_native_engine() {
+    let dir = std::env::temp_dir().join(format!("dekan_mock_guard_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_host.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Mock;
+    let pipeline = InjectionPipeline::new(config, None);
+    let error = pipeline
+        .arm(&[])
+        .await
+        .err()
+        .expect("mock is not executable");
+    assert!(error.to_string().contains("MOCK_PROVIDER_NOT_EXECUTABLE"));
+    assert!(!dir.exists());
+}
+
+#[tokio::test]
+async fn mock_provider_spawn_patcher_is_refused() {
+    let dir = std::env::temp_dir().join(format!("dekan_mock_spawn_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_host.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Mock;
+    let error = InjectionPipeline::new(config, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("mock cannot spawn a patcher");
+    assert!(
+        error
+            .to_string()
+            .contains("Mock provider cannot spawn a patcher process")
+    );
+}
+
+#[tokio::test]
+async fn native_spawn_patcher_reports_each_missing_configuration() {
+    let dir = std::env::temp_dir().join(format!("dekan_native_cfg_{}", std::process::id()));
+
+    let mut no_host = temp_config(&dir, dir.join("host.exe"));
+    no_host.native_host_exe = None;
+    let error = InjectionPipeline::new(no_host, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing host path");
+    assert!(
+        error
+            .to_string()
+            .contains("Native host path not configured")
+    );
+
+    let mut no_dll = temp_config(&dir, dir.join("host.exe"));
+    no_dll.native_dll_path = None;
+    let error = InjectionPipeline::new(no_dll, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing dll path");
+    assert!(error.to_string().contains("Native DLL path not configured"));
+
+    let mut no_target = temp_config(&dir, dir.join("host.exe"));
+    no_target.native_target = None;
+    let error = InjectionPipeline::new(no_target, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing game target");
+    assert!(
+        error
+            .to_string()
+            .contains("Native game target not configured")
+    );
+}
+
 #[test]
 fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
     let root = std::env::temp_dir().join(format!("dekan_measure_overlay_{}", std::process::id()));
@@ -28,9 +154,13 @@ fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
 
 fn temp_config(dir: &std::path::Path, host_exe: PathBuf) -> PipelineConfig {
     PipelineConfig {
-        ltk_host_exe: host_exe,
-        ltk_dll_path: dir.join("ltk_patcher_dll.dll"),
-        ltk_flags: 0,
+        provider_kind: crate::provider::ProviderKind::Native,
+        native_host_exe: Some(host_exe),
+        native_dll_path: Some(dir.join("bullet-br.dll")),
+        native_target: Some(NativeWindowTarget {
+            window_title: "League of Legends (TM) Client".into(),
+            image_name: "League of Legends.exe".into(),
+        }),
         overlay_config: OverlayConfig {
             mods_dir: dir.join("mods"),
             overlay_dir: dir.join("overlay"),
@@ -92,50 +222,18 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_building_on_an_injector_windows_cannot_verify() {
-    let temp_dir = std::env::temp_dir().join("dekan_test_pipeline_hash");
-    std::fs::create_dir_all(&temp_dir).unwrap();
-
-    let host_file = temp_dir.join("ltk_patcher_host.exe");
-    std::fs::write(&host_file, b"test host contents").unwrap();
-
-    let (tx, rx) = new_state_channel();
-    let config = temp_config(&temp_dir, host_file);
-
-    let pipeline = InjectionPipeline::new(config, Some(tx));
-    let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
-
-    assert!(
-        matches!(result, Err(InjectError::UntrustedInjector { .. })),
-        "an injector Windows cannot read as a binary must stop the pipeline"
-    );
-    assert!(matches!(
-        rx.borrow().injection,
-        InjectionStatus::Failed { .. }
-    ));
-
-    std::fs::remove_dir_all(&temp_dir).ok();
-}
-
-#[tokio::test]
-async fn test_a_dll_that_only_serves_ltk_manager_stops_the_pipeline() {
-    let dir = std::env::temp_dir().join(format!("dekan_test_host_lock_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+async fn test_a_missing_native_dll_stops_the_pipeline_before_building() {
+    let dir = std::env::temp_dir().join(format!("dekan_test_missing_dll_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("fixture dir");
-    let pe =
-        std::fs::read(std::env::current_exe().expect("test binary")).expect("read test binary");
-    let host = dir.join("ltk_patcher_host.exe");
-    std::fs::write(&host, &pe).expect("host");
-    let mut dll = pe;
-    dll.extend_from_slice(b"host verification failed");
-    std::fs::write(dir.join("ltk_patcher_dll.dll"), dll).expect("dll");
+    let host = dir.join("bullet-br.exe");
+    std::fs::write(&host, b"host").expect("host");
 
     let (tx, rx) = new_state_channel();
     let pipeline = InjectionPipeline::new(temp_config(&dir, host), Some(tx));
     let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
 
     assert!(
-        matches!(&result, Err(InjectError::UntrustedInjector { reason, .. }) if reason.contains("only serves LTK Manager")),
+        matches!(&result, Err(InjectError::Process(message)) if message.contains("Native DLL not found")),
         "{:?}",
         result.err()
     );
@@ -152,13 +250,14 @@ async fn fake_host(
     hook_timeout: Duration,
 ) -> (InjectionPipeline, OverlayProcess) {
     let dir = std::env::temp_dir().join(format!("dekan_fake_host_{name}_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("fixture dir");
+    std::fs::create_dir_all(dir.join("overlay")).expect("fixture dir");
     let host = dir.join("fake_host.cmd");
     let body: String = std::iter::once("@echo off")
         .chain(script.iter().copied())
         .map(|line| format!("{line}\r\n"))
         .collect();
     std::fs::write(&host, body).expect("fake host script");
+    std::fs::write(dir.join("bullet-br.dll"), b"dll").expect("fake dll");
     let mut config = temp_config(&dir, host);
     config.hook_timeout = hook_timeout;
     let pipeline = InjectionPipeline::new(config, None);
@@ -167,21 +266,13 @@ async fn fake_host(
 }
 
 const STALL: &str = "ping -n 4 127.0.0.1 >nul";
+const ARMED: &str = "echo Native target watcher armed";
+const HOOKED: &str = "echo Native file-open interception confirmed by DLL";
 
 #[tokio::test]
-async fn test_hook_confirmed_only_when_the_host_reports_injected() {
+async fn test_hook_confirmed_only_when_the_host_reports_interception() {
     let budget = Duration::from_secs(10);
-    let (pipeline, mut overlay) = fake_host(
-        "confirmed",
-        &[
-            "echo status 0.01 injecting scanning for the game",
-            "echo dll 1.00 1 2 INFO ltk_patcher_dll: redirected wad: Zed.wad.client",
-            "echo status 1.10 injected dll attached",
-            STALL,
-        ],
-        budget,
-    )
-    .await;
+    let (pipeline, mut overlay) = fake_host("confirmed", &[ARMED, HOOKED, STALL], budget).await;
 
     assert_eq!(
         pipeline.confirm_hook(&mut overlay, budget).await,
@@ -191,18 +282,10 @@ async fn test_hook_confirmed_only_when_the_host_reports_injected() {
 }
 
 #[tokio::test]
-async fn test_arming_and_legacy_text_alone_are_not_a_confirmation() {
+async fn test_arming_alone_is_not_a_confirmation() {
     let budget = Duration::from_millis(700);
-    let (pipeline, mut overlay) = fake_host(
-        "progress",
-        &[
-            "echo status 0.01 injecting scanning for the game",
-            "echo Status: Waiting for exit",
-            "ping -n 6 127.0.0.1 >nul",
-        ],
-        budget,
-    )
-    .await;
+    let (pipeline, mut overlay) =
+        fake_host("progress", &[ARMED, "ping -n 6 127.0.0.1 >nul"], budget).await;
 
     assert_eq!(
         pipeline.confirm_hook(&mut overlay, budget).await,
@@ -215,15 +298,8 @@ async fn test_arming_and_legacy_text_alone_are_not_a_confirmation() {
 #[tokio::test]
 async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
     let budget = Duration::from_secs(5);
-    let (pipeline, mut overlay) = fake_host(
-        "dying",
-        &[
-            "echo status 0.01 injecting scanning for the game",
-            "ping -n 2 127.0.0.1 >nul",
-        ],
-        budget,
-    )
-    .await;
+    let (pipeline, mut overlay) =
+        fake_host("dying", &[ARMED, "ping -n 2 127.0.0.1 >nul"], budget).await;
 
     assert_eq!(
         pipeline.confirm_hook(&mut overlay, budget).await,
@@ -238,8 +314,8 @@ async fn test_a_patcher_reporting_failure_is_failed_not_unconfirmed() {
     let (pipeline, mut overlay) = fake_host(
         "failed",
         &[
-            "echo status 0.01 injecting scanning",
-            "echo status 1.00 failed DLL never attached",
+            ARMED,
+            "echo Error: Supervision(SetWindowsHookExW failed with ERROR_ACCESS_DENIED (0x00000005))",
             STALL,
         ],
         budget,
@@ -258,19 +334,13 @@ async fn test_a_patcher_reporting_failure_is_failed_not_unconfirmed() {
 #[tokio::test]
 async fn test_a_patcher_terminated_by_another_program_reports_its_exit_code() {
     let budget = Duration::from_secs(5);
-    let (pipeline, mut overlay) = fake_host(
-        "terminated",
-        &[
-            "echo status 0.01 injecting scanning for the game",
-            "exit /b 1073807364",
-        ],
-        budget,
-    )
-    .await;
+    let (pipeline, mut overlay) =
+        fake_host("terminated", &[ARMED, "exit /b 1073807364"], budget).await;
 
     let status = pipeline.confirm_hook(&mut overlay, budget).await;
 
     assert_eq!(status, InjectionStatus::PatcherExited { code: 0x4001_0004 });
+    assert!(closed_by_another_program(0x4001_0004));
 }
 
 #[tokio::test]

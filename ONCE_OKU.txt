@@ -1,0 +1,7 @@
+DEKAN 2.1 — KURULUM ÖNİZLEMESİ
+Dekan-Setup-2.1-x64.exe dosyasını açtığında kurulum sihirbazında “Dekan 2.1 Kurulumu” yazar. Kurulum simgesi, yayıncı bilgisi ve Başlat menüsü kısayolu Dekan markalıdır.
+Varsayılan kurulum yolu: %LOCALAPPDATA%\Programs\Dekan-2.1
+Bu paket mevcut Dekan 2.0 kurulumunun üzerine yazmaz.
+Bu önizleme yalnızca yeniden derlenen ana uygulamayı içerir. Gönderilen kaynak arşivinde kapalı motorun kaynak kodu ve Dekan için GitHub giriş yapılandırması yok. Bu nedenle programın oyun modu bu paketle başlamaz. Oynanabilir sürüm için yetkili uyumlu imzalı motor ve Dekan GitHub OAuth Client ID gerekir.
+Kaynak kodu, önceki Dekan logosu, Türkçe ve İngilizce arayüz, üç tema, Discord durumu ve Dekan parti adresi için yapılandırılmıştır. Parti bağlantısı ve oyun uyumluluğu canlı Windows ortamında doğrulanmadı.
+Onay ekranı Dekan 2.1 Kurulum Koşulları başlığını taşır. Tam telif ve lisans bildirimleri LICENSE.txt ve THIRD-PARTY-NOTICES.md dosyalarındadır.

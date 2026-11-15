@@ -95,7 +95,7 @@ impl WadFile {
         if &magic != b"RW" {
             return Err(WadError::InvalidMagic(magic));
         }
-        if header[2] != 3 {
+        if header[2] != 3 || header[3] > 4 {
             return Err(WadError::UnsupportedVersion(header[2], header[3]));
         }
 

@@ -1,9 +1,3 @@
-# Dekan source notes
+# Upstream and attribution
 
-Dekan is distributed under the MIT License in `LICENSE`. Product names, executable names, local data paths,
-environment variables, interface assets and Windows installer metadata use Dekan branding.
-
-This update integrates source revision `3cfa3d76646837a8ac797402afeca42c147f9ec1` (v1.6).
-Dekan maintains its Turkish/English interface, Discord Rich Presence, theme preferences and installer handoff.
-
-Third-party components retain their separate terms in `THIRD-PARTY-NOTICES.md`.
+Dekan 2.1 derives from the supplied Bullet 1.10 public source archive and the Dekan 2.0 branding. The original copyright and MIT terms are retained in LICENSE. The separately licensed engine is not included.

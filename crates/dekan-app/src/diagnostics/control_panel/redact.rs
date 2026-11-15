@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn any_user_folder_is_masked_including_short_names() {
-        let log = r#"tmp=C:\Users\DEKAN~1\AppData x="d:\\users\\other\\y" z=E:/Users/Bia Lima/w"#;
+        let log = r#"tmp=C:\Users\SAMPLE~1\AppData x="d:\\users\\other\\y" z=E:/Users/Bia Lima/w"#;
         assert_eq!(
             redact(log, Some(PROFILE)),
             r#"tmp=C:\Users\<user>\AppData x="d:\\users\\<user>\\y" z=E:/Users/<user>/w"#

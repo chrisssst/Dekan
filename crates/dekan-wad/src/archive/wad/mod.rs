@@ -97,7 +97,7 @@ impl<'a> WadArchive<'a> {
 
         let major = data[2];
         let minor = data[3];
-        if major != 3 {
+        if major != 3 || minor > 4 {
             warn!(major, minor, "Unsupported WAD version");
             return Err(WadError::UnsupportedVersion(major, minor));
         }
@@ -341,5 +341,7 @@ use decode::{MAX_PREALLOCATION, decompress_entry};
 pub use decode::{SubchunkToc, subchunk_toc_name};
 pub use file::{WAD_SIGNATURE_SIZE, WadFile};
 
+#[cfg(test)]
+mod integrity_tests;
 #[cfg(test)]
 mod tests;

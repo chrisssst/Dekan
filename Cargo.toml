@@ -1,13 +1,27 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/*",
+    "crates/dekan-app",
+    "crates/dekan-classic",
+    "crates/dekan-core",
+    "crates/dekan-inject",
+    "crates/dekan-lcu",
+    "crates/dekan-party",
+    "crates/dekan-platform",
+    "crates/dekan-relay",
+    "crates/dekan-wad",
     "xtask",
+]
+exclude = [
+    "crates/dekan-native-dll",
+    "crates/dekan-native-host",
+    "crates/dekan-native-protocol",
+    "crates/dekan-native-test-harness",
 ]
 
 [workspace.package]
-version = "1.2.1"
-authors = ["Dekan contributors"]
+version = "2.1.0"
+authors = ["Dekan"]
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"

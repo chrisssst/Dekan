@@ -240,7 +240,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -983,9 +983,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12218662ccac37d9714f2191252553d67585b97df8c839cbe49e0bde278dc865"
+checksum = "38d28fb6aa7dd680b3ffd1a3e64e115c177bdba63c0ae7f9cd48129ff05c4fa0"
 dependencies = [
  "cmov",
 ]
@@ -1010,7 +1010,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
 name = "dekan-app"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "dekan-classic",
@@ -1033,13 +1033,14 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid 1.28.0",
  "winres",
  "zip",
 ]
 
 [[package]]
 name = "dekan-classic"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "dekan-core",
  "dekan-wad",
@@ -1051,7 +1052,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-core"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "futures-util",
  "serde",
@@ -1065,7 +1066,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-inject"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "dekan-core",
  "dekan-platform",
@@ -1082,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-lcu"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "base64 0.23.1",
  "dekan-core",
@@ -1102,13 +1103,12 @@ dependencies = [
 
 [[package]]
 name = "dekan-party"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "base64 0.23.1",
  "chacha20poly1305",
  "dekan-core",
  "futures-util",
- "reqwest",
  "serde",
  "serde_json",
  "sha2",
@@ -1117,12 +1117,11 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
 name = "dekan-platform"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "dekan-core",
  "i-slint-backend-testing",
@@ -1142,7 +1141,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-relay"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "dekan-core",
  "dekan-party",
@@ -1160,7 +1159,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-wad"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "flate2",
  "memmap2",
@@ -1377,7 +1376,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3135,7 +3134,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3545,7 +3544,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3870,9 +3869,9 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "pulldown-cmark"
-version = "0.13.4"
+version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e"
+checksum = "3db2be46835f013dd3f4fa7f5f7402c537787b54ebb6fe2b94bbdd7e2669bb7b"
 dependencies = [
  "bitflags 2.13.2",
  "memchr",
@@ -3953,7 +3952,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4278,7 +4277,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4931,7 +4930,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6037,7 +6036,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6512,7 +6511,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "1.2.1"
+version = "2.1.0"
 dependencies = [
  "dekan-app",
  "dekan-classic",

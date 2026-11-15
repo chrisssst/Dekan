@@ -1,11 +1,14 @@
 use super::*;
 
+pub const NATIVE_HOST_EXE: &str = "bullet-br.exe";
+pub const NATIVE_DLL_FILE: &str = "bullet-br.dll";
+
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
     pub tools_dir: PathBuf,
     pub tools_source: ToolsSource,
-    pub ltk_host_exe: PathBuf,
-    pub ltk_dll_path: PathBuf,
+    pub native_host_exe: PathBuf,
+    pub native_dll_path: PathBuf,
     pub library_dir: PathBuf,
     pub mods_dir: PathBuf,
     pub overlay_dir: PathBuf,
@@ -43,14 +46,14 @@ impl ResolvedPaths {
             ToolsSource::Missing => {
                 error!(
                     expected = %tools_dir.display(),
-                    "Injection tools not found. Place ltk_patcher_host.exe and ltk_patcher_dll.dll \
-                     in that folder — no skin can be injected until then"
+                    "Dekan's native engine was not found. Reinstall Dekan so {NATIVE_HOST_EXE} and \
+                     {NATIVE_DLL_FILE} are in that folder; no skin can be prepared until then"
                 );
             }
         }
 
-        let ltk_host_exe = tools_dir.join(dekan_inject::ltk_host::HOST_EXE);
-        let ltk_dll_path = tools_dir.join(dekan_inject::ltk_host::DLL_FILE);
+        let native_host_exe = tools_dir.join(NATIVE_HOST_EXE);
+        let native_dll_path = tools_dir.join(NATIVE_DLL_FILE);
 
         let mut candidate_library_dirs =
             vec![app_data_dir.join("library"), app_data_dir.join("skins")];
@@ -86,8 +89,8 @@ impl ResolvedPaths {
         Self {
             tools_dir,
             tools_source: source,
-            ltk_host_exe,
-            ltk_dll_path,
+            native_host_exe,
+            native_dll_path,
             library_dir,
             mods_dir,
             overlay_dir,
@@ -107,16 +110,12 @@ pub enum ToolsSource {
 }
 
 pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
-    let complete = |dir: &PathBuf| {
-        dir.join(dekan_inject::ltk_host::HOST_EXE).is_file()
-            && dir.join(dekan_inject::ltk_host::DLL_FILE).is_file()
-    };
-
+    let complete =
+        |dir: &PathBuf| dir.join(NATIVE_HOST_EXE).is_file() && dir.join(NATIVE_DLL_FILE).is_file();
     if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
-        info!(tools = %dir.display(), "Injection backend (LTK host + DLL) found");
+        info!(tools = %dir.display(), "Native engine (host and DLL) found");
         return (dir.clone(), ToolsSource::Own);
     }
-
     (
         candidates.first().cloned().unwrap_or_default(),
         ToolsSource::Missing,
@@ -124,7 +123,7 @@ pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource
 }
 
 pub fn required_tool_files(paths: &ResolvedPaths) -> Vec<PathBuf> {
-    vec![paths.ltk_host_exe.clone(), paths.ltk_dll_path.clone()]
+    vec![paths.native_host_exe.clone(), paths.native_dll_path.clone()]
 }
 
 pub fn tools_ready(paths: &ResolvedPaths) -> bool {

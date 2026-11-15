@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum InjectError {
-    #[error("the LTK injector at {path} is not trusted: {reason}")]
+    #[error("the native engine file {path} is not trusted: {reason}")]
     UntrustedInjector { path: String, reason: String },
     #[error("overlay build failed: {0}")]
     Overlay(String),

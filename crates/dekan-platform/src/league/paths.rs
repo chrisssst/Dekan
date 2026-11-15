@@ -19,6 +19,8 @@ pub fn logs_dir() -> Result<PathBuf, PlatformError> {
     Ok(data_dir()?.join("logs"))
 }
 
+pub const STAR_GATE_FILE: &str = "star_gate.bin";
+
 pub fn state_dir() -> Result<PathBuf, PlatformError> {
     Ok(data_dir()?.join("state"))
 }
@@ -26,8 +28,11 @@ pub fn state_dir() -> Result<PathBuf, PlatformError> {
 #[must_use]
 pub fn tools_dir_candidates(data_dir: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    if let Ok(install) = install_dir() {
-        candidates.push(install.join("tools"));
+    if let Ok(override_dir) = std::env::var("DEKAN_TOOLS_DIR") {
+        let p = PathBuf::from(override_dir);
+        if !p.as_os_str().is_empty() {
+            candidates.push(p);
+        }
     }
     if let Some(dir) = std::env::current_exe()
         .ok()
@@ -36,6 +41,12 @@ pub fn tools_dir_candidates(data_dir: &Path) -> Vec<PathBuf> {
         let beside = dir.join("tools");
         if !candidates.contains(&beside) {
             candidates.push(beside);
+        }
+    }
+    if let Ok(install) = install_dir() {
+        let p = install.join("tools");
+        if !candidates.contains(&p) {
+            candidates.push(p);
         }
     }
     candidates.push(data_dir.join("tools"));
@@ -212,7 +223,7 @@ mod tests {
         assert_eq!(candidates.last(), Some(&data.join("tools")));
         assert!(candidates.iter().all(|c| c.ends_with("tools")));
         if let Ok(install) = install_dir() {
-            assert_eq!(candidates.first(), Some(&install.join("tools")));
+            assert!(candidates.contains(&install.join("tools")));
         }
     }
 

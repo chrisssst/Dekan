@@ -4,7 +4,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tracing::{debug, warn};
 
 use super::runtime;
-use super::views::{Theme, WelcomeWindow};
+use super::views::WelcomeWindow;
 
 const AUTO_DISMISS: Duration = Duration::from_secs(15);
 
@@ -74,10 +74,10 @@ fn open(content: &WelcomeContent, auto_dismiss: Option<Duration>) {
             return;
         }
     };
-    super::themes::follow(&window, |window, mode| {
-        window.global::<Theme>().set_mode(mode)
-    });
     fill(&window, content);
+    super::themes::follow(&window, |w, mode| {
+        w.global::<super::views::Theme>().set_mode(mode)
+    });
     runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
     let weak = window.as_weak();
     window.on_dismiss(move || {
