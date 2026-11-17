@@ -11,7 +11,7 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
 ### Changed
 
 - Dekan 2.1 is rebuilt on the latest engine: native injection tools (`dekan_launcher.exe` and
-  `dekan_bridge.dll`) ship with the installer, so no separate LTK Manager download is needed.
+  `dekan_bridge.dll`) ship with the installer and drive the installed Mod Manager (1.33.0 or newer).
 - The interface stays in Turkish (default) and English, and the Classic, Crimson and Obsidian themes are kept
   under **Options → Theme**; the choice is saved and applied to every window.
 - Discord Rich Presence shows the champion and skin in your Discord status, with download and Discord buttons.
