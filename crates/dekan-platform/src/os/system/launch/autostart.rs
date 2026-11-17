@@ -134,10 +134,7 @@ mod tests {
     fn test_a_value_matches_quoted_unquoted_and_in_any_case() {
         let exe = PathBuf::from(r"C:\Program Files\Dekan\dekan.exe");
         assert!(run_value_matches(&run_command(&exe), &exe));
-        assert!(run_value_matches(
-            r"c:\program files\dekan\DEKAN.EXE",
-            &exe
-        ));
+        assert!(run_value_matches(r"c:\program files\dekan\DEKAN.EXE", &exe));
         assert!(run_value_matches(
             r#"  "C:\Program Files\Dekan\dekan.exe" --tray "#,
             &exe

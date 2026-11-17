@@ -179,8 +179,7 @@ fn a_symlink_entry_is_refused() {
 
 #[test]
 fn an_entry_is_never_written_through_a_junction_in_the_destination() {
-    let root =
-        std::env::temp_dir().join(format!("dekan_test_zip_junction_{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("dekan_test_zip_junction_{}", std::process::id()));
     let outside = root.join("outside");
     let dest = root.join("dest");
     std::fs::create_dir_all(&outside).expect("outside dir");
@@ -255,8 +254,7 @@ fn an_entry_is_never_written_through_a_junction_used_as_the_destination() {
 
 #[test]
 fn extraction_refuses_to_truncate_a_preexisting_hard_link() {
-    let root =
-        std::env::temp_dir().join(format!("dekan_test_zip_hardlink_{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("dekan_test_zip_hardlink_{}", std::process::id()));
     let dest = root.join("dest");
     let sentinel = root.join("sentinel.txt");
     std::fs::create_dir_all(&dest).expect("destination dir");

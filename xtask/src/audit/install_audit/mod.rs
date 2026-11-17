@@ -77,8 +77,7 @@ pub fn audit_files(
                     format!(
                         "{} is signed by Dekan's publisher {} ({})",
                         path.display(),
-                        dekan_inject::trust::NATIVE_PUBLISHER
-                            .unwrap_or("not pinned in this build"),
+                        dekan_inject::trust::NATIVE_PUBLISHER.unwrap_or("not pinned in this build"),
                         verdict.err().unwrap_or_else(|| "verified".to_owned())
                     ),
                 ));

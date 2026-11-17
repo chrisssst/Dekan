@@ -128,10 +128,8 @@ fn test_partial_extraction_cleans_up_aborted_file() {
         writer.finish().expect("finish zip");
     }
 
-    let root = std::env::temp_dir().join(format!(
-        "dekan_test_partial_cleanup_{}",
-        std::process::id()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("dekan_test_partial_cleanup_{}", std::process::id()));
 
     let strict_limits = ExtractLimits {
         max_single_file_bytes: 50,

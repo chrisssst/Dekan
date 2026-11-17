@@ -108,12 +108,11 @@ pub(crate) fn run_mesh_roundtrip(args: &[String]) {
                         skeletons.most_joints = skeletons.most_joints.max(skeleton.joints.len());
                         skeletons.most_influences =
                             skeletons.most_influences.max(skeleton.influences.len());
-                        let same =
-                            dekan_classic::skeleton::write(&skeleton).is_ok_and(|written| {
-                                written.len() == bytes.len()
-                                    && dekan_classic::skeleton::parse(&written)
-                                        .is_ok_and(|parsed| parsed == skeleton)
-                            });
+                        let same = dekan_classic::skeleton::write(&skeleton).is_ok_and(|written| {
+                            written.len() == bytes.len()
+                                && dekan_classic::skeleton::parse(&written)
+                                    .is_ok_and(|parsed| parsed == skeleton)
+                        });
                         skeletons.record(same, what);
                     }
                     Err(e) => skeletons.record(false, || format!("{}: {e}", what())),

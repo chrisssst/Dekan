@@ -274,9 +274,7 @@ async fn run() -> Result<()> {
         });
 
         if dekan_app::update_check::is_enabled(
-            std::env::var(dekan_core::env::UPDATE_CHECK)
-                .ok()
-                .as_deref(),
+            std::env::var(dekan_core::env::UPDATE_CHECK).ok().as_deref(),
         ) {
             boot::tasks::spawn_update_check(
                 &mut supervisor,

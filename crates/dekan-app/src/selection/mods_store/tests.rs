@@ -45,9 +45,7 @@ fn test_selection_round_trips_and_a_damaged_file_is_set_aside() {
     let selection = ModSelection {
         map: Some("dekan:maps/Winter".into()),
         others: vec!["dekan:ui/HUD".into()],
-        skin: [(238, "dekan:skins/238/Neon".into())]
-            .into_iter()
-            .collect(),
+        skin: [(238, "dekan:skins/238/Neon".into())].into_iter().collect(),
         ..Default::default()
     };
     save_selection(&tmp.0, &selection);

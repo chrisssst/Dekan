@@ -159,9 +159,7 @@ pub(crate) fn lobby_overlay_serves(
             && lobby.is_some_and(|lobby| lobby.champions().contains(&champ_id)))
 }
 
-pub(crate) fn party_skins(
-    state: &dekan_core::state::AppState,
-) -> dekan_core::party::VerifiedParty {
+pub(crate) fn party_skins(state: &dekan_core::state::AppState) -> dekan_core::party::VerifiedParty {
     dekan_core::party::verified_party_skins(
         &state.party_peers,
         &state.team,

@@ -4,10 +4,7 @@ const TRUST_E_NOSIGNATURE: u32 = 0x800b_0100;
 
 #[test]
 fn the_native_engine_must_carry_the_pinned_publisher() {
-    assert_eq!(
-        judge_native("Dekan", Ok("Dekan".into())),
-        Ok(())
-    );
+    assert_eq!(judge_native("Dekan", Ok("Dekan".into())), Ok(()));
     assert!(
         judge_native("Dekan", Ok("Someone Else".into()))
             .is_err_and(|reason| reason.contains("Someone Else"))

@@ -147,10 +147,7 @@ pub async fn ensure_bridge_running(
         ));
     }
     if code != 0 {
-        warn!(
-            exit_code = code,
-            "dekan_launcher exited with non-zero code"
-        );
+        warn!(exit_code = code, "dekan_launcher exited with non-zero code");
         return Err(InjectError::Process(format!(
             "{LAUNCHER_EXE_NAME} failed to launch Mod Manager (exit code {code})"
         )));

@@ -82,7 +82,9 @@ pub(crate) fn run_package() {
         workspace_root.join("target/release/dekan-relay.exe"),
     ];
     let relay_bin = relay_paths.iter().find(|p| p.exists()).unwrap_or_else(|| {
-        eprintln!("[ERROR] dekan-relay.exe was not built under target/; the package would ship without it");
+        eprintln!(
+            "[ERROR] dekan-relay.exe was not built under target/; the package would ship without it"
+        );
         std::process::exit(1);
     });
     let relay_dest = dist_dir.join("dekan-relay.exe");

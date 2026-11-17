@@ -112,7 +112,9 @@ async fn revalidate(github: &Github, state_dir: &Path, saved: Grant, now: u64) -
 
 pub async fn enforce_star_gate(state_dir: &Path) -> anyhow::Result<bool> {
     let Some(client_id) = github::CLIENT_ID.filter(|id| !id.trim().is_empty()) else {
-        info!("This build has no DEKAN_GITHUB_CLIENT_ID; StarGate is off and Dekan starts normally");
+        info!(
+            "This build has no DEKAN_GITHUB_CLIENT_ID; StarGate is off and Dekan starts normally"
+        );
         return Ok(true);
     };
     let github = Github::new(client_id)?;
