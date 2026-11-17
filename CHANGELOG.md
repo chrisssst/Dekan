@@ -14,6 +14,8 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
   `dekan_bridge.dll`) ship with the installer, so no separate LTK Manager download is needed.
 - The interface stays in Turkish (default) and English, and the Classic, Crimson and Obsidian themes are kept
   under **Options → Theme**; the choice is saved and applied to every window.
+- Discord Rich Presence shows the champion and skin in your Discord status, with download and Discord buttons.
+- Party rooms on the default relay recover through HTTPS DNS when the system DNS cannot reach it.
 
 ### Added
 

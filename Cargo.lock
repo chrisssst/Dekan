@@ -24,7 +24,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
 dependencies = [
- "uuid",
+ "uuid 1.28.0",
 ]
 
 [[package]]
@@ -575,190 +575,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dekan-app"
-version = "2.1.0"
-dependencies = [
- "anyhow",
- "dekan-classic",
- "dekan-core",
- "dekan-inject",
- "dekan-lcu",
- "dekan-party",
- "dekan-platform",
- "dekan-wad",
- "futures-util",
- "reqwest",
- "ring",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "uuid",
- "winres",
- "zip",
-]
-
-[[package]]
-name = "dekan-bridge"
-version = "2.1.0"
-dependencies = [
- "base64 0.23.1",
- "ring",
- "serde",
- "serde_json",
- "uuid",
- "windows",
-]
-
-[[package]]
-name = "dekan-classic"
-version = "2.1.0"
-dependencies = [
- "dekan-core",
- "dekan-wad",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "dekan-core"
-version = "2.1.0"
-dependencies = [
- "futures-util",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "dekan-inject"
-version = "2.1.0"
-dependencies = [
- "base64 0.23.1",
- "dekan-core",
- "dekan-platform",
- "dekan-wad",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "xxhash-rust",
- "zip",
- "zstd",
-]
-
-[[package]]
-name = "dekan-launcher"
-version = "2.1.0"
-dependencies = [
- "windows",
-]
-
-[[package]]
-name = "dekan-lcu"
-version = "2.1.0"
-dependencies = [
- "base64 0.23.1",
- "dekan-core",
- "dekan-platform",
- "futures-util",
- "reqwest",
- "rustls",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "dekan-party"
-version = "2.1.0"
-dependencies = [
- "base64 0.23.1",
- "dekan-core",
- "chacha20poly1305",
- "futures-util",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "dekan-platform"
-version = "2.1.0"
-dependencies = [
- "dekan-core",
- "i-slint-backend-testing",
- "libc",
- "raw-window-handle",
- "serde",
- "serde_json",
- "slint",
- "slint-build",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
- "windows",
- "zip",
-]
-
-[[package]]
-name = "dekan-relay"
-version = "2.1.0"
-dependencies = [
- "dekan-core",
- "dekan-party",
- "futures-util",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "dekan-wad"
-version = "2.1.0"
-dependencies = [
- "flate2",
- "memmap2",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tracing",
- "xxhash-rust",
- "zip",
- "zstd",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1193,6 +1009,193 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
+name = "dekan-app"
+version = "2.1.0"
+dependencies = [
+ "anyhow",
+ "dekan-classic",
+ "dekan-core",
+ "dekan-inject",
+ "dekan-lcu",
+ "dekan-party",
+ "dekan-platform",
+ "dekan-wad",
+ "discord-rich-presence",
+ "futures-util",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "uuid 1.28.0",
+ "winres",
+ "zip",
+]
+
+[[package]]
+name = "dekan-bridge"
+version = "2.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "ring",
+ "serde",
+ "serde_json",
+ "uuid 1.28.0",
+ "windows",
+]
+
+[[package]]
+name = "dekan-classic"
+version = "2.1.0"
+dependencies = [
+ "dekan-core",
+ "dekan-wad",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-core"
+version = "2.1.0"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dekan-inject"
+version = "2.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "dekan-core",
+ "dekan-platform",
+ "dekan-wad",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "xxhash-rust",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "dekan-launcher"
+version = "2.1.0"
+dependencies = [
+ "windows",
+]
+
+[[package]]
+name = "dekan-lcu"
+version = "2.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "dekan-core",
+ "dekan-platform",
+ "futures-util",
+ "reqwest",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "dekan-party"
+version = "2.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "chacha20poly1305",
+ "dekan-core",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dekan-platform"
+version = "2.1.0"
+dependencies = [
+ "dekan-core",
+ "i-slint-backend-testing",
+ "libc",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "slint",
+ "slint-build",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid 1.28.0",
+ "windows",
+ "zip",
+]
+
+[[package]]
+name = "dekan-relay"
+version = "2.1.0"
+dependencies = [
+ "dekan-core",
+ "dekan-party",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dekan-wad"
+version = "2.1.0"
+dependencies = [
+ "flate2",
+ "memmap2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tracing",
+ "xxhash-rust",
+ "zip",
+ "zstd",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1230,6 +1233,21 @@ dependencies = [
  "block-buffer",
  "const-oid",
  "crypto-common",
+]
+
+[[package]]
+name = "discord-rich-presence"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c55d69cab17c19677ce3a5f8face993a9e6eaf847fecac3547f3a3ff4a2494"
+dependencies = [
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_repr",
+ "thiserror 2.0.21",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -5576,6 +5594,15 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom 0.2.17",
+]
+
+[[package]]
+name = "uuid"
 version = "1.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
@@ -6596,7 +6623,7 @@ dependencies = [
  "serde_repr",
  "tracing",
  "uds_windows",
- "uuid",
+ "uuid 1.28.0",
  "windows-sys 0.61.2",
  "winnow",
  "zbus_macros",
