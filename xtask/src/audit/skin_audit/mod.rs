@@ -157,6 +157,7 @@ pub fn audit_champion(
                     !keeps_source_links(&champion, &main, skin, &characters.join(&main));
                 let written: HashSet<String> = generated_paths(&wad_root).into_iter().collect();
                 check_generated_bins(&champion, maps, &characters, &written, &mut finding);
+                checks::check_generated_meshes(&wad_root, &written, &mut finding);
                 finding.shared_with_map = generated_paths(&wad_root)
                     .into_iter()
                     .filter_map(|path| {
@@ -187,6 +188,7 @@ pub fn audit_champion(
                             generated_paths(&wad_root).into_iter().collect();
                         let characters = wad_root.join("data").join("characters");
                         check_generated_bins(&champion, maps, &characters, &written, &mut finding);
+                        checks::check_generated_meshes(&wad_root, &written, &mut finding);
                         if !settings.keep {
                             let _ = std::fs::remove_dir_all(staging.join(&folder)); // ignore-ok: probe scratch folder
                         }

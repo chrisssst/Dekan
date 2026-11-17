@@ -136,8 +136,7 @@ pub fn run(exe: &Path, tools: &Path) -> Vec<Check> {
     let installed_injector = dekan_platform::paths::install_dir()
         .map(|dir| dir.join("tools"))
         .is_ok_and(|tools| {
-            tools.join("ltk_patcher_host.exe").is_file()
-                && tools.join("ltk_patcher_dll.dll").is_file()
+            tools.join("dekan_launcher.exe").is_file() && tools.join("dekan_bridge.dll").is_file()
         });
     if installed_injector {
         println!(
@@ -152,7 +151,7 @@ pub fn run(exe: &Path, tools: &Path) -> Vec<Check> {
             Ok(mut child) => {
                 let refused = cursor.wait_for(&[
                     "Dekan starting",
-                    "Dekan stopped at startup: the injector files are missing",
+                    "Dekan stopped at startup: the native engine is missing from the tools folder",
                 ]);
                 check(
                     &mut checks,
@@ -185,14 +184,14 @@ pub fn run(exe: &Path, tools: &Path) -> Vec<Check> {
             let tools_dir = staged.with_file_name("tools");
             let written = std::fs::create_dir_all(&tools_dir)
                 .and_then(|()| {
-                    std::fs::write(tools_dir.join("ltk_patcher_host.exe"), b"not the host")
+                    std::fs::write(tools_dir.join("dekan_launcher.exe"), b"not the host")
                 })
-                .and_then(|()| {
-                    std::fs::write(tools_dir.join("ltk_patcher_dll.dll"), b"not the dll")
-                });
+                .and_then(|()| std::fs::write(tools_dir.join("dekan_bridge.dll"), b"not the dll"));
             match written.and_then(|()| spawn(&staged)) {
                 Ok(mut child) => {
-                    let refused = cursor.wait_for(&["an injector file is not the audited build"]);
+                    let refused = cursor.wait_for(&[
+                        "Dekan stopped at startup: a native engine file is not signed by Dekan's publisher",
+                    ]);
                     check(
                         &mut checks,
                         "B",
@@ -222,7 +221,7 @@ fn run_audited(exe: &Path, tools: &Path, root: &Path, mut checks: Vec<Check>) ->
         (Ok(staged), Some(cursor)) => {
             let tools_dir = staged.with_file_name("tools");
             let copied = std::fs::create_dir_all(&tools_dir).and_then(|()| {
-                for file in ["ltk_patcher_host.exe", "ltk_patcher_dll.dll"] {
+                for file in ["dekan_launcher.exe", "dekan_bridge.dll"] {
                     std::fs::copy(tools.join(file), tools_dir.join(file))?;
                 }
                 Ok(())

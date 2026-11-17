@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use super::skeleton::{Joint, Skeleton, Transform, joint_hash};
 use super::skinned_mesh::{
-    BASIC_VERTEX, COLOR_AT, COLOR_VERTEX, INFLUENCES_AT, SkinnedMesh, Submesh, TANGENT_VERTEX,
+    BASIC_VERTEX, COLOR_AT, COLOR_VERTEX, INFLUENCES_AT, RELATIVE_INDICES_FLAG, SkinnedMesh,
+    Submesh, TANGENT_VERTEX,
 };
 use crate::error::ClassicError;
 
@@ -211,6 +212,41 @@ fn append_vertices(
     Ok(())
 }
 
+fn append_indices(
+    target: &mut Vec<u16>,
+    source: &SkinnedMesh,
+    first_vertex: usize,
+) -> Result<(), ClassicError> {
+    let mut shifted: Vec<u16> = source
+        .indices
+        .iter()
+        .map(|index| {
+            u16::try_from(usize::from(*index) + first_vertex).map_err(|_| refuse("index overflow"))
+        })
+        .collect::<Result<_, _>>()?;
+    if source.uses_relative_indices() {
+        for part in &source.submeshes {
+            let start = part.first_index as usize;
+            let end = start
+                .checked_add(part.index_count as usize)
+                .filter(|end| *end <= source.indices.len())
+                .ok_or_else(|| {
+                    refuse(format!("submesh '{}' indices run past the mesh", part.name))
+                })?;
+            let base = first_vertex + part.first_vertex as usize;
+            for (dst, &src) in shifted[start..end]
+                .iter_mut()
+                .zip(&source.indices[start..end])
+            {
+                *dst =
+                    u16::try_from(usize::from(src) + base).map_err(|_| refuse("index overflow"))?;
+            }
+        }
+    }
+    target.extend_from_slice(&shifted);
+    Ok(())
+}
+
 fn widen_bounds(target: &mut [f32; 10], other: &[f32; 10]) {
     for axis in 0..3 {
         target[axis] = target[axis].min(other[axis]);
@@ -237,6 +273,9 @@ fn sphere(bounds: &mut [f32; 10], forms: &[FormModel]) {
 
 pub fn merge_forms(forms: &[FormModel]) -> Result<MergedForms, ClassicError> {
     let base = forms.first().ok_or_else(|| refuse("no forms"))?;
+    if forms.iter().any(|f| f.mesh.has_bone_palettes()) {
+        return Err(refuse("a mesh maps its bones through its own palettes"));
+    }
     let (vertex_size, vertex_type) = vertex_layout(forms)?;
     let total: usize = forms.iter().map(|f| f.mesh.vertex_count()).sum();
     if total > MAX_VERTICES {
@@ -247,10 +286,11 @@ pub fn merge_forms(forms: &[FormModel]) -> Result<MergedForms, ClassicError> {
     let mut joints = Joints::new(&base.skeleton);
     let mut mesh = SkinnedMesh {
         minor: base.mesh.minor,
-        flags: base.mesh.flags,
+        flags: base.mesh.flags & !RELATIVE_INDICES_FLAG,
         vertex_type,
         vertex_size,
         bounds: base.mesh.bounds,
+        bone_palettes: Vec::new(),
         submeshes: Vec::new(),
         indices: Vec::new(),
         vertices: Vec::new(),
@@ -263,11 +303,7 @@ pub fn merge_forms(forms: &[FormModel]) -> Result<MergedForms, ClassicError> {
         let first_vertex = mesh.vertex_count();
         let first_index = mesh.indices.len();
         append_vertices(&mut mesh, &model.mesh, &map)?;
-        for index in &model.mesh.indices {
-            let shifted = usize::from(*index) + first_vertex;
-            mesh.indices
-                .push(u16::try_from(shifted).map_err(|_| refuse("index overflow"))?);
-        }
+        append_indices(&mut mesh.indices, &model.mesh, first_vertex)?;
         let mut names = Vec::with_capacity(model.mesh.submeshes.len());
         for part in &model.mesh.submeshes {
             if !seen.insert(part.name.to_ascii_lowercase()) {

@@ -280,7 +280,16 @@ fn a_saved_game_index_comes_back_whole_and_anything_stale_or_damaged_is_refused(
     let mut files = Vec::new();
     collect_game_wads(&game.join("DATA").join("FINAL"), &mut files);
     files.sort();
-    let fingerprint = files_fingerprint(&files);
+    let fingerprint = files_fingerprint(&game, &files);
+    let respelled_game = PathBuf::from(game.to_string_lossy().replace('\\', "/"));
+    let mut respelled = Vec::new();
+    collect_game_wads(&respelled_game.join("DATA").join("FINAL"), &mut respelled);
+    respelled.sort();
+    assert_eq!(
+        files_fingerprint(&respelled_game, &respelled),
+        fingerprint,
+        "the same folder spelled with other separators keeps the saved index"
+    );
     let (index, unreadable) = index_game(&game, files.clone()).expect("index");
     assert_eq!(unreadable, 0);
     let file = root.0.join("game_index.bin");
@@ -317,7 +326,7 @@ fn a_saved_game_index_comes_back_whole_and_anything_stale_or_damaged_is_refused(
     std::thread::sleep(std::time::Duration::from_millis(20));
     write_wad(&files[0], &[(77, b"patched")]);
     assert_ne!(
-        files_fingerprint(&files),
+        files_fingerprint(&game, &files),
         fingerprint,
         "a patched WAD changes the fingerprint"
     );

@@ -6,7 +6,6 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-      - ".claude/**"
       - "LICENSE"
   workflow_dispatch:
 
@@ -88,7 +87,7 @@ jobs:
       actions: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+      DEKAN_GITHUB_CLIENT_ID: ${{ vars.DEKAN_GITHUB_CLIENT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -109,67 +108,11 @@ jobs:
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
-      - name: Build the release binary (cargo xtask package)
+      - name: Build the release binary and bridge tools (cargo xtask package)
         run: cargo xtask package
-
-      - id: unsigned-exe
-        if: env.SIGNING == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unsigned-dekan-exe-${{ env.VERSION }}
-          if-no-files-found: error
-          path: dist/dekan.exe
-
-      - name: Sign dekan.exe (SignPath)
-        if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
-        with:
-          connector-url: https://githubactions.connectors.signpath.io
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ vars.SIGNPATH_EXE_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: dist
 
       - name: Build installer around that binary (cargo xtask installer --prebuilt)
         run: cargo xtask installer --prebuilt
-
-      - id: unsigned-setup
-        if: env.SIGNING == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unsigned-setup-${{ env.VERSION }}
-          if-no-files-found: error
-          path: dist/installer/Dekan-Setup-${{ env.VERSION }}-x64.exe
-
-      - name: Sign the installer (SignPath)
-        if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
-        with:
-          connector-url: https://githubactions.connectors.signpath.io
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: dist/installer
-
-      - name: Verify the Authenticode signatures
-        if: env.SIGNING == 'true'
-        shell: pwsh
-        run: |
-          foreach ($file in @('dist/dekan.exe', "dist/installer/Dekan-Setup-$env:VERSION-x64.exe")) {
-            $signature = Get-AuthenticodeSignature $file
-            "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
-            if ($signature.Status -ne 'Valid') { throw "$file is not validly signed" }
-          }
 
       - name: Checksums
         shell: pwsh

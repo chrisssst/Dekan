@@ -108,6 +108,7 @@ pub(crate) fn remove_if_present(dir: &Path) -> Result<(), ClassicError> {
     }
 }
 
+mod baseskin;
 mod cleanup;
 mod cycle;
 mod forms;

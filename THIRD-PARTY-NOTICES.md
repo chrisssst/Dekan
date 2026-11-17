@@ -3,25 +3,6 @@
 Dekan's own source code is licensed under the [MIT License](LICENSE). This file lists the third-party
 components Dekan uses or depends on and the terms they come with.
 
-## LTK patcher (injector)
-
-`ltk_patcher_host.exe` and `ltk_patcher_dll.dll` are made by the League Toolkit organization and ship with
-[LTK Manager](https://github.com/LeagueToolkit/ltk-manager). They are **not** part of this repository, are
-**not** covered by Dekan's MIT license, and are **not** included in Dekan's installer. The README links an
-official way to get them (LTK Manager) and a convenience download mirror, which is not an official League
-Toolkit release.
-
-They are governed by the
-[LTK Patcher License](https://github.com/LeagueToolkit/ltk-manager/blob/main/LTK-PATCHER-LICENSE.md), published by
-League Toolkit. In short, it allows using, studying and building software that uses the binaries. Anyone who
-redistributes them outside an unmodified official LTK Manager release must remove League Toolkit's code
-signature and may only sign them with their own certificate. The official way to get them is to copy both
-files from an LTK Manager release. Dekan only runs copies that carry a valid Authenticode signature from League Toolkit's publisher, whatever
-their source.
-
-For questions about these binaries or their license, use the contact published by League Toolkit in that
-license. Dekan is not affiliated with or endorsed by League Toolkit.
-
 ## Rust crates
 
 `dekan.exe` statically links open-source Rust crates from [crates.io](https://crates.io). Every crate in the
@@ -60,10 +41,18 @@ included in each crate's source, which is available from crates.io at the versio
 ## Reference projects
 
 Dekan was built by studying the projects listed in the README's acknowledgements. No source code from them
-is included. Where a reference is GPL-licensed (for example LTK Manager), Dekan reimplements the behavior it
-needs independently.
+is included, and no third-party injector is used or shipped. Where a reference is GPL-licensed, Dekan
+reimplements the behavior it needs independently.
 
 ## Trademarks
 
 League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. Dekan is not
-affiliated with, endorsed or sponsored by Riot Games or League Toolkit.
+affiliated with, endorsed or sponsored by Riot Games.
+
+## Upstream source
+
+Parts of Dekan are derived from an MIT-licensed upstream project, whose license requires this notice
+to be kept:
+
+> Copyright (c) 2026 Isllan Toso. Permission is hereby granted, free of charge, to any person obtaining a copy of
+> this software and associated documentation files, under the terms of the MIT License (same text as `LICENSE`).

@@ -116,10 +116,20 @@ impl Preference {
         self.toggle_in(&crate::paths::state_dir()?)
     }
 
+    pub fn set_enabled(&self, enabled: bool) -> Result<(), PlatformError> {
+        self.set_enabled_in(&crate::paths::state_dir()?, enabled)
+    }
+
     fn load_in(&self, state_dir: &Path) -> bool {
         let enabled = self.read_from(&state_dir.join(self.file));
         self.value.store(enabled, Ordering::Relaxed);
         enabled
+    }
+
+    fn set_enabled_in(&self, state_dir: &Path, enabled: bool) -> Result<(), PlatformError> {
+        write_to(&state_dir.join(self.file), enabled, self.label)?;
+        self.value.store(enabled, Ordering::Relaxed);
+        Ok(())
     }
 
     fn toggle_in(&self, state_dir: &Path) -> Result<bool, PlatformError> {
@@ -234,6 +244,9 @@ mod tests {
         );
         assert!(restarted.toggle_in(&dir).expect("toggle on"));
         assert!(Preference::new("pref.json", "toggle", false).load_in(&dir));
+        let pref_set = Preference::new("pref_set.json", "set", false);
+        pref_set.set_enabled_in(&dir, true).expect("set enabled");
+        assert!(pref_set.load_in(&dir));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
     }
 

@@ -25,7 +25,7 @@ fn test_wad_file_reads_single_entries_from_disk() {
         Err(WadError::OffsetOutOfRange { .. })
     ));
 
-    std::fs::remove_file(&path).ok();
+    let _ = std::fs::remove_file(&path); // ignore-ok: cleanup temporary fixture file
     assert!(matches!(WadFile::open(&path), Err(WadError::FileIo { .. })));
 }
 
@@ -169,7 +169,7 @@ fn test_zstd_chunked_decodes_concatenated_frames() {
         file.read(0xC4C4_C4C4).expect("read").as_deref(),
         Some(expected.as_slice())
     );
-    std::fs::remove_file(&path).ok();
+    let _ = std::fs::remove_file(&path); // ignore-ok: cleanup temporary fixture file
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn test_type4_with_a_stored_subchunk_decodes_through_the_table() {
         file.read(0x7E57).expect("read").as_deref(),
         Some(expected.as_slice())
     );
-    std::fs::remove_dir_all(&root).ok();
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: cleanup temporary fixture directory
 }
 
 #[test]
@@ -370,5 +370,5 @@ fn test_read_prefix_decodes_only_the_head_of_every_compression() {
         "never more than the entry holds"
     );
     assert_eq!(file.read_prefix(0x9, 4).expect("absent"), None);
-    std::fs::remove_file(&path).ok();
+    let _ = std::fs::remove_file(&path); // ignore-ok: cleanup temporary fixture file
 }

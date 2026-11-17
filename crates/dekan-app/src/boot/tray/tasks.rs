@@ -1,6 +1,5 @@
 use tracing::{debug, info, warn};
 
-use crate::boot::injector::install_from_panel;
 use crate::boot::panel::tray_status;
 
 pub fn spawn_custom_mods_notice(
@@ -39,35 +38,6 @@ pub fn spawn_custom_mods_notice(
     });
 }
 
-pub fn spawn_injector_install(
-    supervisor: &mut dekan_core::supervisor::Supervisor,
-    ltk_notice: &dekan_app::ltk_release::LtkNotice,
-    tools_dir: &std::path::Path,
-    state_dir: &std::path::Path,
-    tray: &dekan_platform::tray::TrayController,
-) -> tokio::sync::mpsc::UnboundedSender<()> {
-    let (install_tx, mut install_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    let install_tray = tray.clone();
-    let install_notice = ltk_notice.clone();
-    let install_tools = tools_dir.to_path_buf();
-    let install_state = state_dir.to_path_buf();
-    supervisor.spawn("injector-install", move |child_token| async move {
-        loop {
-            tokio::select! {
-                _ = child_token.cancelled() => break,
-                request = install_rx.recv() => {
-                    if request.is_none() {
-                        break;
-                    }
-                    install_from_panel(&install_notice, &install_tools, &install_state, &install_tray).await;
-                    while install_rx.try_recv().is_ok() {}
-                }
-            }
-        }
-    });
-    install_tx
-}
-
 pub fn spawn_update_check(
     supervisor: &mut dekan_core::supervisor::Supervisor,
     offer: crate::boot::update::UpdateOffer,
@@ -81,39 +51,6 @@ pub fn spawn_update_check(
     };
     supervisor.spawn("update-check", move |child_token| {
         dekan_app::update_check::run(check, state_rx_update, child_token)
-    });
-}
-
-pub fn spawn_ltk_check(
-    supervisor: &mut dekan_core::supervisor::Supervisor,
-    install_tx: tokio::sync::mpsc::UnboundedSender<()>,
-    state_dir_path: &std::path::Path,
-    ltk_dll_path: &std::path::Path,
-    installed_dll: &dekan_app::ltk_release::InstalledDllCache,
-    ltk_notice: &dekan_app::ltk_release::LtkNotice,
-    state_rx: &dekan_core::state::StateReceiver,
-) {
-    let ltk_check = dekan_app::ltk_release::LtkCheck {
-        state_dir: state_dir_path.to_path_buf(),
-        installed_dll: ltk_dll_path.to_path_buf(),
-        installed: installed_dll.clone(),
-        notice: ltk_notice.clone(),
-        notify: Box::new(move |version| {
-            info!(
-                version,
-                "A newer LTK injector was found; installing it automatically"
-            );
-            if install_tx.send(()).is_err() {
-                warn!(
-                    version,
-                    "The injector install task is gone; the newer injector stays offered in the control panel"
-                );
-            }
-        }),
-    };
-    let state_rx_ltk = state_rx.clone();
-    supervisor.spawn("ltk-check", move |child_token| {
-        dekan_app::ltk_release::run(ltk_check, state_rx_ltk, child_token)
     });
 }
 

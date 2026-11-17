@@ -54,12 +54,9 @@ relay-worker/.dev.vars
 *.p12
 *.pfx
 
-# Local AI and agent context (kept private; CLAUDE.md and AGENTS.md are the public entry points).
-# No exceptions: internal skills and notes never ship with the public repository.
-.claude/
-.agents/
-.serena/
-CLAUDE.local.md
+# Documentação técnica e diagnósticos locais (ADR-048)
+docs/
+native-integration-diagnostics.json
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
@@ -78,4 +75,13 @@ strip_rust_comments.py
 __pycache__/
 *.pyc
 .mypy_cache/
-resultados_ltk/
+
+# Retired native engine sources, kept only in the private repository
+crates/dekan-native-dll/
+crates/dekan-native-host/
+crates/dekan-native-protocol/
+crates/dekan-native-test-harness/
+crates/dekan-inject/examples/native_owned_pipeline.rs
+crates/dekan-inject/tests/native_provider_orchestration.rs
+crates/dekan-wad/tests/native_engine_validation.rs
+scratch/

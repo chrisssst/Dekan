@@ -1,60 +1,49 @@
 use super::*;
 
 impl OverlaySession {
-    pub(super) fn warm_companions(&self, alias: Option<String>) {
+    pub(super) fn warm_champion(&self, alias: Option<String>) {
         let Some(alias) = alias else {
             return;
         };
         let Some(game_dir) = dekan_platform::paths::normalize_game_dir(&self.mods.game_dir)
             .or_else(dekan_platform::paths::discover_game_dir)
         else {
-            debug!("The game folder is not known; companion characters are not warmed");
+            debug!("The game folder is not known; the champion is not warmed");
             return;
         };
         let cache_dir = self.mods.state_dir.clone();
-        let overlay_dir = self.mods.overlay_dir.clone();
         let state_rx = self.state_rx.clone();
+        let turn = std::sync::Arc::clone(&self.warm_turn);
+        let mine = turn.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
         drop(tokio::task::spawn_blocking(move || {
             let started = std::time::Instant::now();
-            let companions =
-                match dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
-                    .map(|champion| champion.with_cache_dir(&cache_dir).companions())
-                {
-                    Ok(companions) => companions,
-                    Err(e) => {
-                        debug!(error = %e, "Companion characters not indexed ahead of the build");
-                        return;
-                    }
-                };
-            let skin_bins: Vec<u64> = std::iter::once(alias.to_ascii_lowercase())
-                .chain(companions.iter().cloned())
-                .map(|character| {
-                    dekan_wad::hash::wad_path_hash(&format!(
-                        "data/characters/{character}/skins/skin0.bin"
-                    ))
-                })
-                .collect();
-            match dekan_inject::overlay_builder::prewarm_shared_copies(
-                &game_dir,
-                &overlay_dir,
-                &skin_bins,
-                &|| {
-                    state_rx.borrow().phase.is_in_game()
-                        && !dekan_inject::overlay_builder::build_waiting_for_copies()
-                },
-            ) {
-                Ok(copied) => info!(
-                    companions = ?companions,
-                    copied,
+            if let Err(e) = dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
+                .map(|champion| champion.with_cache_dir(&cache_dir).companions())
+            {
+                debug!(error = %e, "Companion characters not indexed ahead of the build");
+            }
+            let skin_bin = dekan_wad::hash::wad_path_hash(&format!(
+                "data/characters/{}/skins/skin0.bin",
+                alias.to_ascii_lowercase()
+            ));
+            match dekan_inject::overlay_builder::read_wads_ahead(&game_dir, &[skin_bin], &|| {
+                state_rx.borrow().phase.is_in_game()
+                    || turn.load(std::sync::atomic::Ordering::Acquire) != mine
+            }) {
+                Ok(read) => info!(
+                    alias = %alias,
+                    files = read.files,
+                    bytes = read.bytes,
                     elapsed_ms = started.elapsed().as_millis(),
-                    "Shared map WADs prepared in the background; the selection window stayed responsive"
+                    "Champion WAD read ahead; the patcher build finds it in the file cache"
                 ),
-                Err(dekan_inject::error::InjectError::Cancelled) => info!(
+                Err(dekan_inject::error::InjectError::Cancelled) => debug!(
+                    alias = %alias,
                     elapsed_ms = started.elapsed().as_millis(),
-                    "Map WAD copy ahead stopped: the match started and no build needs it"
+                    "Champion WAD read-ahead stopped: another champion took its place or the match started"
                 ),
                 Err(e) => {
-                    warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it")
+                    warn!(alias = %alias, error = %e, "Champion WAD not read ahead; the patcher build reads it from the disk")
                 }
             }
         }));

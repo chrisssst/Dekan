@@ -136,10 +136,10 @@ mod tests {
     #[test]
     fn parameters_become_separate_arguments_the_shell_never_reads() {
         assert_eq!(
-            split_parameters(r#"--install-injector "1.29.3" "/Applications/My $(x) App/tools""#),
+            split_parameters(r#"--flag "1.2.3" "/Applications/My $(x) App/tools""#),
             vec![
-                "--install-injector".to_owned(),
-                "1.29.3".to_owned(),
+                "--flag".to_owned(),
+                "1.2.3".to_owned(),
                 "/Applications/My $(x) App/tools".to_owned(),
             ]
         );

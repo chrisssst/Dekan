@@ -94,12 +94,14 @@ fn write_zip(
 
     let file = std::fs::File::create(partial).map_err(|e| format!("{}: {e}", partial.display()))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
+    let deflated = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
+    let stored = deflated.compression_method(zip::CompressionMethod::Stored);
     let mut total = 0u64;
     for (name, path) in files {
+        let image = name.starts_with("screenshots/");
         let mut bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        if !name.starts_with("screenshots/") {
+        if !image {
             bytes = redact::redact(&String::from_utf8_lossy(&bytes), profile).into_bytes();
         }
         total += bytes.len() as u64;
@@ -108,7 +110,7 @@ fn write_zip(
                 "logs larger than the diagnostic limit ({total} bytes after {name})"
             ));
         }
-        zip.start_file(name.as_str(), options)
+        zip.start_file(name.as_str(), if image { stored } else { deflated })
             .map_err(|e| format!("{name}: {e}"))?;
         zip.write_all(&bytes).map_err(|e| format!("{name}: {e}"))?;
     }

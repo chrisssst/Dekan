@@ -223,6 +223,7 @@ pub(super) fn close_match(
     since: SystemTime,
     timeline: &[(SystemTime, f64)],
 ) {
+    let _background = dekan_platform::process::BackgroundThread::enter();
     report_game_log(game_dir, since);
     let until = SystemTime::now();
     let shots = game_dir

@@ -157,7 +157,7 @@ fn dekan_tools_dir() -> PathBuf {
     let candidates = dekan_platform::paths::tools_dir_candidates(&dekan_data_dir());
     candidates
         .iter()
-        .find(|dir| dir.join("ltk_patcher_host.exe").is_file())
+        .find(|dir| dir.join("dekan_launcher.exe").is_file() || dir.join("dekan-br.exe").is_file())
         .or_else(|| candidates.first())
         .cloned()
         .unwrap_or_default()

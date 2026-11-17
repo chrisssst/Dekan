@@ -89,6 +89,8 @@ pub struct OverlaySession {
     preview_tally: PreviewTally,
 
     pending_import: Option<PendingImport>,
+
+    warm_turn: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,8 +101,6 @@ pub struct ModsConfig {
     pub state_dir: PathBuf,
 
     pub game_dir: PathBuf,
-
-    pub overlay_dir: PathBuf,
 
     pub injection_tools: Vec<PathBuf>,
 }
@@ -139,6 +139,7 @@ impl OverlaySession {
             preview_fetches: None,
             preview_tally: PreviewTally::default(),
             pending_import: None,
+            warm_turn: std::sync::Arc::default(),
         }
     }
 
@@ -366,7 +367,7 @@ impl OverlaySession {
         }
         self.controller.set_catalog(built.clone());
         if !classic {
-            self.warm_companions(built.alias.clone());
+            self.warm_champion(built.alias.clone());
         }
         Some(built)
     }

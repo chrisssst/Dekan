@@ -180,14 +180,18 @@ pub fn run_installer(install: Option<ReadyInstall>, instance_guard: Option<Singl
     {
         command.raw_arg(format!("/DIR=\"{}\"", dir.display()));
     }
-    match command.spawn() {
-        Ok(_) => {
-            info!(
-                "Update installer started; Dekan is exiting so the installed files can be replaced"
+    match command.spawn().and_then(|mut setup| setup.wait()) {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            warn!(
+                exit_code = status.code(),
+                setup = %install.setup.path.display(),
+                "The installer stopped before updating, or Windows permission was declined"
             );
+            relaunch();
         }
         Err(e) => {
-            error!(error = %e, setup = %install.setup.path.display(), "Could not start the update installer");
+            error!(error = %e, setup = %install.setup.path.display(), "The installer could not be started; Dekan reopens");
             relaunch();
         }
     }

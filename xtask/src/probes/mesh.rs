@@ -1,4 +1,5 @@
 use crate::game_dir;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 const SKN_MAGIC: &[u8] = &[0x33, 0x22, 0x11, 0x00];
@@ -26,6 +27,29 @@ impl Tally {
     }
 }
 
+const CONVENTIONS: [&str; 4] = ["relative only", "global only", "both", "neither"];
+
+fn index_convention(mesh: &dekan_classic::skinned_mesh::SkinnedMesh) -> usize {
+    let (mut relative, mut global) = (true, true);
+    for part in &mesh.submeshes {
+        let start = part.first_index as usize;
+        let Some(indices) = mesh.indices.get(start..start + part.index_count as usize) else {
+            return 3;
+        };
+        let (first, count) = (part.first_vertex as usize, part.vertex_count as usize);
+        relative &= indices.iter().all(|&i| usize::from(i) < count);
+        global &= indices
+            .iter()
+            .all(|&i| (first..first + count).contains(&usize::from(i)));
+    }
+    match (relative, global) {
+        (true, false) => 0,
+        (false, true) => 1,
+        (true, true) => 2,
+        (false, false) => 3,
+    }
+}
+
 pub(crate) fn run_mesh_roundtrip(args: &[String]) {
     let root = args
         .iter()
@@ -46,6 +70,7 @@ pub(crate) fn run_mesh_roundtrip(args: &[String]) {
     wads.sort();
     let (mut meshes, mut skeletons) = (Tally::default(), Tally::default());
     let (mut unreadable, mut unreadable_entries) = (0usize, 0usize);
+    let mut conventions: BTreeMap<u32, [usize; 4]> = BTreeMap::new();
     for path in &wads {
         let Ok(wad) = dekan_wad::wad::WadFile::open(path) else {
             unreadable += 1;
@@ -69,6 +94,7 @@ pub(crate) fn run_mesh_roundtrip(args: &[String]) {
             if bytes.starts_with(SKN_MAGIC) {
                 match dekan_classic::skinned_mesh::parse(&bytes) {
                     Ok(mesh) => {
+                        conventions.entry(mesh.flags).or_default()[index_convention(&mesh)] += 1;
                         let same = dekan_classic::skinned_mesh::write(&mesh)
                             .is_ok_and(|written| written == bytes);
                         meshes.record(same, what);
@@ -105,6 +131,14 @@ pub(crate) fn run_mesh_roundtrip(args: &[String]) {
         skeletons.most_joints,
         skeletons.most_influences
     );
+    for (flags, counts) in &conventions {
+        let row: Vec<String> = CONVENTIONS
+            .iter()
+            .zip(counts)
+            .map(|(label, n)| format!("{label} {n}"))
+            .collect();
+        println!("  skn flags={flags}: {}", row.join(" | "));
+    }
     for example in meshes.examples.iter().chain(&skeletons.examples) {
         println!("  {example}");
     }

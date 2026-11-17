@@ -12,3 +12,5 @@ new_sqlite_classes = ["PartyRoom"]
 
 [observability]
 enabled = true
+
+[previews]

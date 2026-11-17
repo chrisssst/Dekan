@@ -14,6 +14,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::{HRESULT, PWSTR};
 
+pub use super::desktop::{is_default_desktop, process_desktop, terminate_process};
+
 use tracing::debug;
 
 use crate::error::PlatformError;

@@ -16,6 +16,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: "0"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   MACOS_TARGET: aarch64-apple-darwin
 
@@ -32,18 +33,28 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install && rustup target add "$MACOS_TARGET"
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore cargo registry & build
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-cargo2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-cargo2-
 
       - name: Check
         run: cargo check --locked --target "$MACOS_TARGET" -p dekan-core -p dekan-wad -p dekan-classic -p dekan-party -p dekan-relay -p dekan-lcu
 
       - name: Test
         run: cargo test --locked --target "$MACOS_TARGET" -p dekan-core -p dekan-wad -p dekan-classic -p dekan-party -p dekan-relay
+      - name: Save cargo registry & build
+        if: github.event_name == 'push' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}

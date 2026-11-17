@@ -30,19 +30,19 @@ fn joining_refuses_an_empty_code_then_answers_the_trimmed_one() {
         "nothing is answered for an empty code"
     );
 
-    dialog.set_code("  BLT-7Q2M-X9KD \n".into());
+    dialog.set_code("  DKN-7Q2M-X9KD \n".into());
     press(&dialog, text.party_dialog_btn_join);
     assert_eq!(
         answers.try_recv().ok(),
-        Some(Some("BLT-7Q2M-X9KD".to_owned()))
+        Some(Some("DKN-7Q2M-X9KD".to_owned()))
     );
 }
 
 #[test]
 fn cancelling_answers_nothing_and_only_the_first_answer_counts() {
     let text = Language::English.text();
-    let (dialog, answers) = open(&join_content(text, Some("BLT-AAAA")));
-    assert_eq!(dialog.get_code(), "BLT-AAAA");
+    let (dialog, answers) = open(&join_content(text, Some("DKN-AAAA")));
+    assert_eq!(dialog.get_code(), "DKN-AAAA");
     press(&dialog, text.party_dialog_btn_cancel);
     press(&dialog, text.party_dialog_btn_join);
     assert_eq!(answers.try_recv().ok(), Some(None));
@@ -52,7 +52,7 @@ fn cancelling_answers_nothing_and_only_the_first_answer_counts() {
 #[test]
 fn the_created_dialog_is_read_only_without_cancel_and_confirms_the_code() {
     let text = Language::Turkish.text();
-    let content = created_content(text, "BLT-7Q2M-X9KD");
+    let content = created_content(text, "DKN-7Q2M-X9KD");
     assert_eq!(content.inline, InlineAction::Copy);
     let (dialog, answers) = open(&content);
     assert!(dialog.get_read_only());
@@ -65,7 +65,7 @@ fn the_created_dialog_is_read_only_without_cancel_and_confirms_the_code() {
     press(&dialog, text.party_dialog_btn_ok);
     assert_eq!(
         answers.try_recv().ok(),
-        Some(Some("BLT-7Q2M-X9KD".to_owned()))
+        Some(Some("DKN-7Q2M-X9KD".to_owned()))
     );
 }
 
@@ -100,16 +100,16 @@ fn enter_confirms_the_typed_code() {
     let text = Language::English.text();
     let (dialog, answers) = open(&join_content(text, None));
     dialog.invoke_focus_field();
-    for c in ["B", "L", "T", "-", "9"] {
+    for c in ["D", "K", "N", "-", "9"] {
         key(&dialog, c);
     }
     assert_eq!(
         dialog.get_code(),
-        "BLT-9",
+        "DKN-9",
         "typed keys reach the code field"
     );
     key(&dialog, "\n");
-    assert_eq!(answers.try_recv().ok(), Some(Some("BLT-9".to_owned())));
+    assert_eq!(answers.try_recv().ok(), Some(Some("DKN-9".to_owned())));
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn escape_cancels_from_the_code_field() {
 #[test]
 fn closing_the_window_answers_nothing() {
     let text = Language::English.text();
-    let (dialog, answers) = open(&join_content(text, Some("BLT-1")));
+    let (dialog, answers) = open(&join_content(text, Some("DKN-1")));
     dialog
         .window()
         .dispatch_event(slint::platform::WindowEvent::CloseRequested);

@@ -56,10 +56,11 @@ find the characters.
 | `animation/parts/form_mesh/mod.rs`, `generation/generator/forms/form_models.rs` | Forms with their own mesh and skeleton: each gear becomes a gear of parts of one merged model, its whole-model texture becomes per-part overrides, and the skin points at the merged files under new paths |
 | `animation/transition/form_transition/mod.rs` | Finds each form's own transformation clip (a contextual situation of the skin whose sounds name the form) so `Ctrl+5` plays it |
 | `audio/sound_bank/mod.rs`, `audio/form_sound/mod.rs` | Wwise sound banks read and written with their original objects untouched, and one event per form that sets the skin's `gear_N` sound switches, fired when the form is entered |
-| `mesh/formats/skeleton/mod.rs`, `mesh/formats/skinned_mesh/mod.rs`, `mesh/merge/mesh_merge/mod.rs` | Skeletons (`.skl`) and skinned meshes (`.skn` v4) read and written byte for byte, and the merge of several forms into one: shared bones by name, a skinning twin wherever a form binds a bone differently |
+| `mesh/formats/skeleton/mod.rs`, `mesh/formats/skinned_mesh/mod.rs`, `mesh/merge/mesh_merge/mod.rs` | Skeletons (`.skl`) and skinned meshes (`.skn` v4) read and written byte for byte, the per-submesh bone palettes of a mesh whose skeleton has more than 256 influences kept as they are, and the merge of several forms into one: shared bones by name, a skinning twin wherever a form binds a bone differently |
 | `animation/parts/form_marker/mod.rs` | Adds one invisible marker part per extra form to the skin's mesh and hides the markers at start |
 | `animation/gear/form_gear/mod.rs` | Reads what each gear changes besides parts: idle effects per form, materials per part (a part drawn with another material in a form gets a copy for that form) and what a cycle cannot carry |
 | `animation/vfx/form_vfx/mod.rs` | Gives every effect that changes by form one system with each form's emitters drawn only under that form's stencil reference |
+| `animation/vfx/clip_effects/mod.rs` | In each form's copy of a clip, an effect the clip fires names that form's own system instead of the shared one, unless some clip ends that effect by key |
 | `animation/vfx/vfx_markers.rs` | Stencil markers: one invisible ground effect per form, held by the form's persistent condition, that writes the form's stencil reference |
 | `animation/clips/form_clips/mod.rs` | Clip helpers for the form graph: strips form parts from the game's events and plays, in each form's copy, the variant the game picks by equipped gear |
 | `animation/graph/form_state/mod.rs` | Holds each form through a persistent effect condition of the skin (state clip playing or marker visible) and gives the drivers gears are rewired to |
@@ -118,8 +119,12 @@ find the characters.
   invisible ground effect per form, held by the form's persistent condition, writes that reference, and the first
   form's also starts as an idle effect a second after spawn, because one made on the loading screen does not
   write the stencil. The form references are 42 to 48, 54, 55 and 57, values no effect of the game sets (a scan of
-  every game bin found 40, 41 and 49 in use, the old range of the forms). Idle effects move into a persistent
-  condition per form. A part that a form draws with another
+  every game bin found 40, 41 and 49 in use, the old range of the forms). An effect a clip fires does not go
+  through the shared system: each form plays its own copy of the clip, so the copy names that form's system
+  under a key of its own in the skin's resolver and only that form's emitters are created. The shared system
+  stays for what the game's scripts fire by name, for an effect some clip ends by key (a kill in another form's
+  copy would miss it) and for a form that has no system of its own for the effect. Idle effects move into a
+  persistent condition per form. A part that a form draws with another
   material gets a copy in the mesh (same vertices, its indices repeated) with that material, shown only in that
   form. Clips the game picks by equipped gear play, in each form's copy, that form's variant. What a cycle cannot
   carry is logged and listed by `cargo xtask skin-audit`: a form with another mesh or skeleton turns the cycle off

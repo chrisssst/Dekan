@@ -51,6 +51,7 @@ pub(crate) fn mesh(parts: &[(&str, usize)], color: bool, influence: u8) -> Skinn
         vertex_type: u32::from(color),
         vertex_size: if color { COLOR_VERTEX } else { BASIC_VERTEX },
         bounds: [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.8],
+        bone_palettes: Vec::new(),
         submeshes,
         indices,
         vertices,
@@ -72,6 +73,27 @@ fn a_written_mesh_reads_back_whole_and_rewrites_byte_for_byte() {
             Some(original.vertex_size)
         );
         assert!(parsed.vertex(9).is_none());
+    }
+}
+
+#[test]
+fn bone_palettes_sit_before_the_indices_and_survive_a_rewrite() {
+    let mut original = mesh(&[("Body", 2), ("Wing", 1)], false, 3);
+    original.flags = BONE_PALETTES_FLAG | RELATIVE_INDICES_FLAG;
+    original.indices = vec![0, 1, 2, 3, 4, 5, 0, 1, 2];
+    original.bone_palettes = vec![1, 2, 0x21, 0x01, 0x28, 0x01];
+    let bytes = write(&original).expect("write");
+    let palettes_at = SUBMESHES_AT + 2 * SUBMESH + COUNTS + BOUNDS * 4;
+    assert_eq!(&bytes[palettes_at..palettes_at + 2], &6u16.to_le_bytes());
+
+    let parsed = parse(&bytes).expect("parse");
+    assert_eq!(parsed, original);
+    parsed
+        .validate_submesh_indices()
+        .expect("the indices are read after the palettes");
+    assert_eq!(write(&parsed).expect("rewrite"), bytes);
+    for cut in palettes_at..palettes_at + 8 {
+        assert!(parse(&bytes[..cut]).is_err(), "cut at {cut}");
     }
 }
 

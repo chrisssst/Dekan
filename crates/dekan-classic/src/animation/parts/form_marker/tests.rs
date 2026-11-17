@@ -188,3 +188,34 @@ fn test_a_part_copy_reuses_the_vertices_and_repeats_the_indices() {
     assert_eq!(&out[data + 12..data + 24], &out[data..data + 12]);
     assert!(add_parts(&original, &names, &[("missing".into(), "X_F1".into())]).is_none());
 }
+
+#[test]
+fn test_relative_index_meshes_keep_marker_indices_submesh_relative() {
+    let mut original = skn(&["Body", "Coat"], 56);
+    let table_end = PARTS_AT + 2 * PART_SIZE;
+    original[table_end..table_end + 4]
+        .copy_from_slice(&crate::skinned_mesh::RELATIVE_INDICES_FLAG.to_le_bytes());
+    let data = table_end + 20 + BOUNDS_SIZE;
+    for (part_idx, (fv, vc, fi, raw)) in [(0u32, 3u32, 0u32, [0u16, 1, 2]), (3, 1, 3, [0, 0, 0])]
+        .into_iter()
+        .enumerate()
+    {
+        let at = PARTS_AT + part_idx * PART_SIZE + PART_NAME;
+        original[at..at + 4].copy_from_slice(&fv.to_le_bytes());
+        original[at + 4..at + 8].copy_from_slice(&vc.to_le_bytes());
+        original[at + 8..at + 12].copy_from_slice(&fi.to_le_bytes());
+        original[at + 12..at + 16].copy_from_slice(&3u32.to_le_bytes());
+        for (slot, value) in raw.into_iter().enumerate() {
+            let off = data + (fi as usize + slot) * 2;
+            original[off..off + 2].copy_from_slice(&value.to_le_bytes());
+        }
+    }
+    let names = vec!["DekanForm1".to_owned(), "DekanForm2".to_owned()];
+    let out = add_parts(&original, &names, &[]).expect("relative markers");
+    let parsed = crate::skinned_mesh::parse(&out).expect("parse");
+    assert!(parsed.uses_relative_indices());
+    parsed
+        .validate_submesh_indices()
+        .expect("relative marker indices stay inside their submesh");
+    assert_eq!(&parsed.indices[6..12], &[0, 1, 2, 0, 1, 2]);
+}

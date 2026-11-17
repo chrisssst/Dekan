@@ -105,6 +105,26 @@ pub(super) fn check_generated_bins(
     }
 }
 
+pub(super) fn check_generated_meshes(
+    wad_root: &Path,
+    written: &HashSet<String>,
+    finding: &mut SkinFinding,
+) {
+    for path in written.iter().filter(|path| path.ends_with(".skn")) {
+        let Ok(bytes) = std::fs::read(wad_root.join(path)) else {
+            continue;
+        };
+        if bytes.get(4..6) != Some(&4u16.to_le_bytes()) {
+            continue;
+        }
+        let check = dekan_classic::skinned_mesh::parse(&bytes)
+            .and_then(|mesh| mesh.validate_submesh_indices());
+        if let Err(error) = check {
+            finding.stale_references.push(format!("{path}: {error}"));
+        }
+    }
+}
+
 pub(super) fn generated_paths(wad_root: &Path) -> Vec<String> {
     let mut paths = Vec::new();
     let mut stack = vec![wad_root.to_path_buf()];

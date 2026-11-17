@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use super::*;
 
 struct CachedIndex {
@@ -29,7 +31,7 @@ pub fn get_or_index_game(game_dir: &Path) -> Result<Arc<GameIndexMap>, InjectErr
         );
     }
     files.sort();
-    let fingerprint = files_fingerprint(&files);
+    let fingerprint = files_fingerprint(game_dir, &files);
     let key = game_dir
         .canonicalize()
         .unwrap_or_else(|_| game_dir.to_path_buf());
@@ -67,10 +69,13 @@ pub fn get_or_index_game(game_dir: &Path) -> Result<Arc<GameIndexMap>, InjectErr
     Ok(index)
 }
 
-pub(super) fn files_fingerprint(files: &[PathBuf]) -> u64 {
+pub(super) fn files_fingerprint(game_dir: &Path, files: &[PathBuf]) -> u64 {
     let mut hasher = xxhash_rust::xxh3::Xxh3::new();
     for file in files {
-        hasher.update(file.to_string_lossy().as_bytes());
+        for part in file.strip_prefix(game_dir).unwrap_or(file).components() {
+            hasher.update(part.as_os_str().to_string_lossy().as_bytes());
+            hasher.update(b"/");
+        }
         let (len, modified) = std::fs::metadata(file).map_or((u64::MAX, 0), |meta| {
             let modified = meta
                 .modified()
@@ -204,6 +209,45 @@ pub fn prewarm_game_index(game_dir: &Path) {
         PREWARM_RUNNING.store(false, Ordering::Release);
         debug!(error = %e, "Game WAD index prewarm thread not started; the build will index on demand");
     }
+}
+
+const READ_AHEAD_BLOCK: usize = 1 << 20;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ReadAhead {
+    pub files: usize,
+    pub bytes: u64,
+}
+
+pub fn read_wads_ahead(
+    game_dir: &Path,
+    names: &[u64],
+    stop: &dyn Fn() -> bool,
+) -> Result<ReadAhead, InjectError> {
+    let game = get_or_index_game(game_dir)?;
+    let mut done = ReadAhead::default();
+    let mut block = vec![0u8; READ_AHEAD_BLOCK];
+    for wad in game.values() {
+        if is_map(wad) || !names.iter().any(|name| wad.contains(*name)) {
+            continue;
+        }
+        let unread = |e: std::io::Error| {
+            InjectError::Overlay(format!("could not read '{}': {e}", wad.path.display()))
+        };
+        let mut file = std::fs::File::open(&wad.path).map_err(unread)?;
+        loop {
+            if stop() {
+                return Err(InjectError::Cancelled);
+            }
+            let read = file.read(&mut block).map_err(unread)?;
+            if read == 0 {
+                break;
+            }
+            done.bytes += read as u64;
+        }
+        done.files += 1;
+    }
+    Ok(done)
 }
 
 pub(super) fn index_game(

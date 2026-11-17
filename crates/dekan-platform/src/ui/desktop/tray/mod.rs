@@ -40,7 +40,6 @@ pub enum TrayEvent {
     PartyLeave,
 
     OpenRelease,
-    InstallInjector,
 
     MarkProblem,
 

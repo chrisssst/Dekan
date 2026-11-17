@@ -19,11 +19,9 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
    when a file's size or modification time changes. For every archive a mod touches, the builder writes a copy
    that holds the mod's files and the original bytes of everything else. Entries that turn out identical to the
    game's are dropped, so the overlay stays small.
-3. **Injector armed.** The injector host (`ltk_patcher_host.exe`) is started during champion select, before
-   the game process exists, and receives the overlay location. Dekan sends its commands over stdin and reads
-   its status from stdout. The host's own log lines are recorded at the level the host gave them.
-4. **Game starts.** The host attaches its DLL to the game. From then on, whenever the game opens one of the
-   archives Dekan rebuilt, it reads the overlay copy instead.
+3. **Injector armed.** Dekan drives the LTF bridge (`dekan_launcher.exe` and `dekan_bridge.dll`) during champion select,
+   connecting to the official Mod Manager via local TCP bridge.
+4. **Game starts.** The patcher redirects WAD reads so the game loads the overlay copies seamlessly.
 
 ## What is inside
 
@@ -33,17 +31,17 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `build/mod_compat/assets.rs` | Reads asset formats from their headers and finds the game's new name for a renamed asset path |
 | `build/mod_compat/repair.rs` | `Repairer`: rewrites a mod's bins and assets against the installed game, for packed WADs and folders |
 | `build/overlay_builder/mod.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
-| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes; an index built while some WADs were unreadable is used for that run and never kept |
+| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes; an index built while some WADs were unreadable is used for that run and never kept. The saved index is keyed by paths relative to the game folder, so another spelling of that folder keeps it. Also reads a champion's own WAD once, in file order, ahead of the patcher build |
 | `build/overlay_builder/mods.rs` | Index of a mod's WADs and loose files, stale bins retyped against the game, entries identical to the game dropped |
 | `build/overlay_builder/report.rs` | Logs each overlay WAD and writes the overlay manifest |
-| `build/overlay_builder/store.rs` | Shared game WAD copies prepared ahead of a match, the stored base WADs moved in and out of the overlay, and removal of stray WADs left by an earlier build (counted when they cannot be removed or listed) |
+| `build/overlay_builder/store.rs` | The stored base WADs moved in and out of the overlay, and removal of stray WADs left by an earlier build (counted when they cannot be removed or listed) |
 | `build/overlay_cache/mod.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed; recording fails on a game WAD that exists but cannot be read |
 | `build/overlay.rs` | Overlay configuration and locations |
-| `injector/ltk_host/mod.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
-| `injector/overlay_process/mod.rs` | Starts the host, reads its output without blocking (host lines are decoded as lossy UTF-8), and kills it if Dekan drops it; a `Hooked` signal that arrives while waiting for `Armed` satisfies the wait |
+| `injector/overlay_process/mod.rs` | Lifecycle of the native host: waits for its signals, notices when it exits and kills it if Dekan drops it; a `Hooked` signal that arrives while waiting for `Armed` satisfies the wait |
+| `injector/overlay_process/native.rs` | Starts `dekan-br.exe`, passes the StarGate file path, and turns its stdout and stderr into signals and structured failures |
 | `pipeline/mod.rs` | Orchestrates build → arm → confirm |
 | `pipeline/overlay.rs` | Builds the overlay for a pipeline run and records it in the overlay cache, unless stray WADs from an earlier build could not be removed |
-| `injector/trust/mod.rs` | Accepts an injector file signed by League Toolkit's publisher or carrying no signature at all, and refuses a foreign or broken signature; reads the game-build limit compiled into the DLL |
+| `injector/trust/mod.rs` | Runs Dekan's own engine (`dekan-br.exe`, `dekan-br.dll`) only when it carries the publisher the build pins in `DEKAN_NATIVE_PUBLISHER` |
 | `injector/dll_validator.rs` | SHA-256 helpers used to tell installed and published DLLs apart |
 
 ## Rules the builder follows
@@ -66,8 +64,14 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 - **A cache is never recorded over doubt.** A stray overlay WAD that cannot be removed, or a game WAD that
   exists but cannot be read, leaves the overlay without a fingerprint so the next match rebuilds it; an index
   of the game's WADs that skipped unreadable files is not saved.
-- **Every third-party binary is verified first.** An injector signed by anyone other than League Toolkit's publisher, or with a broken signature, is refused; an unsigned file from an official LTK Manager release is accepted. If a
-  file is missing, the user is told where it was expected. The injector never falls back to anything silently.
+- **The engine is verified first.** In a build that pins `DEKAN_NATIVE_PUBLISHER`, a native engine file signed
+  by anyone else, unsigned or with a broken signature is refused. If a file is missing, the user is told to
+  reinstall Dekan. There is no other injector to fall back to.
+
+## Technical Interoperability & Boundaries
+
+Dekan's native engine is used strictly for overlay archive redirection.
+Arbitrary memory tampering, anti-cheat tampering, and process identity spoofing are strictly prohibited.
 
 ## No suspension
 

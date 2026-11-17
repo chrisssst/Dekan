@@ -27,7 +27,7 @@ pub fn tray_status(
             InjectionStatus::Confirmed => text.status_in_game_confirmed,
             InjectionStatus::Unconfirmed => text.status_in_game_unconfirmed,
             InjectionStatus::PatcherExited { code }
-                if dekan_inject::ltk_host::closed_by_another_program(code) =>
+                if dekan_inject::pipeline::closed_by_another_program(code) =>
             {
                 text.status_in_game_patcher_killed
             }
@@ -48,14 +48,7 @@ pub fn tray_status(
 
 pub struct ReleaseNotices {
     pub dekan: dekan_app::update_check::UpdateNotice,
-    pub ltk: dekan_app::ltk_release::LtkNotice,
-    pub installed: InstalledInjector,
     pub custom_mods: dekan_app::mod_repair::CustomModsNotice,
-}
-
-pub struct InstalledInjector {
-    pub dll: std::path::PathBuf,
-    pub cache: dekan_app::ltk_release::InstalledDllCache,
 }
 
 pub fn panel_links_for(
@@ -63,7 +56,6 @@ pub fn panel_links_for(
     state_rx: dekan_core::state::StateReceiver,
     tools: Vec<std::path::PathBuf>,
     game_dir: std::path::PathBuf,
-    game_build: Option<u32>,
     elevated: bool,
     notices: ReleaseNotices,
 ) -> dekan_platform::panel::PanelLinks {
@@ -91,14 +83,8 @@ pub fn panel_links_for(
             tools_present: dekan_app::control_panel::tools_present(&tools),
             game_found: dekan_app::control_panel::game_found(&game_dir),
             lcu_connected,
-            game_build,
-            now_secs: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs()),
             elevated,
             update: notices.dekan.available().map(|latest| latest.to_string()),
-            ltk: notices.ltk.status(),
-            installed_dll: notices.installed.cache.read(&notices.installed.dll),
             custom_mods: notices.custom_mods.summary(),
         };
         let snapshot = dekan_app::control_panel::snapshot(&facts, dekan_platform::i18n::text());
@@ -139,7 +125,6 @@ pub struct TrayActions {
     pub links: dekan_platform::panel::PanelLinks,
     pub mark_state: dekan_core::state::StateReceiver,
     pub mark_live: dekan_app::live_game::LiveGame,
-    pub install_tx: tokio::sync::mpsc::UnboundedSender<()>,
 }
 
 impl TrayActions {
@@ -286,10 +271,6 @@ impl TrayActions {
                 if let Err(e) = dekan_platform::shell::open_web_page(&page) {
                     warn!(error = %e, page = %page, "Could not open the release page");
                 }
-            }
-            dekan_platform::tray::TrayEvent::InstallInjector => {
-                // ignore-ok: the install task is gone only when the app is shutting down
-                let _ = self.install_tx.send(());
             }
             dekan_platform::tray::TrayEvent::ToggleAutostart => {
                 match dekan_platform::autostart::toggle() {
