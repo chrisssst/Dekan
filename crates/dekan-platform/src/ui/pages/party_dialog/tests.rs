@@ -100,7 +100,7 @@ fn enter_confirms_the_typed_code() {
     let text = Language::English.text();
     let (dialog, answers) = open(&join_content(text, None));
     dialog.invoke_focus_field();
-    for c in ["B", "L", "T", "-", "9"] {
+    for c in ["D", "K", "N", "-", "9"] {
         key(&dialog, c);
     }
     assert_eq!(
