@@ -4,9 +4,9 @@ use super::*;
 fn client_locales_map_by_language_family() {
     assert_eq!(Language::from_locale("tr_TR"), Some(Language::Turkish));
     assert_eq!(Language::from_locale("tr-TR"), Some(Language::Turkish));
-    assert_eq!(Language::from_locale("en-GB"), Some(Language::English));
     assert_eq!(Language::from_locale("pt_BR"), None);
     assert_eq!(Language::from_locale("es_MX"), None);
+    assert_eq!(Language::from_locale("en-GB"), Some(Language::English));
     assert_eq!(Language::from_locale("ko_KR"), None);
     assert_eq!(Language::from_locale(""), None);
 }
@@ -15,9 +15,10 @@ fn client_locales_map_by_language_family() {
 #[test]
 fn windows_primary_language_ids_map_to_dictionaries() {
     assert_eq!(Language::from_primary_lang_id(0x1f), Language::Turkish);
-    assert_eq!(Language::from_primary_lang_id(0x09), Language::English);
     assert_eq!(Language::from_primary_lang_id(0x16), Language::Turkish);
     assert_eq!(Language::from_primary_lang_id(0x0a), Language::Turkish);
+    assert_eq!(Language::from_primary_lang_id(0x09), Language::English);
+    assert_eq!(Language::from_primary_lang_id(0x11), Language::Turkish);
 }
 
 #[test]
@@ -26,6 +27,8 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
         assert!(fill(text.party_in_room, "n", "3").contains('3'));
         for (template, key) in [
             (text.party_in_room, "n"),
+            (text.star_gate_missing_star, "user"),
+            (text.star_gate_unreachable, "error"),
             (text.party_copy_failed_body, "code"),
             (text.party_unavailable_body, "reason"),
             (text.import_refused, "reason"),
@@ -38,19 +41,6 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.update_offer_body, "version"),
             (text.panel_update_line, "version"),
             (text.panel_update_line, "current"),
-            (text.detail_dll_days_left, "n"),
-            (text.detail_ltk_current, "version"),
-            (text.detail_ltk_new, "version"),
-            (text.detail_ltk_untrusted, "latest"),
-            (text.panel_ltk_missing_line, "version"),
-            (text.panel_ltk_new_line, "version"),
-            (text.panel_ltk_untrusted_line, "latest"),
-            (text.injector_installed_title, "version"),
-            (text.panel_ltk_download, "version"),
-            (text.missing_tools_body, "version"),
-            (text.injector_auto_body, "version"),
-            (text.injector_auto_failed, "error"),
-            (text.broken_tools_body, "version"),
             (text.overlay_no_results_sub, "term"),
             (text.overlay_no_library_big, "champion"),
             (text.overlay_skin_many, "count"),
@@ -61,6 +51,9 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.custom_mods_refused_body, "n"),
             (text.custom_mods_restored_body, "n"),
             (text.custom_mods_restore_failed, "error"),
+            (text.manager_outdated_body, "found"),
+            (text.manager_outdated_body, "dekan"),
+            (text.manager_outdated_body, "required"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),

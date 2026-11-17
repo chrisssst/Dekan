@@ -8,8 +8,8 @@ mod generation;
 mod mesh;
 
 pub use animation::{
-    clip_alias, form_clips, form_gear, form_graph, form_marker, form_mesh, form_state, form_trace,
-    form_transition, form_vfx, forms, gear_toggle, vfx_markers,
+    clip_alias, clip_effects, form_clips, form_gear, form_graph, form_marker, form_mesh,
+    form_state, form_trace, form_transition, form_vfx, forms, gear_toggle, vfx_markers,
 };
 pub use audio::{form_sound, sound_bank};
 pub use generation::{builder, client_data, generator};

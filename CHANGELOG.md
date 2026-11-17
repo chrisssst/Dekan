@@ -6,6 +6,15 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
 
 ## [Unreleased]
 
+## [2.1] — 2026-11-17
+
+### Changed
+
+- Dekan 2.1 is rebuilt on the latest engine: native injection tools (`dekan_launcher.exe` and
+  `dekan_bridge.dll`) ship with the installer, so no separate LTK Manager download is needed.
+- The interface stays in Turkish (default) and English, and the Classic, Crimson and Obsidian themes are kept
+  under **Options → Theme**; the choice is saved and applied to every window.
+
 ### Added
 
 - Custom mods broken by a patch are repaired at startup: when a patch adds a skin and renames the files skins
@@ -130,7 +139,7 @@ First public release.
 - Custom `.fantome` mods in ten categories, with a compatibility check that drops mods broken by a patch.
 - Classic Rift models generated from the installed game.
 - Party mode: teammates see each other's skins through an encrypted relay that cannot read the content.
-- Tray application with English, Turkish, start with Windows, single instance.
+- Tray application with English, Portuguese and Spanish, start with Windows, single instance.
 - Installer and uninstaller with an install audit, file details and a manifest that runs Dekan without
   administrator rights.
 
@@ -143,7 +152,7 @@ First public release.
 
 ### Known limitations
 
-- The LTK injector is not bundled in the installer. Users copy it from LTK Manager 1.21.0 or 1.22.0, which ship
+- The Mod Manager injector is not bundled in the installer. Users copy it from Mod Manager 1.21.0 or 1.22.0, which ship
   the audited build, or from the direct download linked in the README.
 
 - Proven in live matches for Draft and Ranked; other modes are still being validated.

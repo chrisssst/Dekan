@@ -22,13 +22,14 @@ the release notes unless you prefer otherwise.
 In scope:
 
 - `dekan.exe`, the installer and the uninstaller,
+- the bridge and launcher (`dekan_launcher.exe`, `dekan_bridge.dll`), built from `crates/dekan-launcher` and `crates/dekan-bridge`,
+- the GitHub sign-in that checks the repository star,
 - the party mode protocol, its encryption and the relay (`relay-worker/`, `crates/dekan-relay`),
 - the terminal install script (`install.ps1`) and the in-app update, which verify the installer before running it,
 - the build and release pipeline in `.github/`.
 
 Out of scope:
 
-- the LTK patcher binaries (report those to [League Toolkit](https://github.com/LeagueToolkit/ltk-manager)),
 - the League of Legends client or game,
 - detection or penalties by Riot's anti-cheat. Using Dekan is at your own risk, as the README's disclaimer
   explains.
@@ -41,7 +42,7 @@ Only the latest release and the latest pre-release receive security fixes.
 
 Every installer published by the release workflow comes with a `SHA256SUMS` file, its signature
 (`SHA256SUMS.sig`) and a build provenance attestation. Dekan itself checks the signed checksum list before it runs
-an update, and `install.ps1` checks the installer against `SHA256SUMS` and its Authenticode signature:
+an update, and `install.ps1` checks the installer against `SHA256SUMS`. Releases are not code-signed:
 
 ```powershell
 Get-FileHash .\Dekan-Setup-<version>-x64.exe -Algorithm SHA256

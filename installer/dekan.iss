@@ -49,6 +49,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
+AppMutex=Local\Dekan_SingleInstance_dekan
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -63,10 +64,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 
 [InstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Programs\Dekan"
-Type: files; Name: "{app}\tools\*.orig"
-Type: files; Name: "{app}\tools\*.bak"
-Type: files; Name: "{app}\tools\cloudflared.exe"
-Type: files; Name: "{app}\tools\tools.zip"
+Type: filesandordirs; Name: "{app}\tools\*"
 Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 
 [Dirs]
@@ -76,6 +74,8 @@ Name: "{localappdata}\Dekan\library"
 
 [Files]
 Source: "..\dist\dekan.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\tools\dekan_launcher.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\dekan_bridge.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\assets\dekan.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -102,8 +102,10 @@ Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
 Type: filesandordirs; Name: "{localappdata}\Dekan\overlay"
 Type: filesandordirs; Name: "{localappdata}\Dekan\mods"
 Type: filesandordirs; Name: "{localappdata}\Dekan\tools"
-Type: files; Name: "{app}\tools\ltk_patcher_host.exe"
-Type: files; Name: "{app}\tools\ltk_patcher_dll.dll"
+Type: files; Name: "{app}\tools\dekan_launcher.exe"
+Type: files; Name: "{app}\tools\dekan_bridge.dll"
+Type: files; Name: "{app}\tools\dekan-br.exe"
+Type: files; Name: "{app}\tools\dekan-br.dll"
 Type: dirifempty; Name: "{app}\tools"
 Type: dirifempty; Name: "{app}\assets"
 Type: dirifempty; Name: "{app}"

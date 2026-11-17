@@ -23,7 +23,7 @@ const HELD: u32 = 14;
 const CARRIER_FALLBACKS: [&str; 3] = ["Idle1", "Idle1_Base", "Idle_Base"];
 const MAX_CLIPS: usize = 40_000;
 
-fn copy_key(form: usize, key: u32) -> u32 {
+pub(crate) fn copy_key(form: usize, key: u32) -> u32 {
     h(&format!("DekanForm{form}_{key:08x}"))
 }
 

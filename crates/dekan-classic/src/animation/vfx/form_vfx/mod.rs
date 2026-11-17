@@ -47,6 +47,12 @@ fn gated_key(path: u32, form: usize) -> u32 {
     h(&format!("Dekan/FormEffect{form}_{path:08x}"))
 }
 
+fn form_key(key: u32, form: usize) -> u32 {
+    h(&format!("Dekan/FormEffect{form}_{key:08x}"))
+}
+
+pub type FormKeys = BTreeMap<u32, Vec<Option<u32>>>;
+
 struct Gate<'a> {
     systems: &'a HashMap<u32, Vec<Field>>,
     targets: &'a BTreeMap<u32, Vec<Option<u32>>>,
@@ -228,7 +234,7 @@ pub struct FormEffects<'a> {
 pub fn gate_form_effects(
     skin0: &[u8],
     plan: &FormEffects<'_>,
-) -> Result<Option<(Vec<u8>, usize)>, ClassicError> {
+) -> Result<Option<(Vec<u8>, usize, FormKeys)>, ClassicError> {
     let forms = plan.gear_bodies.len();
     if forms < 2 || plan.markers.len() + 1 != forms {
         debug!(
@@ -313,10 +319,21 @@ pub fn gate_form_effects(
         unresolved: 0,
     };
     let mut links = Vec::new();
+    let mut form_keys = FormKeys::new();
     for (key, per_form) in &targets {
         if let Some((path, merged)) = gate.merge(*key, per_form) {
             gate.added.insert(path, merged);
             links.push((*key, path));
+            let own = per_form
+                .iter()
+                .enumerate()
+                .map(|(form, target)| {
+                    let path = target.filter(|p| systems.contains_key(p))?;
+                    links.push((form_key(*key, form), path));
+                    Some(form_key(*key, form))
+                })
+                .collect();
+            form_keys.insert(*key, own);
         }
     }
     if gate.unresolved > 0 {
@@ -359,7 +376,7 @@ pub fn gate_form_effects(
         });
     }
     serialize_prop_file(&file)
-        .map(|bytes| Some((bytes, stamped)))
+        .map(|bytes| Some((bytes, stamped, form_keys)))
         .map_err(bin_error)
 }
 

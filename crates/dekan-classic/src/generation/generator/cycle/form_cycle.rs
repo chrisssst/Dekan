@@ -233,7 +233,7 @@ impl StandardChampion {
                 .and_then(|skl| crate::vfx_markers::ground_bone(&skl)),
             (None, None) => None,
         };
-        let (skin0, effects) = match &bone {
+        let (skin0, effects, form_keys) = match &bone {
             Some(bone) => {
                 let gated = crate::form_vfx::gate_form_effects(
                     &skin0,
@@ -248,15 +248,21 @@ impl StandardChampion {
                     Some(gated) => gated,
                     None => {
                         debug!(alias = %self.alias, "No form effect needed gating");
-                        (skin0, 0)
+                        (skin0, 0, crate::form_vfx::FormKeys::new())
                     }
                 }
             }
             None => {
                 warn!(alias = %self.alias, "No ground bone in the skeleton; effects are not gated per form and show in every form");
-                (skin0, 0)
+                (skin0, 0, crate::form_vfx::FormKeys::new())
             }
         };
+        if let Some((bytes, events)) =
+            crate::clip_effects::fire_own_effects(&graph_file.1, graph, &form_keys)?
+        {
+            debug!(alias = %self.alias, events, "Clip events fire each form's own effect system");
+            graph_file.1 = bytes;
+        }
         let mut files = Vec::new();
         let skin0 = match self.form_audio(source, &graph_file.1, graph, swaps.len(), &skin0) {
             Some(audio) => {

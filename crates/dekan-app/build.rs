@@ -30,7 +30,10 @@ fn main() {
         res.set("ProductName", "Dekan")
             .set("FileDescription", "Dekan - League of Legends skin changer")
             .set("CompanyName", "Dekan")
-            .set("LegalCopyright", "Copyright (c) 2026 Dekan. MIT License.")
+            .set(
+                "LegalCopyright",
+                "Copyright (c) 2026 Dekan. MIT License.",
+            )
             .set("InternalName", "dekan")
             .set("OriginalFilename", "dekan.exe")
             .set("Comments", "https://github.com/chrisssst/Dekan")

@@ -178,80 +178,28 @@ fn test_a_map_copy_leaves_the_served_folder_when_unused_and_comes_back_when_need
 }
 
 #[test]
-fn test_a_started_match_stops_the_copy_ahead_and_leaves_nothing_half_written() {
-    let root = TempDir::new("prewarm_stop");
+fn test_read_ahead_reads_the_champions_wad_and_never_a_map() {
+    let root = TempDir::new("read_ahead");
     let game = game(&root.0);
-    let overlay = root.0.join("Dekan").join("overlay");
-    let map11 = root
-        .0
-        .join("Dekan")
-        .join(BASE_STORE_DIR)
-        .join("DATA/FINAL/Maps/Shipping/Map11.wad.client");
+    let zed = game
+        .join("DATA")
+        .join("FINAL")
+        .join("Champions")
+        .join("Zed.wad.client");
+    let zed_bytes = std::fs::metadata(&zed).expect("zed").len();
 
+    let read = read_wads_ahead(&game, &[3], &|| false).expect("read");
+    assert_eq!(
+        (read.files, read.bytes),
+        (1, zed_bytes),
+        "the maps that also hold the path are left alone"
+    );
+    assert_eq!(
+        read_wads_ahead(&game, &[77], &|| false).expect("none"),
+        ReadAhead::default()
+    );
     assert!(matches!(
-        prewarm_shared_copies(&game, &overlay, &[3], &|| true),
+        read_wads_ahead(&game, &[3], &|| true),
         Err(InjectError::Cancelled)
     ));
-    assert!(!map11.exists());
-    assert!(!base_stamp_path(&map11).exists());
-    let leftovers = map11
-        .parent()
-        .and_then(|dir| std::fs::read_dir(dir).ok())
-        .map_or(0, |entries| entries.count());
-    assert_eq!(leftovers, 0, "no partial copy is left behind");
-}
-
-#[test]
-fn test_prewarm_copies_only_the_maps_holding_the_champions_skin_bins() {
-    let root = TempDir::new("prewarm");
-    let game = game(&root.0);
-    let overlay = root.0.join("Dekan").join("overlay");
-    let store = root.0.join("Dekan").join(BASE_STORE_DIR);
-    let map11 = "DATA/FINAL/Maps/Shipping/Map11.wad.client";
-
-    assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[1, 9], &|| false).expect("none"),
-        0
-    );
-    assert!(!store.join(map11).exists());
-
-    assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[3], &|| false).expect("map11"),
-        1
-    );
-    assert!(store.join(map11).is_file());
-    assert!(
-        !store
-            .join("DATA/FINAL/Maps/Shipping/Map22.wad.client")
-            .exists(),
-        "TFT maps are never copied"
-    );
-    assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[3], &|| false).expect("again"),
-        0,
-        "a valid copy is not made twice"
-    );
-
-    let mods = root.0.join("mods");
-    let skin = make_mod(&mods, "zed_shadow");
-    write_wad(
-        &skin.join("WAD").join("Zed.wad.client"),
-        &[(3, b"new shadow")],
-    );
-    build(
-        &game,
-        &mods,
-        &overlay,
-        &["zed_shadow".into()],
-        &AtomicBool::new(false),
-    )
-    .expect("build");
-    assert!(
-        !store.join(map11).exists(),
-        "the prepared copy is moved into the overlay"
-    );
-    assert_eq!(
-        read(&overlay.join(map11), 3).as_deref(),
-        Some(&b"new shadow"[..])
-    );
 }

@@ -69,7 +69,12 @@ fn test_only_the_release_key_signature_is_accepted() {
         Ok(())
     );
     assert!(
-        verify_sums_with(public, b"11 *Dekan-Setup-1.3-x64.exe", signature.as_bytes()).is_err()
+        verify_sums_with(
+            public,
+            b"11 *Dekan-Setup-1.3-x64.exe",
+            signature.as_bytes()
+        )
+        .is_err()
     );
     assert!(
         verify_sums_with(key_pair().public_key().as_ref(), sums, signature.as_bytes()).is_err()

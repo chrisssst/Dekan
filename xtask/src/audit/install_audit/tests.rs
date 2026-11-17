@@ -4,8 +4,10 @@ use std::collections::HashSet;
 struct Temp(PathBuf);
 impl Temp {
     fn new(name: &str) -> Self {
-        let path =
-            std::env::temp_dir().join(format!("dekan_install_audit_{name}_{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "dekan_install_audit_{name}_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&path); // ignore-ok: fixture may not exist yet
         std::fs::create_dir_all(&path).expect("temp");
         Self(path)
@@ -52,7 +54,7 @@ fn layout(root: &Path) -> Layout {
     }
 }
 
-const TOOLS: [&str; 1] = ["ltk_patcher_host.exe"];
+const TOOLS: [&str; 2] = ["dekan_launcher.exe", "dekan_bridge.dll"];
 
 #[test]
 fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
@@ -61,7 +63,8 @@ fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
     let tools = layout.program_dir.join("tools");
     std::fs::create_dir_all(&tools).expect("dir");
     std::fs::write(layout.program_dir.join("dekan.exe"), b"exe").expect("exe");
-    std::fs::write(tools.join("ltk_patcher_host.exe"), b"signed").expect("host");
+    std::fs::write(tools.join("dekan_launcher.exe"), b"signed").expect("host");
+    std::fs::write(tools.join("dekan_bridge.dll"), b"signed").expect("dll");
     let checks = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker);
     assert!(checks.iter().all(|c| c.ok), "{checks:#?}");
 
@@ -75,7 +78,7 @@ fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
     assert!(failed[0].contains("cloudflared.exe"));
 
     std::fs::remove_file(tools.join("cloudflared.exe")).expect("rm stray");
-    std::fs::write(tools.join("ltk_patcher_host.exe"), b"patched").expect("patched");
+    std::fs::write(tools.join("dekan_bridge.dll"), b"patched").expect("patched");
     let failed: Vec<String> = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker)
         .into_iter()
         .filter(|c| !c.ok)

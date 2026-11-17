@@ -199,10 +199,17 @@ fn test_an_effect_that_changes_by_form_draws_each_form_only_under_its_stencil() 
     let bodies = vec![gear(&[(h(KEY), RED)]), gear(&[(h(KEY), BLUE)])];
     let src = vec![source()];
     let markers = [h("DekanForm1")];
-    let (out, stamped) = gate_form_effects(&skin0(), &plan_for(&bodies, &src, &markers))
+    let (out, stamped, form_keys) = gate_form_effects(&skin0(), &plan_for(&bodies, &src, &markers))
         .expect("gate")
         .expect("gated");
     let map = resolver_of(&out);
+    let own = form_keys[&h(KEY)].clone();
+    assert_eq!(
+        own.iter().map(|k| k.map(|k| map[&k])).collect::<Vec<_>>(),
+        [Some(RED), Some(BLUE)],
+        "each form also gets a key of its own for the system the game gave it"
+    );
+    assert_eq!(form_keys.len(), 1);
     assert_eq!(
         map[&h("Other")],
         0x900,
@@ -241,7 +248,7 @@ fn test_each_form_draws_its_stencil_marker_while_active() {
     let bodies = vec![gear(&[(h(KEY), RED)]), gear(&[(h(KEY), BLUE)])];
     let src = vec![source()];
     let markers = [h("DekanForm1")];
-    let (out, _) = gate_form_effects(&skin0(), &plan_for(&bodies, &src, &markers))
+    let (out, _, _) = gate_form_effects(&skin0(), &plan_for(&bodies, &src, &markers))
         .expect("gate")
         .expect("gated");
     let map = resolver_of(&out);

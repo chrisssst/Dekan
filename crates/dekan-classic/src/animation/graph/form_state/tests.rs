@@ -119,9 +119,14 @@ fn test_each_form_holds_its_parts_and_marker_through_a_persistent_condition() {
     );
     let hidden = hashes_of(fighter, "SubmeshesToHide");
     assert!(
-        [h("Base_Sword"), h("Tank_Sword"), h("Glow"), h("DekanForm2")]
-            .iter()
-            .all(|p| hidden.contains(p))
+        [
+            h("Base_Sword"),
+            h("Tank_Sword"),
+            h("Glow"),
+            h("DekanForm2")
+        ]
+        .iter()
+        .all(|p| hidden.contains(p))
     );
     assert!(!hidden.contains(&h("Fighter_Sword")) && !hidden.contains(&h("DekanForm1")));
     let base = added[1].fields().expect("base");

@@ -295,7 +295,8 @@ fn forms_with_their_own_model_cycle_on_one_merged_model_that_only_this_skin_uses
     let (mods_dir, folder) = elemental_build("own_models");
     let root = mods_dir.join(&folder).join("WAD").join("Zed.wad.client");
 
-    let skl = std::fs::read(root.join("assets/zed/light_dekanforms.skl")).expect("merged skeleton");
+    let skl =
+        std::fs::read(root.join("assets/zed/light_dekanforms.skl")).expect("merged skeleton");
     let skl = crate::skeleton::parse(&skl).expect("skeleton");
     let names: Vec<&str> = skl.joints.iter().map(|j| j.name.as_str()).collect();
     assert_eq!(names, ["Root", "Spine", "Arm", "DekanForm1_Arm"]);

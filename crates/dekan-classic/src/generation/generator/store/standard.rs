@@ -1,4 +1,5 @@
 use super::*;
+use crate::generation::generator::baseskin::rebase_slot0_identity;
 
 pub const STANDARD_MOD_PREFIX: &str = "std_";
 
@@ -245,6 +246,7 @@ impl StandardChampion {
             "game_wad": self.wad_stamp,
             "generator": reuse::generator_stamp(),
             "options": format!("{:?}", self.options),
+            "baseskin_rebase": 2,
         });
         let _claim = reuse::Claim::wait_for(&final_dir);
         if reuse::already_built(&final_dir, &key) {
@@ -277,6 +279,7 @@ impl StandardChampion {
         };
         let retargeted =
             self.finish_slot0(&main, &self.alias, &source, retargeted, &characters_dir)?;
+        let mut shipped = std::collections::BTreeMap::new();
         let retargeted = if form.is_none() && !self.options.graph_in_slot0 {
             let retargeted =
                 self.with_form_cycle(&source, &target_bin, skin, retargeted, &wad_root)?;
@@ -285,6 +288,8 @@ impl StandardChampion {
         } else {
             retargeted
         };
+        let retargeted =
+            rebase_slot0_identity(&self.wad, &main, retargeted, &wad_root, &mut shipped)?;
         let mut records = vec![generated_bin_record(
             &self.alias,
             &main,
@@ -322,6 +327,13 @@ impl StandardChampion {
                         &source,
                         retargeted,
                         &characters_dir,
+                    )?;
+                    let retargeted = rebase_slot0_identity(
+                        &self.wad,
+                        &companion,
+                        retargeted,
+                        &wad_root,
+                        &mut shipped,
                     )?;
                     records.push(generated_bin_record(
                         &self.alias,

@@ -35,6 +35,13 @@ pub fn game_already_loading() -> Option<(u32, Duration)> {
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }
 
+const TERMINATED_EXTERNALLY: u32 = 0x4001_0004;
+
+#[must_use]
+pub fn closed_by_another_program(exit_code: i32) -> bool {
+    exit_code as u32 == TERMINATED_EXTERNALLY
+}
+
 fn exit_code_hex(code: i32) -> String {
     format!("{:#010X}", code as u32)
 }
@@ -79,11 +86,12 @@ impl Drop for CancelOnDrop {
 
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
-    pub ltk_host_exe: PathBuf,
+    pub provider_kind: crate::provider::ProviderKind,
 
-    pub ltk_dll_path: PathBuf,
+    pub native_host_exe: Option<PathBuf>,
 
-    pub ltk_flags: u32,
+    pub native_dll_path: Option<PathBuf>,
+    pub native_target: Option<NativeWindowTarget>,
 
     pub overlay_config: OverlayConfig,
 
@@ -92,6 +100,12 @@ pub struct PipelineConfig {
     pub build_timeout: Duration,
 
     pub late_budget: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeWindowTarget {
+    pub window_title: String,
+    pub image_name: String,
 }
 
 pub struct InjectionOutcome {
@@ -126,25 +140,8 @@ impl InjectionPipeline {
         }
     }
 
-    fn validate_patcher_binaries(
-        &self,
-    ) -> Result<(crate::trust::Provenance, crate::trust::Provenance), InjectError> {
-        let host = crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
-        let dll = crate::trust::verify_injector_file(&self.config.ltk_dll_path)?;
-        let path = self.config.ltk_dll_path.display().to_string();
-        let bytes = std::fs::read(&self.config.ltk_dll_path).map_err(|e| {
-            InjectError::UntrustedInjector {
-                path: path.clone(),
-                reason: format!("unreadable: {e}"),
-            }
-        })?;
-        if crate::trust::dll_refuses_other_hosts(&bytes) {
-            return Err(InjectError::UntrustedInjector {
-                path,
-                reason: "this patcher DLL only serves LTK Manager; install the injector the control panel offers".into(),
-            });
-        }
-        Ok((host, dll))
+    fn validate_patcher_binaries(&self) -> Result<(), InjectError> {
+        validation::validate_patcher_binaries(&self.config)
     }
 
     pub async fn execute(
@@ -160,8 +157,10 @@ impl InjectionPipeline {
             "Starting injection pipeline"
         );
 
+        self.require_game_integration()?;
+
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Injection aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Dekan");
+            error!(error = %e, "Injection aborted: the native engine is missing or not signed by Dekan's publisher");
             self.publish(InjectionStatus::Failed {
                 error: format!("injector validation error: {e}"),
             });
@@ -202,8 +201,12 @@ impl InjectionPipeline {
         let budget = self.config.late_budget.min(LATE_BUDGET_LIMIT);
         let remaining = |now: &std::time::Instant| budget.saturating_sub(now.elapsed());
 
-        let build_timeout = self.config.build_timeout.min(remaining(&started));
-        self.build_overlay(mods, build_timeout).await?;
+        if self.config.provider_kind == crate::provider::ProviderKind::Ltf {
+            self.prepare_ltf_summary(mods)?;
+        } else {
+            let build_timeout = self.config.build_timeout.min(remaining(&started));
+            self.build_overlay(mods, build_timeout).await?;
+        }
 
         if let Some((_, age)) = game_already_loading() {
             return Err(InjectError::GameAlreadyLoading {
@@ -211,7 +214,7 @@ impl InjectionPipeline {
             });
         }
 
-        let mut overlay = self.spawn_patcher().await?;
+        let mut overlay = self.spawn_patcher(mods).await?;
 
         let hook_budget = self.config.hook_timeout.min(remaining(&started));
         let status = self.confirm_hook(&mut overlay, hook_budget).await;
@@ -227,39 +230,49 @@ impl InjectionPipeline {
 
         info!(mods = ?mods, "Arming the patcher before the game starts");
 
-        let (host, dll) = match self.validate_patcher_binaries() {
-            Ok(provenance) => provenance,
-            Err(e) => {
-                error!(error = %e, "Arming aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Dekan");
-                self.publish(InjectionStatus::Failed {
-                    error: format!("injector validation error: {e}"),
-                });
-                return Err(e);
-            }
-        };
+        self.require_game_integration()?;
+
+        if let Err(e) = self.validate_patcher_binaries() {
+            error!(error = %e, "Arming aborted: the native engine is missing or not signed by Dekan's publisher");
+            self.publish(InjectionStatus::Failed {
+                error: format!("injector validation error: {e}"),
+            });
+            return Err(e);
+        }
         info!(
-            publisher = crate::trust::LTK_PUBLISHER,
-            host = %self.config.ltk_host_exe.display(),
-            host_provenance = host.as_str(),
-            dll = %self.config.ltk_dll_path.display(),
-            dll_provenance = dll.as_str(),
-            "Injector files accepted"
+            provider = ?self.config.provider_kind,
+            host = ?self.config.native_host_exe,
+            dll = ?self.config.native_dll_path,
+            "Native engine files accepted"
         );
 
-        let build = match self.build_overlay(mods, self.config.build_timeout).await {
-            Ok(build) => build,
-            Err(e) => {
-                error!(error = %e, "Arming aborted: the overlay could not be built");
-                self.publish(InjectionStatus::Failed {
-                    error: e.to_string(),
-                });
-                return Err(e);
+        let build = if self.config.provider_kind == crate::provider::ProviderKind::Ltf {
+            match self.prepare_ltf_summary(mods) {
+                Ok(build) => build,
+                Err(e) => {
+                    error!(error = %e, "Arming aborted: LTF mod directories contain no injectable files");
+                    self.publish(InjectionStatus::Failed {
+                        error: e.to_string(),
+                    });
+                    return Err(e);
+                }
+            }
+        } else {
+            match self.build_overlay(mods, self.config.build_timeout).await {
+                Ok(build) => build,
+                Err(e) => {
+                    error!(error = %e, "Arming aborted: the overlay could not be built");
+                    self.publish(InjectionStatus::Failed {
+                        error: e.to_string(),
+                    });
+                    return Err(e);
+                }
             }
         };
 
         wait_out_loading_game().await;
 
-        let mut overlay = match self.spawn_patcher().await {
+        let mut overlay = match self.spawn_patcher(mods).await {
             Ok(overlay) => overlay,
             Err(e) => {
                 error!(error = %e, "Arming aborted: the patcher could not be started");
@@ -289,7 +302,7 @@ impl InjectionPipeline {
                     error = %e,
                     exit_code = ?exit,
                     exit_code_hex = ?exit.map(exit_code_hex),
-                    closed_by_another_program = exit.is_some_and(crate::ltk_host::closed_by_another_program),
+                    closed_by_another_program = exit.is_some_and(closed_by_another_program),
                     "The patcher never reported that it is watching for the game; the skin will not load"
                 );
                 self.publish(match exit {
@@ -301,16 +314,6 @@ impl InjectionPipeline {
                 Err(e)
             }
         }
-    }
-
-    async fn spawn_patcher(&self) -> Result<OverlayProcess, InjectError> {
-        OverlayProcess::spawn_ltk_host(
-            &self.config.ltk_host_exe,
-            &self.config.overlay_config.overlay_dir,
-            self.config.ltk_flags,
-            crate::ltk_host::HostLogLevel::from_env(),
-        )
-        .await
     }
 
     pub async fn confirm_hook(
@@ -343,7 +346,7 @@ impl InjectionPipeline {
                     warn!(
                         exit_code = code,
                         exit_code_hex = %exit_code_hex(code),
-                        closed_by_another_program = crate::ltk_host::closed_by_another_program(code),
+                        closed_by_another_program = closed_by_another_program(code),
                         "The patcher exited before confirming the hook; the overlay is not active"
                     );
                     return InjectionStatus::PatcherExited { code };
@@ -361,6 +364,8 @@ impl InjectionPipeline {
 }
 
 mod overlay;
+mod spawn;
+mod validation;
 
 #[cfg(test)]
 mod tests;

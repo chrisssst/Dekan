@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use chacha20poly1305::aead::Generate;
 use dekan_core::party::PartyStatus;
 use dekan_core::state::{AppState, StateReceiver, StateSender, set_party_peers, set_party_status};
+use chacha20poly1305::aead::Generate;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -16,7 +16,7 @@ use crate::error::PartyError;
 use crate::protocol::{Announcement, ClientMessage, RelayMessage, open_member};
 use crate::token::PartyToken;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -151,7 +151,7 @@ impl PartyClient {
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_MESSAGE_BYTES))
             .max_frame_size(Some(MAX_MESSAGE_BYTES));
-        let connect = super::connection::connect(url, config);
+        let connect = tokio_tungstenite::connect_async_with_config(url, Some(config), false);
         let connected = tokio::select! {
             () = cancel.cancelled() => return Ok(SessionEnd::Cancelled),
             connected = tokio::time::timeout(CONNECT_TIMEOUT, connect) => connected,

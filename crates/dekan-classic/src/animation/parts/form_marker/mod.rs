@@ -64,6 +64,8 @@ pub fn add_parts(skn: &[u8], markers: &[String], copies: &[(String, String)]) ->
     }
     let parts = count(skn, 8)?;
     let table_end = parts.checked_mul(PART_SIZE)?.checked_add(PARTS_AT)?;
+    let relative_indices =
+        count(skn, table_end)? & (crate::skinned_mesh::RELATIVE_INDICES_FLAG as usize) != 0;
     let index_count = count(skn, table_end.checked_add(4)?)?;
     let vertex_count = count(skn, table_end.checked_add(8)?)?;
     let vertex_size = count(skn, table_end.checked_add(12)?)?;
@@ -134,8 +136,15 @@ pub fn add_parts(skn: &[u8], markers: &[String], copies: &[(String, String)]) ->
     out.extend_from_slice(&le32(vertex_count + added)?);
     out.extend_from_slice(&skn[table_end + 12..indices_end]);
     out.extend_from_slice(&copied_indices);
-    for vertex in vertex_count..vertex_count + added {
-        out.extend_from_slice(&u16::try_from(vertex).ok()?.to_le_bytes());
+    for marker in 0..markers.len() {
+        let base = if relative_indices {
+            0
+        } else {
+            vertex_count + marker * MARKER_VERTICES
+        };
+        for corner in 0..MARKER_VERTICES {
+            out.extend_from_slice(&u16::try_from(base + corner).ok()?.to_le_bytes());
+        }
     }
     out.extend_from_slice(&skn[indices_end..vertices_end]);
     let vertex = marker_vertex(vertex_size);

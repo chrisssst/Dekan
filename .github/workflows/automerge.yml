@@ -78,7 +78,7 @@ jobs:
           [[ "$approved" == true ]] || { echo "::error::no approval of $SHA from a maintainer"; exit 1; }
 
           files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
-          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger(\.rs$|/)|crates/dekan-app/src/updates/(injector_install\.rs$|update_check\.rs$|self_update/)|install\.ps1$|crates/dekan-inject/src/injector/|crates/dekan-party/src/security/|crates/dekan-platform/src/os/system/authenticode(\.rs$|/)|relay-worker/wrangler\.toml$|xtask/)'
+          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/dekan-app/build\.rs$|crates/dekan-app/src/trigger(\.rs$|/)|crates/dekan-app/src/updates/(injector_install\.rs$|update_check\.rs$|self_update/)|install\.ps1$|crates/dekan-inject/src/injector/|crates/dekan-inject/src/ltf/|crates/dekan-bridge/|crates/dekan-launcher/|crates/dekan-party/src/security/|crates/dekan-platform/src/os/system/authenticode(\.rs$|/)|relay-worker/wrangler\.toml$|xtask/)'
           blocked=$(grep -E "$protected" <<<"$files" || true)
           if [[ -n "$blocked" ]]; then
             echo "::warning::PR #$PR touches protected paths and must be merged by hand:"

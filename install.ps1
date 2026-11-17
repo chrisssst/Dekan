@@ -73,12 +73,7 @@ function Install-Dekan {
         }
         Write-Host "Checksum verified: $actual"
 
-        $signature = Get-AuthenticodeSignature -FilePath $setupPath
-        switch ($signature.Status) {
-            'Valid' { Write-Host "Signed by $($signature.SignerCertificate.Subject)" }
-            'NotSigned' { Write-Warning 'This release is not code-signed; Windows SmartScreen may warn about it.' }
-            default { throw "The installer signature is $($signature.Status). Nothing was installed." }
-        }
+        Write-Warning 'Dekan is not code-signed; Windows SmartScreen may warn about the installer.'
 
         $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
             [Security.Principal.WindowsBuiltInRole]::Administrator)

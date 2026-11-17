@@ -1,6 +1,8 @@
 #[cfg(windows)]
 pub mod autostart;
 #[cfg(windows)]
+mod desktop;
+#[cfg(windows)]
 pub mod elevation;
 #[cfg(windows)]
 pub mod process;

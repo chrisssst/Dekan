@@ -3,7 +3,7 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 18] = [
+const ACTIONS: [PanelAction; 17] = [
     PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
@@ -17,7 +17,6 @@ const ACTIONS: [PanelAction; 18] = [
     PanelAction::OpenTools,
     PanelAction::OpenLogs,
     PanelAction::OpenRelease,
-    PanelAction::InstallInjector,
     PanelAction::MarkProblem,
     PanelAction::ExportDiagnostics,
     PanelAction::About,
@@ -36,7 +35,7 @@ pub(super) fn tall_panel() -> ControlPanel {
 fn snapshot() -> PanelSnapshot {
     PanelSnapshot {
         status: "Champion select".into(),
-        party_line: "Room BLT-7Q2M".into(),
+        party_line: "Room DKN-7Q2M".into(),
         in_room: true,
         auto_accept: true,
         injection: true,
@@ -44,8 +43,6 @@ fn snapshot() -> PanelSnapshot {
         light_loading: true,
         autostart: false,
         update_line: Some("Dekan 1.3 is available".into()),
-        ltk_line: None,
-        ltk_download: None,
         checks: vec![
             PanelCheck {
                 label: "Injector".into(),
@@ -53,7 +50,7 @@ fn snapshot() -> PanelSnapshot {
                 detail: "audited".into(),
             },
             PanelCheck {
-                label: "DLL".into(),
+                label: "Game".into(),
                 ok: false,
                 detail: "refused".into(),
             },
@@ -80,12 +77,12 @@ fn every_language_fills_every_label() {
         for (name, value) in [
             ("home", &labels.tab_home),
             ("options", &labels.tab_options),
+            ("party", &labels.tab_party),
+            ("help", &labels.tab_help),
             ("theme", &labels.theme),
             ("classic theme", &labels.theme_classic),
             ("crimson theme", &labels.theme_crimson),
             ("obsidian theme", &labels.theme_obsidian),
-            ("party", &labels.tab_party),
-            ("help", &labels.tab_help),
             ("all clear", &labels.all_clear),
             ("attention", &labels.attention),
             ("see diagnostics", &labels.see_diagnostics),
@@ -198,8 +195,6 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
     window.set_labels(labels(text));
     let state = PanelSnapshot {
         in_room: false,
-        ltk_line: Some("LTK Manager 1.27 has a new injector.".into()),
-        ltk_download: Some("Install injector 1.27".into()),
         ..snapshot()
     };
     render(&window, &state);
@@ -209,7 +204,6 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
 
     let clicks = [
         (0, text.panel_update_download, PanelAction::OpenRelease),
-        (0, "Install injector 1.27", PanelAction::InstallInjector),
         (0, text.menu_injection, PanelAction::ToggleInjection),
         (1, text.menu_random_skin, PanelAction::ToggleRandomSkin),
         (1, text.menu_light_loading, PanelAction::ToggleLightLoading),
@@ -256,7 +250,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
 }
 
 #[test]
-fn notices_appear_only_with_a_line_and_the_ltk_button_only_with_a_download() {
+fn the_update_notice_appears_only_with_a_line() {
     let window = tall_panel();
     let text = Language::English.text();
     window.set_labels(labels(text));
@@ -270,19 +264,12 @@ fn notices_appear_only_with_a_line_and_the_ltk_button_only_with_a_download() {
             .next()
             .is_none()
     );
-    render(
-        &window,
-        &PanelSnapshot {
-            ltk_line: Some("Injector missing".into()),
-            ..quiet
-        },
-    );
+    render(&window, &snapshot());
     assert!(
-        ElementHandle::find_by_accessible_label(&window, "Injector missing")
+        ElementHandle::find_by_accessible_label(&window, text.panel_update_download)
             .next()
             .is_some()
     );
-    assert_eq!(window.get_ltk_download(), "");
 }
 
 #[test]
@@ -294,15 +281,15 @@ fn long_diagnostic_lines_never_run_under_the_hint_below_them() {
         "OK",
         "OK",
         "waiting for the client to open",
-        "accepts the current patch; refuses game builds made 0 day(s) from now or later",
-        "LTK Manager 1.27.0 ships a newer injector",
+        "the custom mods scan adjusted 2 mods to the patch and left 1 out because it no longer fits",
+        "the game folder could not be found on any drive",
         "running as administrator",
     ];
     let state = PanelSnapshot {
         checks: details
             .iter()
             .map(|detail| PanelCheck {
-                label: "Injector DLL validity".into(),
+                label: "Native engine".into(),
                 ok: false,
                 detail: (*detail).into(),
             })

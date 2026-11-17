@@ -1,6 +1,7 @@
 pub mod overlay_window;
 pub mod panel;
 pub mod party_dialog;
+pub mod star_gate;
 pub mod welcome;
 
 mod overlay_model;

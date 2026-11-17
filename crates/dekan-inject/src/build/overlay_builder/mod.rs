@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -21,7 +21,6 @@ const TFT_MOUNTS: [&str; 2] = ["map21", "map22"];
 const BASE_STORE_DIR: &str = "overlay_base";
 
 static GAME_COPY_LOCK: Mutex<()> = Mutex::new(());
-static BUILDS_WAITING_FOR_COPIES: AtomicUsize = AtomicUsize::new(0);
 
 pub const OVERLAY_BUILDER_REVISION: u32 = 4;
 
@@ -60,11 +59,12 @@ mod report;
 mod store;
 
 use game_index::*;
-pub use game_index::{get_or_index_game, persist_game_index_in, prewarm_game_index};
+pub use game_index::{
+    ReadAhead, get_or_index_game, persist_game_index_in, prewarm_game_index, read_wads_ahead,
+};
 use mods::*;
 use report::*;
 use store::*;
-pub use store::{build_waiting_for_copies, prewarm_shared_copies};
 
 #[derive(Debug, Clone)]
 struct ModMount {
@@ -178,11 +178,9 @@ pub fn build(
 
     let base_store = base_store_for(overlay_dir);
     let revision = OVERLAY_BUILDER_REVISION.to_string();
-    BUILDS_WAITING_FOR_COPIES.fetch_add(1, Ordering::AcqRel);
     let _copies = GAME_COPY_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    BUILDS_WAITING_FOR_COPIES.fetch_sub(1, Ordering::AcqRel);
     let (mut written, mut bytes) = (0usize, 0u64);
     let mut manifest = Vec::with_capacity(overlay.len());
     let mut header_mismatch = 0usize;

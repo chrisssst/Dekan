@@ -1,12 +1,17 @@
 use super::*;
 
 pub(super) fn measure_overlay(overlay_dir: &std::path::Path) -> (usize, u64) {
+    measure_tree(overlay_dir, true)
+}
+
+pub(super) fn measure_tree(root: &std::path::Path, wad_only: bool) -> (usize, u64) {
     #[derive(Default)]
     struct Walk {
         files: usize,
         bytes: u64,
         failed: usize,
         first_error: Option<String>,
+        wad_only: bool,
     }
 
     impl Walk {
@@ -33,11 +38,12 @@ pub(super) fn measure_overlay(overlay_dir: &std::path::Path) -> (usize, u64) {
                 match entry.file_type() {
                     Ok(ft) if ft.is_dir() => self.walk(&path),
                     Ok(ft) if ft.is_file() => {
-                        let is_wad = path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .is_some_and(|n| n.to_ascii_lowercase().ends_with(".wad.client"));
-                        if is_wad {
+                        let include = !self.wad_only
+                            || path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .is_some_and(|n| n.to_ascii_lowercase().ends_with(".wad.client"));
+                        if include {
                             self.files += 1;
                             match entry.metadata() {
                                 Ok(meta) => self.bytes += meta.len(),
@@ -52,11 +58,14 @@ pub(super) fn measure_overlay(overlay_dir: &std::path::Path) -> (usize, u64) {
         }
     }
 
-    let mut walk = Walk::default();
-    walk.walk(overlay_dir);
+    let mut walk = Walk {
+        wad_only,
+        ..Default::default()
+    };
+    walk.walk(root);
     if walk.failed > 0 {
         warn!(
-            overlay_dir = %overlay_dir.display(),
+            root = %root.display(),
             failed = walk.failed,
             first_error = walk.first_error.as_deref().unwrap_or_default(),
             "Overlay entries could not be measured"
@@ -66,6 +75,36 @@ pub(super) fn measure_overlay(overlay_dir: &std::path::Path) -> (usize, u64) {
 }
 
 impl InjectionPipeline {
+    pub(super) fn prepare_ltf_summary(&self, mods: &[String]) -> Result<OverlayBuild, InjectError> {
+        let started = std::time::Instant::now();
+        let mut file_count = 0usize;
+        let mut total_bytes = 0u64;
+        for name in mods {
+            let mod_dir = self.config.overlay_config.mods_dir.join(name);
+            if mod_dir.is_dir() {
+                let (files, bytes) = measure_tree(&mod_dir, false);
+                file_count += files;
+                total_bytes += bytes;
+            }
+        }
+        if file_count == 0 {
+            return Err(InjectError::Overlay(
+                "the selected mods contain no files to pack for Mod Manager".into(),
+            ));
+        }
+        info!(
+            mods = ?mods,
+            files = file_count,
+            bytes = total_bytes,
+            "Prepared mods for Mod Manager; skipped native WAD overlay build"
+        );
+        Ok(OverlayBuild {
+            wad_files: mods.len(),
+            bytes: total_bytes,
+            elapsed: started.elapsed(),
+        })
+    }
+
     pub(super) async fn build_overlay(
         &self,
         mods: &[String],

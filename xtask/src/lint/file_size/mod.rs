@@ -88,7 +88,9 @@ fn collect_code_files(dir: &Path, unreadable: &mut Vec<String>, visit: &mut impl
         };
         let path = entry.path();
         if path.is_dir() {
-            if path.file_name().is_some_and(|n| n == "target") {
+            if path.file_name().is_some_and(|n| {
+                n == "target" || n.to_str().is_some_and(|s| s.starts_with("dekan-native-"))
+            }) {
                 continue;
             }
             collect_code_files(&path, unreadable, visit);

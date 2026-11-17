@@ -17,5 +17,6 @@ pub use parts::form_mesh;
 pub use skin_forms::form_trace;
 pub use skin_forms::forms;
 pub use transition::form_transition;
+pub use vfx::clip_effects;
 pub use vfx::form_vfx;
 pub use vfx::vfx_markers;

@@ -82,9 +82,7 @@ pub(crate) fn run_package() {
         workspace_root.join("target/release/dekan-relay.exe"),
     ];
     let relay_bin = relay_paths.iter().find(|p| p.exists()).unwrap_or_else(|| {
-        eprintln!(
-            "[ERROR] dekan-relay.exe was not built under target/; the package would ship without it"
-        );
+        eprintln!("[ERROR] dekan-relay.exe was not built under target/; the package would ship without it");
         std::process::exit(1);
     });
     let relay_dest = dist_dir.join("dekan-relay.exe");
@@ -105,6 +103,42 @@ pub(crate) fn run_package() {
         hash_relay
     );
 
+    let tools_dest_dir = dist_dir.join("tools");
+    std::fs::create_dir_all(&tools_dest_dir).expect("create tools directory");
+    for tool in SHIPPED_TOOLS {
+        let tool_candidates = [
+            workspace_root.join(format!("target/x86_64-pc-windows-msvc/release/{tool}")),
+            workspace_root.join(format!("target/release/{tool}")),
+        ];
+        let Some(src) = tool_candidates.iter().find(|p| p.exists()) else {
+            eprintln!(
+                "[ERROR] {tool} was not built under target/; the package would ship without it"
+            );
+            std::process::exit(1);
+        };
+        let dest = tools_dest_dir.join(tool);
+        if let Err(e) = std::fs::copy(src, &dest) {
+            eprintln!(
+                "[ERROR] copying {} to {}: {e}",
+                src.display(),
+                dest.display()
+            );
+            std::process::exit(1);
+        }
+        let bytes_tool = std::fs::read(&dest).unwrap_or_else(|e| {
+            eprintln!("[ERROR] reading {}: {e}", dest.display());
+            std::process::exit(1);
+        });
+        let hash_tool = dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_tool));
+        checksum_content.push_str(&format!("{hash_tool} *tools/{tool}\n"));
+        println!(
+            "  Tool:     {} ({} bytes, SHA-256: {})",
+            dest.display(),
+            bytes_tool.len(),
+            hash_tool
+        );
+    }
+
     let default_party_json = format!(
         "{{\n  \"relay_url\": \"{}\"\n}}\n",
         dekan_party::config::DEFAULT_RELAY_URL
@@ -124,10 +158,7 @@ pub(crate) fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-pub(crate) const USER_SUPPLIED_TOOLS: [&str; 2] = [
-    dekan_inject::ltk_host::HOST_EXE,
-    dekan_inject::ltk_host::DLL_FILE,
-];
+pub(crate) const SHIPPED_TOOLS: [&str; 2] = ["dekan_launcher.exe", "dekan_bridge.dll"];
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {
@@ -189,6 +220,20 @@ pub(crate) fn run_installer(args: &[String]) {
                 .map(|dir| PathBuf::from(dir).join("Inno Setup 6").join("ISCC.exe")),
         )
         .collect();
+
+    for name in SHIPPED_TOOLS {
+        if !workspace_root
+            .join("dist")
+            .join("tools")
+            .join(name)
+            .is_file()
+        {
+            eprintln!(
+                "[ERROR] dist/tools/{name} ausente; o instalador exige o motor nativo em dist/tools."
+            );
+            std::process::exit(1);
+        }
+    }
 
     let Some(iscc) = iscc_candidates.iter().find(|p| p.exists()) else {
         eprintln!("[ERROR] ISCC.exe não encontrado. Instale o Inno Setup 6.");
