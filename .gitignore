@@ -85,3 +85,6 @@ crates/dekan-inject/examples/native_owned_pipeline.rs
 crates/dekan-inject/tests/native_provider_orchestration.rs
 crates/dekan-wad/tests/native_engine_validation.rs
 scratch/
+
+!/vendor/native/dekan_launcher.exe
+!/vendor/native/dekan_bridge.dll

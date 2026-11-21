@@ -5,14 +5,13 @@ use dekan_wad::hash::wad_path_hash;
 use dekan_wad::prop::tree::{self, Value};
 use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
 use dekan_wad::wad::WadFile;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::error::ClassicError;
 use crate::gear_toggle::{bin_error, h};
 use crate::vfx_markers::{raw_text, text};
 
 const SKIN_DATA_CLASS: u32 = 0x9b67_e9f6;
-const MESH_PADDING: [u8; 16] = [0u8; 16];
 
 struct BaseIdentity {
     skin_name: Option<String>,
@@ -68,20 +67,90 @@ fn read_source_asset(
         .map_err(ClassicError::Wad)
 }
 
-fn write_padded_asset(
+fn write_rebuilt_asset(
     wad_root: &Path,
+    source_path: &str,
     base_path: &str,
-    mut data: Vec<u8>,
+    data: Vec<u8>,
 ) -> Result<(), ClassicError> {
-    if !data.ends_with(&MESH_PADDING) {
-        data.extend_from_slice(&MESH_PADDING);
-    }
+    let before_bytes = data.len();
+    let (data, transform) = mesh::rebuild_mesh(data);
+    let after_bytes = data.len();
     let dst = wad_root.join(base_path.to_ascii_lowercase());
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(dst, data)?;
+    info!(
+        source_path = %source_path.to_ascii_lowercase(),
+        base_path = %base_path.to_ascii_lowercase(),
+        transform,
+        before_bytes,
+        after_bytes,
+        "Base-skin mesh asset rebuilt"
+    );
     Ok(())
+}
+
+fn log_post_rebase_summary(character: &str, fields: &[tree::Field]) {
+    let skin_name = tree::field(fields, h("championSkinName")).and_then(raw_text);
+    let mesh = tree::field(fields, h("skinMeshProperties")).and_then(Value::fields);
+    let skeleton = mesh.and_then(|m| tree::field(m, h("skeleton")).and_then(raw_text));
+    let simple_skin = mesh.and_then(|m| tree::field(m, h("simpleSkin")).and_then(raw_text));
+    let audio = tree::field(fields, h("skinAudioProperties")).and_then(Value::fields);
+    let tags = audio
+        .map(|a| units::string_items(a, "tagEventList"))
+        .unwrap_or_default();
+    let mut unit_names = Vec::new();
+    let mut remaining_skin_refs = Vec::new();
+    if let Some(ref name) = skin_name {
+        if units::contains_skin_numbered_ref(name, character) {
+            remaining_skin_refs.push(format!("championSkinName={name}"));
+        }
+    }
+    for tag in &tags {
+        if units::contains_skin_numbered_ref(tag, character) {
+            remaining_skin_refs.push(format!("tagEventList={tag}"));
+        }
+    }
+    if let Some(unit_vals) =
+        audio.and_then(|a| tree::field(a, h("bankUnits")).and_then(Value::items))
+    {
+        for u in unit_vals {
+            let Some(uf) = u.fields() else {
+                continue;
+            };
+            if let Some(uname) = tree::field(uf, h("name")).and_then(raw_text) {
+                if units::contains_skin_numbered_ref(&uname, character) {
+                    remaining_skin_refs.push(format!("bankUnits.name={uname}"));
+                }
+                unit_names.push(uname);
+            }
+            for ev in units::string_items(uf, "events") {
+                if units::contains_skin_numbered_ref(&ev, character) {
+                    remaining_skin_refs.push(format!("bankUnits.events={ev}"));
+                    break;
+                }
+            }
+        }
+    }
+    info!(
+        character,
+        champion_skin_name = ?skin_name,
+        skeleton = ?skeleton,
+        simple_skin = ?simple_skin,
+        tag_event_list = ?tags,
+        bank_units = ?unit_names,
+        remaining_skin_refs = remaining_skin_refs.len(),
+        "Base-skin identity rebase summary"
+    );
+    if !remaining_skin_refs.is_empty() {
+        warn!(
+            character,
+            refs = ?remaining_skin_refs,
+            "Unexpected Skin<n> references remained after base-skin rebase"
+        );
+    }
 }
 
 pub(crate) fn rebase_slot0_identity(
@@ -93,10 +162,20 @@ pub(crate) fn rebase_slot0_identity(
 ) -> Result<Vec<u8>, ClassicError> {
     let base = match read_base_identity(wad, character) {
         Ok(Some(info)) => info,
-        Ok(None) => return Ok(generated),
+        Ok(None) => BaseIdentity {
+            skin_name: None,
+            skeleton: None,
+            simple_skin: None,
+            tag_event_list: None,
+        },
         Err(e) => {
-            warn!(character, error = %e, "Base skin0.bin unreadable; skipping base-skin identity rebase");
-            return Ok(generated);
+            warn!(character, error = %e, "Base skin0.bin unreadable; using fallback base-skin identity");
+            BaseIdentity {
+                skin_name: None,
+                skeleton: None,
+                simple_skin: None,
+                tag_event_list: None,
+            }
         }
     };
 
@@ -111,9 +190,21 @@ pub(crate) fn rebase_slot0_identity(
     let mut fields = tree::parse_fields(&entry.body).map_err(bin_error)?;
     let mut changed = false;
 
-    if let Some(ref base_name) = base.skin_name {
-        let current = tree::field(&fields, h("championSkinName")).and_then(raw_text);
-        if current.as_deref() != Some(base_name.as_str()) {
+    let current_skin_name = tree::field(&fields, h("championSkinName")).and_then(raw_text);
+    let desired_skin_name = base.skin_name.clone().or_else(|| {
+        current_skin_name
+            .as_deref()
+            .filter(|n| units::contains_skin_numbered_ref(n, character))
+            .map(|_| character.to_owned())
+    });
+    if let Some(ref base_name) = desired_skin_name {
+        if current_skin_name.as_deref() != Some(base_name.as_str()) {
+            info!(
+                character,
+                skin_name_before = ?current_skin_name,
+                skin_name_after = %base_name,
+                "Base-skin championSkinName rebased"
+            );
             tree::set_field(&mut fields, h("championSkinName"), text(base_name));
             changed = true;
         }
@@ -127,19 +218,32 @@ pub(crate) fn rebase_slot0_identity(
         ];
         let mut updates = Vec::new();
         for (field_name, base_path_opt) in pairs {
-            let Some(base_path) = base_path_opt else {
-                continue;
-            };
             let Some(skin_path) =
                 mesh.and_then(|m| tree::field(m, h(field_name)).and_then(raw_text))
             else {
                 continue;
             };
-            let base_key = base_path.to_ascii_lowercase();
             let skin_key = skin_path.to_ascii_lowercase();
+            let Some(base_path) = base_path_opt else {
+                if !shipped.contains_key(&skin_key)
+                    && wad.contains(wad_path_hash(&skin_key))
+                    && let Some(bytes) = read_source_asset(wad, wad_root, &skin_path)?
+                {
+                    write_rebuilt_asset(wad_root, &skin_path, &skin_path, bytes)?;
+                    shipped.insert(skin_key.clone(), skin_key);
+                }
+                continue;
+            };
+            let base_key = base_path.to_ascii_lowercase();
             if let Some(prev_src) = shipped.get(&base_key) {
                 if *prev_src == skin_key && skin_key != base_key {
                     updates.push((field_name, base_path.to_owned()));
+                } else if *prev_src != skin_key
+                    && !shipped.contains_key(&skin_key)
+                    && let Some(bytes) = read_source_asset(wad, wad_root, &skin_path)?
+                {
+                    write_rebuilt_asset(wad_root, &skin_path, &skin_path, bytes)?;
+                    shipped.insert(skin_key.clone(), skin_key);
                 }
                 continue;
             }
@@ -147,13 +251,13 @@ pub(crate) fn rebase_slot0_identity(
                 let local = wad_root.join(&base_key);
                 if local.is_file() {
                     let bytes = std::fs::read(&local)?;
-                    write_padded_asset(wad_root, base_path, bytes)?;
+                    write_rebuilt_asset(wad_root, &skin_path, base_path, bytes)?;
                 }
                 shipped.insert(base_key, skin_key);
                 continue;
             }
             if let Some(bytes) = read_source_asset(wad, wad_root, &skin_path)? {
-                write_padded_asset(wad_root, base_path, bytes)?;
+                write_rebuilt_asset(wad_root, &skin_path, base_path, bytes)?;
                 shipped.insert(base_key, skin_key);
                 updates.push((field_name, base_path.to_owned()));
             }
@@ -183,6 +287,8 @@ pub(crate) fn rebase_slot0_identity(
         changed = true;
     }
 
+    log_post_rebase_summary(character, &fields);
+
     if !changed {
         return Ok(generated);
     }
@@ -192,6 +298,7 @@ pub(crate) fn rebase_slot0_identity(
 
 mod audio;
 mod banks;
+mod mesh;
 mod units;
 
 #[cfg(test)]

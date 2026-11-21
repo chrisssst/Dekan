@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+
 use super::*;
+use crate::generation::generator::baseskin::rebase_slot0_identity;
 
 pub struct ClassicChampion {
     alias: String,
@@ -145,6 +148,10 @@ impl ClassicChampion {
         let partial = mods_dir.join(format!("{folder}.partial"));
         remove_if_present(&partial)?;
 
+        let wad_root = partial
+            .join("WAD")
+            .join(format!("{}.wad.client", self.alias));
+        let mut shipped = BTreeMap::new();
         let mut written = 0usize;
         for character in &targets {
             let display = if **character == main {
@@ -157,9 +164,7 @@ impl ClassicChampion {
                 .read(wad_path_hash(&skin_bin(character, skin)))?
                 .ok_or_else(|| ClassicError::Bin(format!("{character} skin{skin}.bin vanished")))?;
 
-            let bins_dir = partial
-                .join("WAD")
-                .join(format!("{}.wad.client", self.alias))
+            let bins_dir = wad_root
                 .join("data")
                 .join("characters")
                 .join(character.as_str())
@@ -167,7 +172,11 @@ impl ClassicChampion {
             std::fs::create_dir_all(&bins_dir)?;
             for slot in slots.iter().copied().filter(|slot| *slot != skin) {
                 let identity = identity_at(&self.wad, character, slot);
-                let bin = retarget_skin_bin(&source, &display, skin, slot, identity)?;
+                let mut bin = retarget_skin_bin(&source, &display, skin, slot, identity)?;
+                if slot == 0 {
+                    bin =
+                        rebase_slot0_identity(&self.wad, character, bin, &wad_root, &mut shipped)?;
+                }
                 std::fs::write(bins_dir.join(format!("skin{slot}.bin")), bin)?;
                 written += 1;
             }

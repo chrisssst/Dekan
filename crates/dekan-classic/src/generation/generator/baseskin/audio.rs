@@ -3,11 +3,13 @@ use std::path::Path;
 
 use dekan_wad::prop::tree::{self, Field, Value};
 use dekan_wad::wad::WadFile;
+use tracing::info;
 
 use super::banks::{LoadedBank, load_bank, sidecar_path};
 use super::units::{
-    UnitEdit, UnitSnapshot, apply_unit_edits, base_tag_for, rebase_bank_units, set_string_list,
-    snapshot_units, string_items, tag_prefix_end, write_bank_asset,
+    UnitEdit, UnitSnapshot, apply_unit_edits, base_tag_for, extra_skin_tags_from_events,
+    rebase_bank_units, set_string_list, snapshot_units, string_items, strip_skin_numbered_events,
+    tag_prefix_end, write_bank_asset,
 };
 use crate::error::ClassicError;
 use crate::gear_toggle::h;
@@ -49,19 +51,24 @@ pub(super) fn rebase_skin_audio(
 
     let base_tag = base_tags.iter().rev().find(|t| !t.is_empty()).cloned();
     let is_base_tag = |tag: &str| base_tags.iter().any(|b| b.eq_ignore_ascii_case(tag));
-    let removed_tags: Vec<String> = current_tags
+    let mut removed_tags: Vec<String> = current_tags
         .iter()
         .filter(|t| !t.is_empty() && !is_base_tag(t))
         .cloned()
         .collect();
+    let extra_tags = extra_skin_tags_from_events(audio, &current_tags, &base_tags, character);
+    let mut scan_tags = extra_tags.clone();
+    scan_tags.extend(current_tags.iter().cloned());
+    removed_tags.extend(extra_tags);
 
+    let mut merged = false;
     if let Some(ref base_tag) = base_tag {
         if !removed_tags.is_empty()
             && merge_banks(
                 wad,
                 wad_root,
                 audio,
-                &current_tags,
+                &scan_tags,
                 &base_tags,
                 base_tag,
                 &removed_tags,
@@ -69,14 +76,31 @@ pub(super) fn rebase_skin_audio(
             )?
         {
             changed = true;
+            merged = true;
         }
     }
 
-    if rebase_bank_units(audio) {
+    let units_renamed = rebase_bank_units(audio);
+    if units_renamed {
+        changed = true;
+    }
+    let stripped_events = strip_skin_numbered_events(audio, character);
+    if stripped_events > 0 {
         changed = true;
     }
 
     set_string_list(audio, "tagEventList", &base_tags);
+    if changed {
+        info!(
+            character,
+            tags_before = ?current_tags,
+            tags_after = ?base_tags,
+            merged_banks = merged,
+            units_renamed,
+            stripped_events,
+            "Base-skin audio identity rebased"
+        );
+    }
     Ok(changed)
 }
 

@@ -76,18 +76,23 @@ pub async fn ensure_bridge_running(
     tools_dirs: &[PathBuf],
     timeout: Duration,
 ) -> Result<BridgeClient, InjectError> {
+    let (launcher_exe, bridge_dll) = find_launcher_tools(tools_dirs).ok_or_else(|| {
+        InjectError::Process("Dekan bridge tools are missing; reinstall Dekan 2.2".into())
+    })?;
+    let tools_dir = launcher_exe
+        .parent()
+        .ok_or_else(|| InjectError::Process("Dekan launcher has no containing directory".into()))?;
+    super::native_bundle::verify_directory(tools_dir).map_err(InjectError::Process)?;
+    for path in [&launcher_exe, &bridge_dll] {
+        crate::trust::verify_native_file(path)?;
+    }
+
     if let Some(endpoint) = discover_bridge(None).await {
         let client = BridgeClient::new(endpoint);
         if client.ping().await.is_ok() {
             return Ok(client);
         }
     }
-
-    let (launcher_exe, _) = find_launcher_tools(tools_dirs).ok_or_else(|| {
-        InjectError::Process(format!(
-            "LTF bridge tools ({LAUNCHER_EXE_NAME} or {BRIDGE_DLL_NAME}) not found in search paths"
-        ))
-    })?;
 
     let manager_path = match check_manager_install() {
         ManagerInstallState::Ready { path, version } => {

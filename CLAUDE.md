@@ -22,6 +22,7 @@ dekan-party     encrypted party rooms over a relay                              
 dekan-relay     optional self-hosted relay (same protocol as relay-worker/)
 dekan-app       binary: composition, lifecycle, tray, catalog, injection trigger              → all
 xtask            check, package, installer, audits and probes (xtask/README.md)
+vendor/native/  maintainer-supplied, hash-pinned x64 bridge bundle (ADR-032)
 installer/       Inno Setup script; .github/ CI, security, auto-merge, release, promote
 ```
 

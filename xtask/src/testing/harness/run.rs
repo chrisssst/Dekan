@@ -185,6 +185,19 @@ pub fn run_case(case: &Case, game: &Path, scratch: &Path, cache: &Path) -> Outco
                 ));
             }
         }
+        if let Some(wad_name) = relative.file_name().and_then(|n| n.to_str()) {
+            let wad_stem = wad_name.strip_suffix(".wad.client").unwrap_or(wad_name);
+            let mod_wad_dir = mods.join(&folder).join("WAD").join(wad_name);
+            if mod_wad_dir.is_dir() {
+                super::verify_ah::check_mod_against_ah(
+                    &mod_wad_dir,
+                    &built,
+                    &original,
+                    wad_stem,
+                    &mut outcome.failures,
+                );
+            }
+        }
     }
     outcome.changed_entries = changed.len();
     if changed.is_empty() {

@@ -90,3 +90,7 @@ cargo test -p dekan-inject
 unchanged data is byte-identical to the game's and that each archive keeps the game's header
 (`DEKAN_FAITHFUL_MODS`, `DEKAN_FAITHFUL_MOD` and `DEKAN_FAITHFUL_SECOND` choose the mods). Anything that affects what happens inside the game still has
 to be confirmed in a real match.
+
+## Dekan 2.2 native bundle
+
+`ltf/native_bundle/` pins and packages the supplied x64 launcher and DLL. `ltf/discovery/` recognizes their actual internal bridge identity and local profile directory. `ltf/launcher.rs` checks the public binaries and required compatibility alias before launch. The obsolete native workspace crates have been retired, so an ordinary build cannot silently overwrite the supplied payloads with the old implementation. See `vendor/native/README.md` and ADR-032.

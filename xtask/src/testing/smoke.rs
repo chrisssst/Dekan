@@ -221,7 +221,7 @@ fn run_audited(exe: &Path, tools: &Path, root: &Path, mut checks: Vec<Check>) ->
         (Ok(staged), Some(cursor)) => {
             let tools_dir = staged.with_file_name("tools");
             let copied = std::fs::create_dir_all(&tools_dir).and_then(|()| {
-                for file in ["dekan_launcher.exe", "dekan_bridge.dll"] {
+                for file in dekan_inject::ltf::native_bundle::SHIPPED_TOOLS {
                     std::fs::copy(tools.join(file), tools_dir.join(file))?;
                 }
                 Ok(())

@@ -76,6 +76,7 @@ Name: "{localappdata}\Dekan\library"
 Source: "..\dist\dekan.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\tools\dekan_launcher.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\dist\tools\dekan_bridge.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\bullet_bridge.dll"; DestDir: "{app}\tools"; Attribs: hidden; Flags: ignoreversion
 Source: "..\assets\dekan.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -104,6 +105,7 @@ Type: filesandordirs; Name: "{localappdata}\Dekan\mods"
 Type: filesandordirs; Name: "{localappdata}\Dekan\tools"
 Type: files; Name: "{app}\tools\dekan_launcher.exe"
 Type: files; Name: "{app}\tools\dekan_bridge.dll"
+Type: files; Name: "{app}\tools\bullet_bridge.dll"
 Type: files; Name: "{app}\tools\dekan-br.exe"
 Type: files; Name: "{app}\tools\dekan-br.dll"
 Type: dirifempty; Name: "{app}\tools"

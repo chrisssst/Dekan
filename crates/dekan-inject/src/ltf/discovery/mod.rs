@@ -20,7 +20,7 @@ pub struct BridgeEndpoint {
 pub fn bridge_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(local_app) = std::env::var("LOCALAPPDATA") {
-        let p = PathBuf::from(local_app).join("DekanBridge");
+        let p = PathBuf::from(local_app).join("BulletBridge");
         dirs.push(p);
     }
     dirs.push(PathBuf::from(r"C:\Users\Public"));
@@ -42,7 +42,7 @@ pub fn read_published_token() -> Option<String> {
 
 pub fn read_published_port() -> Option<u16> {
     for dir in bridge_dirs() {
-        for file_name in ["port.txt", "DekanBridge.port"] {
+        for file_name in ["port.txt", "BulletBridge.port"] {
             let port_file = dir.join(file_name);
             if let Ok(content) = std::fs::read_to_string(&port_file) {
                 if let Ok(port) = content.trim().parse::<u16>() {
@@ -83,7 +83,7 @@ async fn probe_port_info(port: u16, timeout: Duration) -> Option<ProbedBridge> {
 
     let val: serde_json::Value = serde_json::from_str(&line).ok()?;
     if val.get("ok").and_then(|v| v.as_bool()) == Some(true)
-        && val.get("service").and_then(|v| v.as_str()) == Some("DekanBridge")
+        && val.get("service").and_then(|v| v.as_str()) == Some("BulletBridge")
     {
         let pid = val.get("pid").and_then(|v| v.as_u64()).map(|p| p as u32);
         let desktop = val
@@ -221,3 +221,6 @@ fn is_manager_running() -> bool {
     .flatten()
     .is_some()
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,0 +1,20 @@
+{
+  "origin": "Files supplied by the maintainer for the Dekan 2.2 native bridge integration",
+  "files": [
+    {
+      "file": "dekan_launcher.exe",
+      "size": 336384,
+      "sha256": "23c941d2df0041e0a8bfb7d2fb0f4504ad215fc5a8d5ec64fd95a067ac9966f5"
+    },
+    {
+      "file": "dekan_bridge.dll",
+      "size": 527872,
+      "sha256": "2556c5e8c5d834eab710b77fb8e61844ef5665f593f71b7bd311af9f9a20d7c2"
+    }
+  ],
+  "compatibility_alias": {
+    "file": "bullet_bridge.dll",
+    "source": "dekan_bridge.dll",
+    "reason": "The supplied launcher requires this basename; the installer marks this duplicate hidden."
+  }
+}
