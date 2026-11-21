@@ -103,6 +103,25 @@ pub fn sample(data: &ClientGameData, game: &Path) -> Result<Vec<Case>, String> {
         ("Orianna", 1, None, "reported: Orianna ball"),
         ("Zed", 10, None, "reported: Zed shadows, Galaxy Slayer"),
         ("Zed", 12, Some(10), "reported: Zed chroma 238012"),
+        (
+            "Zed",
+            17,
+            Some(15),
+            "reported: Zed chroma 238017 (BankUnits.Events)",
+        ),
+        (
+            "Zed",
+            40,
+            Some(38),
+            "reported: Zed chroma 238040 (zero-tail skl)",
+        ),
+        (
+            "Zed",
+            59,
+            Some(58),
+            "reported: Zed chroma 238059 (skin58 prefix)",
+        ),
+        ("Zed", 61, Some(58), "reported: Zed chroma 238061"),
         ("Seraphine", 2, Some(1), "tier: K/DA ALL OUT Rising Star"),
         ("Seraphine", 3, Some(1), "tier: K/DA ALL OUT Superstar"),
         (
@@ -202,6 +221,7 @@ fn median(mut values: Vec<u128>) -> u128 {
 pub(crate) fn run_harness(args: &[String]) {
     let mut root = None;
     let mut out = std::env::temp_dir().join("dekan_harness.md");
+    let mut champ_filter: Option<String> = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -211,6 +231,7 @@ pub(crate) fn run_harness(args: &[String]) {
                     out = PathBuf::from(path);
                 }
             }
+            "--champ" => champ_filter = iter.next().map(|s| s.to_ascii_lowercase()),
             other => println!("argumento ignorado: {other}"),
         }
     }
@@ -224,13 +245,20 @@ pub(crate) fn run_harness(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let cases = match sample(&data, &game) {
+    let mut cases = match sample(&data, &game) {
         Ok(cases) => cases,
         Err(e) => {
             eprintln!("[ERRO] {e}");
             std::process::exit(1);
         }
     };
+    if let Some(ref f) = champ_filter {
+        cases.retain(|c| match c {
+            Case::Standard { alias, .. } | Case::Classic { alias, .. } => {
+                alias.eq_ignore_ascii_case(f)
+            }
+        });
+    }
     if cases.is_empty() {
         eprintln!("[ERRO] nenhum caso de teste foi montado a partir dos dados do cliente");
         std::process::exit(1);
@@ -257,6 +285,9 @@ pub(crate) fn run_harness(args: &[String]) {
             outcome.label,
             outcome.build_ms
         );
+        for failure in &outcome.failures {
+            println!("  -> {failure}");
+        }
         outcomes.push(outcome);
     }
     match std::fs::write(&out, render(&outcomes)) {
@@ -272,5 +303,6 @@ pub(crate) fn run_harness(args: &[String]) {
 }
 
 mod run;
+mod verify_ah;
 
 pub use run::run_case;

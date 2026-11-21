@@ -6,8 +6,6 @@ members = [
     "crates/dekan-core",
     "crates/dekan-inject",
     "crates/dekan-lcu",
-    "crates/dekan-bridge",
-    "crates/dekan-launcher",
     "crates/dekan-party",
     "crates/dekan-platform",
     "crates/dekan-relay",
@@ -22,7 +20,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "2.1.0"
+version = "2.2.0"
 authors = ["Dekan"]
 edition = "2024"
 rust-version = "1.85"

@@ -6,6 +6,36 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
 
 ## [Unreleased]
 
+## [2.2] — 2026-11-21
+
+### Changed
+
+- Base-skin skeleton and mesh assets are rebuilt with bounds-checked format handling instead of relying only on zero-byte padding.
+- Base-skin audio rebasing finds skin-specific event tags, normalizes bank unit names and removes remaining numbered-skin event references.
+- Classic Rift generation also applies the slot-zero identity rebase; the generated asset cache revision is updated.
+- The game-data harness includes additional Zed chroma cases, a `--champ` filter and model/audio identity verification.
+- Dekan remains the application, installer, crate and license identity. Version metadata is 2.2 (`2.2.0` internally).
+
+### Native integration
+
+- Replace the obsolete 2.1 bridge/launcher workspace crates with the maintainer-supplied x64 native bundle.
+- Package and verify the current payloads by SHA-256; stale local build output cannot overwrite them.
+- Preserve Dekan public tool names and add the hidden DLL compatibility alias required by the supplied launcher.
+- Discover the actual native handshake/profile identity and reject reuse of the old bridge service.
+
+### Preserved
+
+- Dekan icons, logo, banner, Classic/Crimson/Obsidian themes and saved theme propagation.
+- Turkish and English only, with the existing language selection and Turkish fallback.
+- Party relay endpoints, saved relay migration, DNS recovery and encrypted room protocol.
+- Discord Rich Presence, webhook reporting, update verification key and release signing configuration.
+- Installer identity, upgrade/data locations and the existing native publisher policy.
+
+### Verification
+
+- See `docs/releases/2.2.md` for the checks actually performed and the remaining Windows/match checks.
+
+
 ## [2.1] — 2026-11-17
 
 ### Changed

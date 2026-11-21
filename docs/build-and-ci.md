@@ -195,15 +195,8 @@ The second form works offline with the Sigstore bundle published next to the ins
   replaces the flags in `.cargo/config.toml`, which silently dropped the static runtime: the executable then
   needed the Visual C++ runtime and carried the builder's user folder in its panic messages. `build.rs`
   also asks the linker for the PE checksum.
-- The LTK injector is **not** packaged. Its license does not allow other projects to redistribute League
-  Toolkit's signed binaries, so users copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` from an official
-  LTK Manager release into `Program Files\Dekan\tools`. Dekan checks both files through `dekan_inject::trust`, accepts valid publisher signatures or unsigned
-  official releases, and rejects foreign/broken signatures and host-restricted DLLs. The official release
-  download and protected tools folder anchor unsigned-file provenance; `cargo xtask install-audit` uses the
-  same signature rules. See ADR-031 and `docs/security.md`.
-- `cargo xtask installer` passes the workspace version to Inno Setup (`installer/dekan.iss`) and produces
-  `Dekan-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `dist\dekan.exe` already there instead
-  of rebuilding it, so the release can sign the binary before it goes into the installer.
+- The current bridge payloads are shipped from `vendor/native`, not rebuilt from the retired 2.1 bridge/launcher crates. `cargo xtask package` verifies the pinned hashes, copies the supplied `dekan_launcher.exe` and `dekan_bridge.dll`, and generates the identical internal `bullet_bridge.dll` alias the launcher requires. The alias is installed hidden, checked before launch and included in package checksums and auditing. See ADR-032 and the bundle manifest.
+- `cargo xtask installer` passes the workspace display version to Inno Setup (`installer/dekan.iss`) and produces `Dekan-Setup-<version>-x64.exe`. With `--prebuilt`, every staged native component is still checked before packaging. Stale native binaries under `target` are never selected.
 - The release publishes the installer, its Sigstore bundle, `SHA256SUMS` and `SHA256SUMS.sig`. Installed copies
   check an update's installer against the signed checksum list before running it, and `install.ps1` (the
   terminal install from the README) checks the installer against `SHA256SUMS` and its signature.

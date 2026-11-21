@@ -1,4 +1,4 @@
-# Dekan 1.4 rebrand notes
+# Dekan 2.2 product notes
 
 Dekan maintains its own product identity and release configuration.
 
@@ -17,4 +17,4 @@ Customized for Dekan:
 
 Dekan uses the MIT license in `LICENSE`; third-party dependency terms remain in `THIRD-PARTY-NOTICES.md`.
 
-The package intentionally omits `assets/urgot-select.png` and `assets/urgot-ingame.png`; when overlaying it onto the existing Dekan repository, keep the current Dekan README screenshots already in `main`.
+The source archive retains the supplied Dekan logos, icons, banner and README screenshots unchanged.

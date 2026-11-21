@@ -28,12 +28,83 @@ pub(super) fn tag_prefix_end(name: &str) -> Option<usize> {
     let action = &name[..first];
     let category = &rest[..second];
     if action.is_empty()
+        || category.is_empty()
         || !action.bytes().all(|b| b.is_ascii_alphabetic())
-        || (!category.eq_ignore_ascii_case("sfx") && !category.eq_ignore_ascii_case("vo"))
+        || !category.bytes().all(|b| b.is_ascii_alphanumeric())
     {
         return None;
     }
-    Some(first + 1 + second + 1)
+    let end = first + 1 + second + 1;
+    (end < name.len()).then_some(end)
+}
+
+pub(super) fn has_skin_tag(name: &str) -> bool {
+    for segment in name.split('_') {
+        let low = segment.to_ascii_lowercase();
+        let Some(at) = low.rfind("skin") else {
+            continue;
+        };
+        let after = &low[at + 4..];
+        let digit_len = after.bytes().take_while(u8::is_ascii_digit).count();
+        let digits = &after[..digit_len];
+        let tail = &after[digit_len..];
+        let head = &low[..at];
+        if !digits.is_empty()
+            && digits.bytes().any(|b| b != b'0')
+            && (head.is_empty() || head.bytes().all(|b| b.is_ascii_alphabetic()))
+            && (tail.is_empty() || tail.bytes().all(|b| b.is_ascii_alphabetic()))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+pub(super) fn contains_skin_numbered_ref(value: &str, character: &str) -> bool {
+    if has_skin_tag(value) {
+        return true;
+    }
+    let lower = value.to_ascii_lowercase();
+    let char_low = character.to_ascii_lowercase();
+    let plain = char_low.strip_prefix("jade_").unwrap_or(&char_low);
+    let prefixes = if plain != char_low {
+        [Some(char_low.as_str()), Some(plain)]
+    } else {
+        [Some(char_low.as_str()), None]
+    };
+    prefixes.into_iter().flatten().any(|prefix| {
+        let needle = format!("{prefix}skin");
+        let bytes = lower.as_bytes();
+        let mut from = 0;
+        while let Some(pos) = lower[from..].find(&needle) {
+            let after = from + pos + needle.len();
+            if bytes.get(after).is_some_and(u8::is_ascii_digit) {
+                return true;
+            }
+            from = after;
+        }
+        false
+    })
+}
+
+pub(super) fn strip_skin_numbered_events(audio: &mut [Field], character: &str) -> usize {
+    let Some(Value::List { items, .. }) = tree::field_mut(audio, h("bankUnits")) else {
+        return 0;
+    };
+    let mut removed = 0usize;
+    for unit in items.iter_mut() {
+        let Some(uf) = unit.fields_mut() else {
+            continue;
+        };
+        let Some(Value::List { items: events, .. }) = tree::field_mut(uf, h("events")) else {
+            continue;
+        };
+        let before = events.len();
+        events
+            .retain(|ev| !raw_text(ev).is_some_and(|s| contains_skin_numbered_ref(&s, character)));
+        removed += before - events.len();
+    }
+    removed
 }
 
 pub(super) fn write_bank_asset(
@@ -103,19 +174,68 @@ fn append_unique_strings(unit: &mut Vec<Field>, field_name: &str, items: &[Strin
     }
 }
 
+pub(super) fn extra_skin_tags_from_events(
+    audio: &[Field],
+    current_tags: &[String],
+    base_tags: &[String],
+    character: &str,
+) -> Vec<String> {
+    let mut extras = Vec::new();
+    for unit in snapshot_units(audio) {
+        for ev in unit.events {
+            let Some(pe) = tag_prefix_end(&ev) else {
+                continue;
+            };
+            let rest = &ev[pe..];
+            let Some(tag) = rest.split('_').next() else {
+                continue;
+            };
+            if rest.len() <= tag.len() || !contains_skin_numbered_ref(tag, character) {
+                continue;
+            }
+            let seen = current_tags.iter().any(|t| t.eq_ignore_ascii_case(tag))
+                || base_tags.iter().any(|t| t.eq_ignore_ascii_case(tag))
+                || extras.iter().any(|t: &String| t.eq_ignore_ascii_case(tag));
+            if !seen {
+                extras.push(tag.to_owned());
+            }
+        }
+    }
+    extras
+}
+
 fn base_unit_name(name: &str) -> Option<String> {
     let is_skin = |seg: &str| {
         seg.len() > 4
             && seg[..4].eq_ignore_ascii_case("skin")
             && seg[4..].bytes().all(|b| b.is_ascii_digit())
     };
+    let strip_embedded_skin = |seg: &str| -> Option<String> {
+        let low = seg.to_ascii_lowercase();
+        let pos = low.rfind("skin")?;
+        if pos == 0 {
+            return None;
+        }
+        let digits = &seg[pos + 4..];
+        (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| format!("{}_Base", &seg[..pos]))
+    };
     let segments: Vec<&str> = name.split('_').collect();
-    if !segments.iter().any(|seg| is_skin(seg)) {
+    if !segments
+        .iter()
+        .any(|seg| is_skin(seg) || strip_embedded_skin(seg).is_some())
+    {
         return None;
     }
-    let renamed: Vec<&str> = segments
+    let renamed: Vec<String> = segments
         .into_iter()
-        .map(|seg| if is_skin(seg) { "Base" } else { seg })
+        .map(|seg| {
+            if is_skin(seg) {
+                "Base".to_owned()
+            } else {
+                strip_embedded_skin(seg).unwrap_or_else(|| seg.to_owned())
+            }
+        })
         .collect();
     Some(renamed.join("_"))
 }

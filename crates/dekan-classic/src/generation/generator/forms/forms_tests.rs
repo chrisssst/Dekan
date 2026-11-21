@@ -95,7 +95,7 @@ fn elementalist_skin() -> Vec<u8> {
                                         Value::List {
                                             kind: 0x80,
                                             element: 16,
-                                            items: vec![text("Play_sfx_Zed_Skin07_Q")],
+                                            items: vec![text("Play_sfx_Zed_Q")],
                                         },
                                     ),
                                 ],

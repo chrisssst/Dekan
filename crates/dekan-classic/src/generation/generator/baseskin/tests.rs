@@ -80,16 +80,15 @@ fn make_test_bank(version: u32, bank_id: u32, objects: Vec<Object>) -> Vec<u8> {
 }
 
 #[test]
-fn padding_extends_without_duplicating() {
+fn fallback_rebuild_always_extends_unknown_asset() {
     let dir = std::env::temp_dir().join(format!("dekan_baseskin_pad_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
-    write_padded_asset(&dir, "assets/test.skl", b"abc".to_vec()).expect("write");
+    let mut source = b"abc".to_vec();
+    source.extend_from_slice(&[0u8; 16]);
+    write_rebuilt_asset(&dir, "assets/src.skl", "assets/test.skl", source.clone()).expect("write");
     let written = std::fs::read(dir.join("assets/test.skl")).expect("read");
-    assert_eq!(written.len(), 3 + 16);
-    assert!(written.ends_with(&MESH_PADDING));
-    write_padded_asset(&dir, "assets/test.skl", written.clone()).expect("rewrite");
-    let rewritten = std::fs::read(dir.join("assets/test.skl")).expect("read2");
-    assert_eq!(rewritten.len(), 3 + 16);
+    assert_eq!(written.len(), source.len() + 16);
+    assert_ne!(written.last().copied(), Some(0));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
 }
 
@@ -269,6 +268,17 @@ fn make_skin_bin_round_trips_mesh_and_audio_tags_and_sfx_bank() {
     )
     .expect("parse base bank");
     assert!(!patched_base_bank.has_event(alias_ev));
+    let audio_fields = tree::field(&fields, h("skinAudioProperties"))
+        .and_then(Value::fields)
+        .expect("audio");
+    let evs: Vec<String> = units::snapshot_units(audio_fields)
+        .into_iter()
+        .flat_map(|u| u.events)
+        .collect();
+    assert!(
+        evs.iter().any(|e| e == "Play_sfx_Neeko_Q")
+            && !evs.iter().any(|e| e == "Play_sfx_NeekoSkin10_Q")
+    );
 
     let _ = std::fs::remove_dir_all(&wad_dir); // ignore-ok: cleanup
 }
@@ -361,13 +371,9 @@ fn live_neeko_skin10_rebases_tags_and_sound_banks_if_installed() {
         !tags
             .iter()
             .any(|t| t.to_ascii_lowercase().contains("skin10")),
-        "rebased tagEventList must not leak skin10 tag: {tags:?}"
+        "leak: {tags:?}"
     );
-    assert_eq!(
-        tree::field(&fields, h("championSkinName"))
-            .and_then(raw_text)
-            .as_deref(),
-        Some("Neeko")
-    );
+    let cname = tree::field(&fields, h("championSkinName")).and_then(raw_text);
+    assert_eq!(cname.as_deref(), Some("Neeko"));
     let _ = std::fs::remove_dir_all(&mods_dir); // ignore-ok: cleanup after live test
 }

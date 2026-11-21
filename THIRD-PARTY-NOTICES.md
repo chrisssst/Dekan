@@ -40,9 +40,7 @@ included in each crate's source, which is available from crates.io at the versio
 
 ## Reference projects
 
-Dekan was built by studying the projects listed in the README's acknowledgements. No source code from them
-is included, and no third-party injector is used or shipped. Where a reference is GPL-licensed, Dekan
-reimplements the behavior it needs independently.
+Dekan was built by studying the projects listed in the README's acknowledgements. Reference-project source is not included unless explicitly identified. The maintainer-supplied native bridge payloads in `vendor/native` are packaged with their provenance and pinned hashes. Where a reference is GPL-licensed, Dekan reimplements the behavior it needs independently.
 
 ## Trademarks
 
@@ -54,5 +52,5 @@ affiliated with, endorsed or sponsored by Riot Games.
 Parts of Dekan are derived from an MIT-licensed upstream project, whose license requires this notice
 to be kept:
 
-> Copyright (c) 2026 Isllan Toso. Permission is hereby granted, free of charge, to any person obtaining a copy of
+> Copyright (c) 2026 Dekan. Permission is hereby granted, free of charge, to any person obtaining a copy of
 > this software and associated documentation files, under the terms of the MIT License (same text as `LICENSE`).

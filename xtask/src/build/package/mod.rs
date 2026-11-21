@@ -106,38 +106,25 @@ pub(crate) fn run_package() {
     );
 
     let tools_dest_dir = dist_dir.join("tools");
-    std::fs::create_dir_all(&tools_dest_dir).expect("create tools directory");
+    if tools_dest_dir.exists() {
+        std::fs::remove_dir_all(&tools_dest_dir).expect("remove stale native tools");
+    }
+    let source_tools = workspace_root.join("vendor").join("native");
+    dekan_inject::ltf::native_bundle::copy_bundle(&source_tools, &tools_dest_dir).unwrap_or_else(
+        |e| {
+            eprintln!("[ERROR] {e}");
+            std::process::exit(1);
+        },
+    );
     for tool in SHIPPED_TOOLS {
-        let tool_candidates = [
-            workspace_root.join(format!("target/x86_64-pc-windows-msvc/release/{tool}")),
-            workspace_root.join(format!("target/release/{tool}")),
-        ];
-        let Some(src) = tool_candidates.iter().find(|p| p.exists()) else {
-            eprintln!(
-                "[ERROR] {tool} was not built under target/; the package would ship without it"
-            );
-            std::process::exit(1);
-        };
         let dest = tools_dest_dir.join(tool);
-        if let Err(e) = std::fs::copy(src, &dest) {
-            eprintln!(
-                "[ERROR] copying {} to {}: {e}",
-                src.display(),
-                dest.display()
-            );
-            std::process::exit(1);
-        }
-        let bytes_tool = std::fs::read(&dest).unwrap_or_else(|e| {
-            eprintln!("[ERROR] reading {}: {e}", dest.display());
-            std::process::exit(1);
-        });
+        let bytes_tool = std::fs::read(&dest).expect("read verified native component");
         let hash_tool = dekan_inject::dll_validator::to_hex(&Sha256::digest(&bytes_tool));
         checksum_content.push_str(&format!("{hash_tool} *tools/{tool}\n"));
         println!(
-            "  Tool:     {} ({} bytes, SHA-256: {})",
+            "  Tool:     {} ({} bytes)",
             dest.display(),
-            bytes_tool.len(),
-            hash_tool
+            bytes_tool.len()
         );
     }
 
@@ -160,7 +147,7 @@ pub(crate) fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-pub(crate) const SHIPPED_TOOLS: [&str; 2] = ["dekan_launcher.exe", "dekan_bridge.dll"];
+pub(crate) const SHIPPED_TOOLS: [&str; 3] = dekan_inject::ltf::native_bundle::SHIPPED_TOOLS;
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {
@@ -236,6 +223,12 @@ pub(crate) fn run_installer(args: &[String]) {
             std::process::exit(1);
         }
     }
+
+    dekan_inject::ltf::native_bundle::verify_directory(&workspace_root.join("dist").join("tools"))
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] {e}");
+            std::process::exit(1);
+        });
 
     let Some(iscc) = iscc_candidates.iter().find(|p| p.exists()) else {
         eprintln!("[ERROR] ISCC.exe não encontrado. Instale o Inno Setup 6.");

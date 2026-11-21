@@ -75,7 +75,7 @@ pub fn audit_files(
                 checks.push(check(
                     verdict.is_ok(),
                     format!(
-                        "{} is signed by Dekan's publisher {} ({})",
+                        "{} satisfies the native component and publisher policy {} ({})",
                         path.display(),
                         dekan_inject::trust::NATIVE_PUBLISHER.unwrap_or("not pinned in this build"),
                         verdict.err().unwrap_or_else(|| "verified".to_owned())
@@ -281,6 +281,7 @@ pub(crate) fn run_install_audit(args: &[String]) {
         data_dir: dekan_data_dir(),
     };
     let trusted = |path: &std::path::Path| -> Result<(), String> {
+        dekan_inject::ltf::native_bundle::verify_file(path)?;
         dekan_inject::trust::verify_native_file(path).map_err(|e| e.to_string())
     };
     let mut checks = audit_files(&layout, phase, &SHIPPED_TOOLS, &trusted);

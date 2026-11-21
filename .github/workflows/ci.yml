@@ -63,6 +63,8 @@ jobs:
     name: Release build
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      DEKAN_GITHUB_CLIENT_ID: ${{ vars.DEKAN_GITHUB_CLIENT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,6 +86,26 @@ jobs:
 
       - name: Release binary as shipped (cargo xtask package)
         run: cargo xtask package
+
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+
+      - name: Build installer for testing
+        run: cargo xtask installer --prebuilt
+
+      - name: Upload Windows test installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dekan-windows-test-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/dekan.exe
+            dist/installer/Dekan-Setup-*-x64.exe
+            dist/SHA256SUMS
 
       - name: Executable metadata and manifest
         shell: pwsh

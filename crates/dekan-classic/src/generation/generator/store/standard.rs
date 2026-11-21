@@ -246,7 +246,7 @@ impl StandardChampion {
             "game_wad": self.wad_stamp,
             "generator": reuse::generator_stamp(),
             "options": format!("{:?}", self.options),
-            "baseskin_rebase": 2,
+            "baseskin_rebase": 9,
         });
         let _claim = reuse::Claim::wait_for(&final_dir);
         if reuse::already_built(&final_dir, &key) {

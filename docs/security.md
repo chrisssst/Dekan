@@ -128,3 +128,9 @@ them is unsigned, and many users will then see a SmartScreen warning.
 
 Please use [GitHub Security Advisories](https://github.com/chrisssst/Dekan/security/advisories/new) and not a
 public issue.
+
+## Dekan 2.2 supplied bridge bundle
+
+The current release adapter uses the maintainer-supplied native payloads. Their public files keep Dekan names and their bytes are hash-pinned; the internal DLL basename, handshake and token-publication directory retain the native protocol identity. The compatibility DLL alias is checked against the same pinned hash as the public DLL, so a stale or changed alias is refused. Optional configured publisher checks remain in place. The old bridge service is not accepted as the new native service.
+
+No constant authentication token is introduced. Protected loopback requests continue to use the per-session token published by the bridge. Close the prior Mod Manager instance before upgrading so the old loaded DLL cannot be mistaken for the new installed payload. Source-level protocol tests do not prove execution inside Mod Manager or the game; complete the Windows handshake and real-match checks before release.

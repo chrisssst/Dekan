@@ -98,6 +98,9 @@ Attach the log when you open an [issue](https://github.com/chrisssst/Dekan/issue
 
 ## Building from source
 
+Dekan 2.2 includes the supplied current native bridge bundle in `vendor/native`. The build packages those verified binaries instead of rebuilding the obsolete 2.1 bridge. Use the complete source archive, including that directory. Close Dekan and Mod Manager (including the tray) before installing the newly built version. Existing themes, languages and user settings remain in the Dekan data directory.
+
+
 ```powershell
 cargo xtask check
 cargo xtask package
