@@ -3,7 +3,7 @@ import { Theme, ExposeLayer, GoldButton, Wordmark, StatusDot, Halo } from "../th
 import { ScrollView } from "std-widgets.slint";
 import { PanelLabels, PanelCheckRow, PanelSkinStatRow, PanelAction } from "panel_types.slint";
 import { Section, PanelTab, CheckRow, Toggle, Notice, PowerCard, AllClearBanner } from "panel_parts.slint";
-import { RepairBanner } from "panel_mode.slint";
+import { ModeCard, RepairBanner } from "panel_mode.slint";
 import { StatsCard } from "panel_stats.slint";
 
 export component ControlPanel inherits Window {
@@ -171,6 +171,13 @@ export component ControlPanel inherits Window {
                             checked: root.injection;
                             toggled => { root.action(PanelAction.toggle-injection); }
                         }
+                        ModeCard {
+                            heading: root.labels.mode-title;
+                            window-label: root.labels.mode-window;
+                            client-label: root.labels.in-client-ui;
+                            in-client: root.in-client-ui;
+                            toggled => { root.action(PanelAction.toggle-in-client-ui); }
+                        }
                         StatsCard {
                             heading: root.labels.stats-title;
                             empty-text: root.labels.stats-empty;
@@ -187,13 +194,6 @@ export component ControlPanel inherits Window {
                         }
                     }
                     if root.tab == 1: Section {
-                        Toggle {
-                            divider: false;
-                            label: root.labels.in-client-ui;
-                            hint: root.labels.in-client-ui-hint;
-                            checked: root.in-client-ui;
-                            toggled => { root.action(PanelAction.toggle-in-client-ui); }
-                        }
                         ThemePicker {
                             label: root.labels.theme;
                             classic-label: root.labels.theme-classic;

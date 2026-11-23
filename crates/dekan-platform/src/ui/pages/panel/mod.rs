@@ -128,6 +128,8 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         injection_hint: text.panel_injection_hint.into(),
         random_skin: text.menu_random_skin.into(),
         random_skin_hint: text.panel_random_skin_hint.into(),
+        mode_title: text.panel_mode_title.into(),
+        mode_window: text.panel_mode_window.into(),
         in_client_ui: text.menu_in_client_ui.into(),
         in_client_ui_hint: text.panel_in_client_ui_hint.into(),
         light_loading: text.menu_light_loading.into(),
@@ -341,3 +343,6 @@ mod tests;
 
 #[cfg(test)]
 mod theme_tests;
+
+#[cfg(test)]
+mod mode_tests;

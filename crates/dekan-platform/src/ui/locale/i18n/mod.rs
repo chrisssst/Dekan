@@ -154,6 +154,8 @@ pub struct Text {
     pub panel_random_skin_hint: &'static str,
     pub menu_injection: &'static str,
     pub panel_injection_hint: &'static str,
+    pub panel_mode_title: &'static str,
+    pub panel_mode_window: &'static str,
     pub menu_in_client_ui: &'static str,
     pub panel_in_client_ui_hint: &'static str,
     pub menu_light_loading: &'static str,
