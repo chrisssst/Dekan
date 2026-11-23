@@ -112,5 +112,7 @@
       "reason": "The supplied launcher requires this basename; the installer marks this duplicate hidden."
     }
   },
-  "live_match_tested": false
+  "live_match_tested": false,
+  "release_public_key_unchanged": true,
+  "release_public_key_sha256": "3d2a2c33d987eb4456c84105e6ad52feae7e26c571e378aee76a642b9e064641"
 }

@@ -368,7 +368,6 @@ async fn run() -> Result<()> {
 
     info!("Shutting down supervised tasks");
     supervisor.shutdown().await;
-    dekan_inject::ltf::shutdown_bridge().await;
     let dropped = logging.dropped.dropped_lines();
     if dropped > 0 {
         warn!(

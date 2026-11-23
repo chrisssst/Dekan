@@ -3,7 +3,7 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 21] = [
+const ACTIONS: [PanelAction; 20] = [
     PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
@@ -97,10 +97,6 @@ fn every_language_fills_every_label() {
             ("injection", &labels.injection),
             ("random", &labels.random_skin),
             ("light", &labels.light_loading),
-            ("in client", &labels.in_client_ui),
-            ("mode title", &labels.mode_title),
-            ("mode window", &labels.mode_window),
-            ("mode client", &labels.mode_client),
             ("accept", &labels.auto_accept),
             ("autostart", &labels.autostart),
             ("create", &labels.party_create),
