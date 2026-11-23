@@ -16,5 +16,10 @@
     "file": "bullet_bridge.dll",
     "source": "dekan_bridge.dll",
     "reason": "The supplied launcher requires this basename; the installer marks this duplicate hidden."
+  },
+  "client_shim_compatibility_alias": {
+    "file": "bullet_launcher.exe",
+    "source": "dekan_launcher.exe",
+    "reason": "The supplied helper recognizes its own IFEO registration by the bullet_launcher basename and --ux-shim flag; the installer marks this identical copy hidden."
   }
 }

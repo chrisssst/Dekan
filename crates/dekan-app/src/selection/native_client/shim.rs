@@ -22,10 +22,10 @@ pub(super) fn registration(launcher: &Path) -> Registration {
 pub(super) fn launcher(directories: &[PathBuf]) -> Result<PathBuf> {
     let (path, _) = dekan_inject::ltf::find_launcher_tools(directories)
         .context("Dekan native tools are missing")?;
-    let path = path.canonicalize()?;
+    let path = std::path::absolute(path)?;
     let directory = path.parent().context("Launcher directory missing")?;
     dekan_inject::ltf::native_bundle::verify_directory(directory).map_err(anyhow::Error::msg)?;
-    Ok(path)
+    Ok(directory.join(dekan_inject::ltf::native_bundle::COMPAT_LAUNCHER))
 }
 
 pub(super) fn change(launcher: &Path, install: bool) -> Result<bool> {
