@@ -69,6 +69,10 @@
     "crates/dekan-platform/ui/assets/logo-40.png": {
       "unchanged": true,
       "sha256": "649952a36d70655f6bbdb879e5004c5395f1a14d2ef0077c697acf6bbceb387f"
+    },
+    "crates/dekan-app/build.rs": {
+      "unchanged": true,
+      "sha256": "f856bea5165203e50cfddabc2eb17393337b3ddb5f86e3c38723856b0d4d0bd1"
     }
   },
   "configuration": {
