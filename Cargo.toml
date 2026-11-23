@@ -26,6 +26,8 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/chrisssst/Dekan"
+homepage = "https://github.com/chrisssst/Dekan"
+description = "Dekan — Open-source League of Legends skin changer, chroma selector, TFT cosmetic generator, and custom mod manager (.fantome / .modpkg) for Windows, written in Rust."
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

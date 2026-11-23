@@ -5,101 +5,81 @@
 <h1 align="center">Dekan</h1>
 
 <p align="center">
-  A League of Legends skin changer for Windows, written in Rust.<br>
-  <em>The right skin loads into the match — every mode, every time.</em>
+  Open-source League of Legends skin changer and custom mod manager (<code>.fantome</code> / <code>.modpkg</code>) for Windows, written in Rust.
 </p>
 
 <p align="center">
   <a href="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml"><img src="https://github.com/chrisssst/Dekan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/chrisssst/Dekan"><img src="https://api.scorecard.dev/projects/github.com/chrisssst/Dekan/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/v/release/chrisssst/Dekan?include_prereleases&sort=semver" alt="Release"></a>
-  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/downloads/chrisssst/Dekan/total?label=downloads" alt="Downloads"></a>
+  <a href="https://github.com/chrisssst/Dekan/releases/latest"><img src="https://img.shields.io/github/downloads/chrisssst/Dekan/total?label=downloads&color=brightgreen" alt="Downloads"></a>
+  <a href="https://github.com/chrisssst/Dekan/stargazers"><img src="https://img.shields.io/github/stars/chrisssst/Dekan?style=flat&color=c8aa6e" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
-  <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <a href="https://discord.gg/dekan"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <a href="https://github.com/chrisssst/Dekan#installation"><img src="https://img.shields.io/badge/Guide-Installation-5865F2?logo=github&logoColor=white" alt="Installation guide"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/chrisssst/Dekan/releases/latest"><b>Download</b></a> ·
-  <a href="https://discord.gg/dekan"><b>Discord community</b></a> ·
-  <a href="https://github.com/chrisssst/Dekan/issues"><b>Report a bug</b></a>
+  <a href="https://github.com/chrisssst/Dekan#installation"><b>Installation Guide</b></a> ·
+  <a href="https://github.com/chrisssst/Dekan#build-from-source"><b>Build Guide</b></a> ·
+  <a href="https://github.com/chrisssst/Dekan/issues"><b>Issues</b></a>
 </p>
+
+> [!WARNING]
+> **Educational Project & Disclaimer:** Dekan is developed strictly for **educational and research purposes**. It is provided as is, without warranty of any kind. The author takes **no responsibility** for any account penalties, bans, damages, or consequences resulting from using or misusing this software. You use it at your own risk.
 
 ---
 
-Pick any skin in Dekan's own window during champion select. Dekan builds a copy of the game files that contain
-it, and when the game starts it reads that copy instead of its own. The game installation is never modified.
+## Overview
+
+Dekan reads your installed League of Legends archives (`DATA/FINAL/Champions/*.wad.client`) to generate and load skins, chromas, Exalted forms (`Ctrl+5`), TFT cosmetics, and custom mods locally at match start without modifying Riot's game files.
 
 <p align="center">
   <img src="assets/urgot-select.png" alt="Dekan in Champion Select" width="49%">
-  <img src="assets/urgot-ingame.png" alt="Dekan in Game" width="49%">
+  <img src="assets/urgot-ingame.png" alt="Dekan In-Game Preview" width="49%">
 </p>
-
-> [!IMPORTANT]
-> **Educational project**, provided as is, without warranty. The author accepts no responsibility for any damage,
-> account penalty or loss caused by its use. See the [Disclaimer](#disclaimer).
-
-## Features
-
-- **Every skin and chroma**, including form skins, chosen in champion select and loaded when the game starts.
-- **Random skin and history**: roll one, or reuse the last skin you played on each champion.
-- **Custom mods**: `.fantome`, `.zip` and `.modpkg`, checked and adjusted against the current patch before use.
-- **Classic Rift**: legacy champion models, generated from your installed game.
-- **Party mode**: friends see each other's skins through an end-to-end encrypted relay, up to five players. Friends
-  in the same lobby need no code.
-- **Always up to date**: skins are generated from the game you have installed, so a patch never breaks them.
-- **Safe by design**: runs without administrator rights, never writes to the game folder, verifies every binary
-  and collects no telemetry.
-- **Updates you approve**, verified against the release's signed checksum list.
-- Turkish (default) and English. **Free and open source**: if you paid for it, you were scammed.
 
 ## Installation
 
-1. **Install Dekan.** Download `Dekan-Setup-<version>-x64.exe` from
-   [Releases](https://github.com/chrisssst/Dekan/releases/latest) and run it, or from PowerShell (not as
-   administrator):
+> **Step-by-step installation tutorial:** Download the Windows installer below. The source build instructions are included in this README.
 
-   ```powershell
-   irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1 | iex
-   ```
+### Windows (10 / 11 x64)
 
-   The script checks the installer against the release's `SHA256SUMS` before installing. Dekan is not
-   code-signed, so Windows SmartScreen may warn about the installer.
+Download the [latest released Windows installer](https://github.com/chrisssst/Dekan/releases/latest), install Mod Manager (LTK Manager 1.33.0 or newer), and start Dekan. The Dekan installer includes the supplied native tools. Alternatively, run in **PowerShell**:
 
-2. **The injection tools come with it.** The installer places Dekan's LTF bridge tools, `dekan_launcher.exe` and
-   `dekan_bridge.dll`, in `C:\Program Files\Dekan\tools`. Dekan integrates with the official Mod Manager to apply
-   overlays cleanly in-game.
+```powershell
+irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1 | iex
+```
 
-3. **Start Dekan** from the Start menu, normally (not as administrator). It lives in the system tray.
-   On the first start Dekan asks you to sign in with GitHub: it shows a code, opens github.com and you enter the
-   code there. Dekan then checks that your account starred this repository. The check repeats on every start; while
-   offline, a check from the last 7 days is accepted. The sign-in is stored for your Windows account only.
+## Features
 
-## Usage
+- **Skins, Chromas & Forms (`Ctrl+5`):** Supports 170+ champions and 9,000+ skins, chromas, Exalted, Ultimate, and Hall of Legends forms, plus localized loading-screen names.
+- **Dekan Interface:** Pick skins in the standalone Dekan window, without Pengu Loader.
+- **TFT Generation:** Includes updated generation support for TFT cosmetic assets.
+- **Custom Mods (`.fantome`, `.modpkg`, `.zip`):** Import and repair custom skins, maps, HUDs, fonts, and announcers.
+- **Party Mode:** End-to-end encrypted (`XChaCha20-Poly1305`) skin and identity sync with up to 5 friends.
+- **All Regions & Languages:** Works across all Riot servers (including WeGame/CN), Classic Rift (JADE), and supports **Türkçe** and **English**.
+- **Themes:** Classic, Crimson and Obsidian themes, with the saved selection retained across launches.
+- **Discord Rich Presence:** Retains the Dekan presence integration.
 
-1. Open the League client and Dekan, in either order.
-2. Pick a champion in champion select. Dekan's window lists its skins and chromas.
-3. Choose one and play.
+## FAQ
 
-Custom mods go into the category folders under `%LOCALAPPDATA%\Dekan\custom_mods`, or are imported from the
-**Mods** tab. Party rooms are created from the tray, or offered automatically when friends running Dekan share
-your lobby. Optional settings are listed in [`.env.example`](.env.example).
+**Where is the full installation tutorial?**
+See the **[installation guide](https://github.com/chrisssst/Dekan#installation)**.
 
-## Troubleshooting
+**Does Dekan modify my League of Legends installation?**
+No. Overlays are built separately and loaded in memory at match start. Your game files stay untouched.
 
-Logs are in `%LOCALAPPDATA%\Dekan\logs` (the tray opens the folder); `DEKAN_LOG=debug` adds detail. **Export
-diagnostics** in the control panel zips everything needed for a report. If a skin or mod breaks match loading,
-turn off **Inject skins** in the control panel. Close other skin tools while Dekan runs: two injectors conflict.
+**Does it require Administrator privileges or Pengu Loader?**
+Dekan normally runs without Administrator privileges and does not use Pengu Loader. Its skin picker is the standalone Dekan window. The supplied native launcher follows its own Mod Manager startup requirements.
 
-Attach the log when you open an [issue](https://github.com/chrisssst/Dekan/issues), or ask on
-[Discord](https://discord.gg/dekan). Security issues go through a
-[private advisory](https://github.com/chrisssst/Dekan/security/advisories/new).
+**Can other players see my skin?**
+Only locally, unless you and your friends enable **Party Mode** inside Dekan.
 
-## Building from source
+**Where can I read how Dekan works internally?**
+Check the **[Build Guide](https://github.com/chrisssst/Dekan#build-from-source)**.
 
-Dekan 2.2 includes the supplied current native bridge bundle in `vendor/native`. The build packages those verified binaries instead of rebuilding the obsolete 2.1 bridge. Use the complete source archive, including that directory. Close Dekan and Mod Manager (including the tray) before installing the newly built version. Existing themes, languages and user settings remain in the Dekan data directory.
-
+## Build from Source
 
 ```powershell
 cargo xtask check
@@ -107,26 +87,6 @@ cargo xtask package
 cargo xtask installer
 ```
 
-Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
-
-## Acknowledgements
-
-Dekan was inspired by [Rose](https://github.com/Alban1911/Rose) and built by studying the open projects listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Maintained by **Dekan** — [GitHub](https://github.com/chrisssst/Dekan).
-
-## Disclaimer
-
-Dekan is published **for educational purposes**, **as is, without warranty of any kind**, as stated in the MIT
-license. The author assumes no responsibility for any damage caused by its use, including account suspensions or
-bans. Using third-party software with League of Legends goes against Riot Games' Terms of Service: you decide
-whether to use it and bear the consequences. Dekan only changes what you see on your own machine. It is not
-affiliated with or endorsed by Riot Games; League of Legends is a trademark of Riot Games, Inc.
-
-<p align="center">
-  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
-</p>
-
 ## License
 
-- **Source Code:** The source code in this repository is licensed under the [MIT License](LICENSE).
-- **Third-Party Components:** Licensed under their respective terms as listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT License](LICENSE) · [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

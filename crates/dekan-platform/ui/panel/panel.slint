@@ -191,7 +191,7 @@ export component ControlPanel inherits Window {
                             classic-label: root.labels.theme-classic;
                             crimson-label: root.labels.theme-crimson;
                             obsidian-label: root.labels.theme-obsidian;
-                            changed(mode) => { root.theme-changed(mode); }
+                            theme-changed(mode) => { root.theme-changed(mode); }
                         }
                         Toggle {
                             divider: false;

@@ -5,7 +5,7 @@ export component ThemePicker inherits VerticalLayout {
     in property <string> classic-label;
     in property <string> crimson-label;
     in property <string> obsidian-label;
-    callback changed(int);
+    callback theme-changed(int);
     spacing: 7px;
     Text {
         text: root.label;
@@ -18,17 +18,17 @@ export component ThemePicker inherits VerticalLayout {
         GoldButton {
             text: root.classic-label;
             primary: Theme.mode == 0;
-            clicked => { root.changed(0); }
+            clicked => { root.theme-changed(0); }
         }
         GoldButton {
             text: root.crimson-label;
             primary: Theme.mode == 1;
-            clicked => { root.changed(1); }
+            clicked => { root.theme-changed(1); }
         }
         GoldButton {
             text: root.obsidian-label;
             primary: Theme.mode == 2;
-            clicked => { root.changed(2); }
+            clicked => { root.theme-changed(2); }
         }
     }
     Rectangle {
