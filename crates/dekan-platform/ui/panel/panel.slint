@@ -14,6 +14,7 @@ export component ControlPanel inherits Window {
     in property <bool> in-room;
     in property <bool> random-skin;
     in property <bool> light-loading;
+    in property <bool> in-client-ui;
     in property <bool> injection;
     in property <bool> auto-accept;
     in property <bool> autostart;
@@ -186,6 +187,13 @@ export component ControlPanel inherits Window {
                         }
                     }
                     if root.tab == 1: Section {
+                        Toggle {
+                            divider: false;
+                            label: root.labels.in-client-ui;
+                            hint: root.labels.in-client-ui-hint;
+                            checked: root.in-client-ui;
+                            toggled => { root.action(PanelAction.toggle-in-client-ui); }
+                        }
                         ThemePicker {
                             label: root.labels.theme;
                             classic-label: root.labels.theme-classic;

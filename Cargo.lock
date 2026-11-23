@@ -1013,6 +1013,7 @@ name = "dekan-app"
 version = "2.3.0"
 dependencies = [
  "anyhow",
+ "base64",
  "dekan-classic",
  "dekan-core",
  "dekan-inject",
@@ -1029,6 +1030,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "tracing",
  "tracing-appender",

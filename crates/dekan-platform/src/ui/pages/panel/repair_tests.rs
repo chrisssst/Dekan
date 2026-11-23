@@ -11,6 +11,7 @@ fn empty_snapshot(repair: PanelRepair) -> PanelSnapshot {
         injection: true,
         random_skin: false,
         light_loading: false,
+        in_client_ui: false,
         autostart: false,
         update_line: None,
         checks: Vec::new(),

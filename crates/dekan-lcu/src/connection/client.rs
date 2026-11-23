@@ -185,6 +185,12 @@ impl LcuClient {
         Ok(value.locale)
     }
 
+    pub async fn restart_ux(&self) -> Result<bool, LcuError> {
+        let url = format!("{}/riotclient/kill-and-restart-ux", self.base_url);
+        let response = self.client.post(url).send().await?;
+        Ok(response.status().is_success())
+    }
+
     pub async fn accept_ready_check(&self) -> Result<bool, LcuError> {
         let path = "/lol-matchmaking/v1/ready-check/accept";
         let url = format!("{}{path}", self.base_url);

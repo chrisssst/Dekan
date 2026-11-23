@@ -180,6 +180,7 @@ async fn run() -> Result<()> {
             e
         })
         .ok();
+    dekan_platform::preferences::IN_CLIENT_UI.load();
     let injection = dekan_platform::preferences::INJECTION.load();
     info!(enabled = injection, "Skin injection setting loaded");
     let random_skin = dekan_platform::preferences::RANDOM_SKIN.load();

@@ -118,5 +118,14 @@
   },
   "live_match_tested": false,
   "release_public_key_unchanged": true,
-  "release_public_key_sha256": "3d2a2c33d987eb4456c84105e6ad52feae7e26c571e378aee76a642b9e064641"
+  "release_public_key_sha256": "3d2a2c33d987eb4456c84105e6ad52feae7e26c571e378aee76a642b9e064641",
+  "native_client": {
+    "implemented": true,
+    "default_enabled": false,
+    "live_client_tested": false,
+    "repository": "https://github.com/chrisssst/Dekan",
+    "discord": "https://discord.gg/dekan",
+    "adr": "docs/decisions/033-native-client-mode.md",
+    "language_source": "Installer language.ini (Turkish or English), with existing active language fallback for portable builds"
+  }
 }

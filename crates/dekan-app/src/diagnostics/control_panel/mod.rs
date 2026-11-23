@@ -31,6 +31,7 @@ pub struct Facts {
     pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
+    pub in_client_ui: bool,
     pub autostart: bool,
     pub tools_present: bool,
     pub manager: ManagerStatus,
@@ -92,6 +93,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         injection: facts.injection,
         random_skin: facts.random_skin,
         light_loading: facts.light_loading,
+        in_client_ui: facts.in_client_ui,
         autostart: facts.autostart,
         update_line: facts.update.as_deref().map(|latest| {
             fill(

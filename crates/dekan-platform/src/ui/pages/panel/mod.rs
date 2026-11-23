@@ -54,6 +54,7 @@ pub struct PanelSnapshot {
     pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
+    pub in_client_ui: bool,
     pub autostart: bool,
     pub update_line: Option<String>,
     pub checks: Vec<PanelCheck>,
@@ -85,6 +86,7 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::ToggleInjection => TrayEvent::ToggleInjection,
         PanelAction::ToggleRandomSkin => TrayEvent::ToggleRandomSkin,
         PanelAction::ToggleLightLoading => TrayEvent::ToggleLightLoading,
+        PanelAction::ToggleInClientUi => TrayEvent::ToggleInClientUi,
         PanelAction::ToggleAutoAccept => TrayEvent::ToggleAutoAccept,
         PanelAction::ToggleAutostart => TrayEvent::ToggleAutostart,
         PanelAction::PartyCreate => TrayEvent::PartyCreate,
@@ -126,6 +128,8 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         injection_hint: text.panel_injection_hint.into(),
         random_skin: text.menu_random_skin.into(),
         random_skin_hint: text.panel_random_skin_hint.into(),
+        in_client_ui: text.menu_in_client_ui.into(),
+        in_client_ui_hint: text.panel_in_client_ui_hint.into(),
         light_loading: text.menu_light_loading.into(),
         light_loading_hint: text.panel_light_loading_hint.into(),
         auto_accept: text.menu_auto_accept.into(),
@@ -173,6 +177,7 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_injection(state.injection);
     window.set_random_skin(state.random_skin);
     window.set_light_loading(state.light_loading);
+    window.set_in_client_ui(state.in_client_ui);
     window.set_auto_accept(state.auto_accept);
     window.set_autostart(state.autostart);
     window.set_update_line(state.update_line.as_deref().unwrap_or_default().into());

@@ -53,6 +53,8 @@ pub(super) static TURKISH: Text = Text {
     panel_random_skin_hint: "Şampiyon kilitlendiğinde Dekan'da skin seçilmemişse maçın skinsiz başlamaması için rastgele bir skin seçilir.",
     menu_injection: "Kostümleri etkinleştir",
     panel_injection_hint: "Oyunun kendi dosyalarıyla, kostüm veya mod yüklemeden oynamak için kapat. Bir mod maçın yüklenmesini bozarsa Dekan yükleyiciyi durdurur; yeniden bağlandığında oyun modsuz açılır.",
+    menu_in_client_ui: "İstemci içi mod",
+    panel_in_client_ui_hint: "Kostümleri League istemcisinden seç. Etkinleştirme yönetici izni isteyebilir ve istemci arayüzünü yeniden başlatabilir. Bağlantı kurulamazsa Dekan penceresi kullanılabilir.",
     menu_light_loading: "Hafif maç yükleme",
     panel_light_loading_hint: "League istemcisinin çökme raporlarını (Config\\LeagueClientSettings.yaml) kapatır; böylece enjektör, maç başlarken tüm dosyaları birden değil, oyun her dosyayı yüklediğinde kontrol eder.",
     check_injector: "Enjektör (tools klasörü)",

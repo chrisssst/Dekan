@@ -28,6 +28,7 @@ pub enum TrayEvent {
 
     ToggleRandomSkin,
     ToggleLightLoading,
+    ToggleInClientUi,
 
     Quit,
 

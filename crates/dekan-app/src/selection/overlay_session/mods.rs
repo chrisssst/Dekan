@@ -66,6 +66,7 @@ impl OverlaySession {
                 "No WAD alias from the client; skin mods outside a champion folder are not offered"
             );
         }
+        self.global_mods_loaded = false;
         self.mod_catalog =
             mods_store::load_mod_catalog(self.mods.roots.clone(), Some(champion_id), alias).await;
 

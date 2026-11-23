@@ -10,6 +10,7 @@ fn facts() -> Facts {
         injection: true,
         random_skin: true,
         light_loading: true,
+        in_client_ui: false,
         autostart: false,
         tools_present: true,
         manager: ManagerStatus::Ready {

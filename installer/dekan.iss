@@ -82,6 +82,9 @@ Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreve
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\party.json"; DestDir: "{localappdata}\Dekan\state"; Flags: onlyifdoesntexist
 
+[INI]
+Filename: "{app}\language.ini"; Section: "ui"; Key: "language"; String: "{language}"; Flags: uninsdeleteentry uninsdeletesectionifempty uninsdeletefileifempty
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\dekan.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\dekan.ico"; Tasks: desktopicon

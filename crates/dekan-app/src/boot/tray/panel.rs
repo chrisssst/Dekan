@@ -98,6 +98,7 @@ pub fn panel_links_for(
             injection: dekan_platform::preferences::INJECTION.is_enabled(),
             random_skin: dekan_platform::preferences::RANDOM_SKIN.is_enabled(),
             light_loading: dekan_platform::preferences::LIGHT_LOADING.is_enabled(),
+            in_client_ui: dekan_platform::preferences::IN_CLIENT_UI.is_enabled(),
             autostart,
             tools_present: dekan_app::control_panel::tools_present(&tools),
             manager,
@@ -219,6 +220,12 @@ impl TrayActions {
                         "Random skin when none is chosen changed from the control panel"
                     ),
                     Err(e) => warn!(error = %e, "Could not change the random skin setting"),
+                }
+            }
+            dekan_platform::tray::TrayEvent::ToggleInClientUi => {
+                match dekan_platform::preferences::IN_CLIENT_UI.toggle() {
+                    Ok(enabled) => info!(enabled, "Native in-client mode changed"),
+                    Err(e) => warn!(error = %e, "Could not save native in-client mode"),
                 }
             }
             dekan_platform::tray::TrayEvent::ToggleLightLoading => {

@@ -3,10 +3,11 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 20] = [
+const ACTIONS: [PanelAction; 21] = [
     PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
+    PanelAction::ToggleInClientUi,
     PanelAction::ToggleAutoAccept,
     PanelAction::ToggleAutostart,
     PanelAction::PartyCreate,
@@ -44,6 +45,7 @@ fn snapshot() -> PanelSnapshot {
         injection: true,
         random_skin: false,
         light_loading: true,
+        in_client_ui: false,
         autostart: false,
         update_line: Some("Dekan 1.3 is available".into()),
         checks: vec![

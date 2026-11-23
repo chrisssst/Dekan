@@ -1,3 +1,6 @@
+mod install;
+pub use install::installed_language;
+
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +53,9 @@ impl Language {
 
     #[must_use]
     pub fn for_locale(locale: Option<&str>) -> Self {
-        locale.and_then(Self::from_locale).unwrap_or(Self::Turkish)
+        installed_language()
+            .or_else(|| locale.and_then(Self::from_locale))
+            .unwrap_or(Self::Turkish)
     }
 
     #[must_use]
@@ -79,6 +84,9 @@ pub fn reset_active_language() {
 
 #[must_use]
 pub fn active_language() -> Language {
+    if let Some(language) = installed_language() {
+        return language;
+    }
     match *ACTIVE_LANGUAGE.read().unwrap_or_else(|e| e.into_inner()) {
         Some(lang) => lang,
         None => Language::Turkish,
@@ -146,6 +154,8 @@ pub struct Text {
     pub panel_random_skin_hint: &'static str,
     pub menu_injection: &'static str,
     pub panel_injection_hint: &'static str,
+    pub menu_in_client_ui: &'static str,
+    pub panel_in_client_ui_hint: &'static str,
     pub menu_light_loading: &'static str,
     pub panel_light_loading_hint: &'static str,
     pub check_injector: &'static str,

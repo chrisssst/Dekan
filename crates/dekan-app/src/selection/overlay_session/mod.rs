@@ -59,6 +59,7 @@ pub struct OverlaySession {
     mods: ModsConfig,
 
     mod_catalog: ModCatalog,
+    global_mods_loaded: bool,
 
     historic: HistoricBook,
 
@@ -131,6 +132,7 @@ impl OverlaySession {
             library_root,
             mods,
             mod_catalog: ModCatalog::default(),
+            global_mods_loaded: false,
             historic,
             presets,
             historic_restored: None,
@@ -159,6 +161,14 @@ impl OverlaySession {
     }
 
     pub async fn run(mut self, token: CancellationToken) {
+        let mut native = super::native_client::NativeClient::default();
+        let tools_dirs: Vec<PathBuf> = self
+            .mods
+            .injection_tools
+            .iter()
+            .filter_map(|p| p.parent().map(std::path::Path::to_path_buf))
+            .collect();
+        let mut in_client_active = false;
         let mut shown = false;
         let mut catalog_key = CatalogKey::default();
         let mut catalog_champion: Option<ChampionId> = None;
@@ -228,7 +238,7 @@ impl OverlaySession {
                         self.lobby_auto.clear();
                     }
 
-                    let placement = track_once(&self.controller, wanted);
+                    let placement = track_once(&self.controller, wanted && !in_client_active);
                     let now_shown = placement.is_some();
                     if now_shown != shown {
                         shown = now_shown;
@@ -281,10 +291,22 @@ impl OverlaySession {
                         self.random_when_nothing_chosen(champion_id, built, finalization, lcu_skin);
                     }
 
+                    let enabled = dekan_platform::preferences::IN_CLIENT_UI.is_enabled();
+                    let use_native = enabled && phase != GamePhase::Reconnect;
+                    let snapshot = self.in_client_catalog_snapshot(wanted, use_native, phase, catalog.as_ref()).await;
+                    let selected = self.state_rx.borrow().overlay_target.as_ref()
+                        .filter(|t| Some(t.champion_id) == champion)
+                        .map(OverlayTarget::package_entry_id);
+                    let (commands, active) = native.sync(super::native_client::Frame { enabled, use_native, phase, tools: &tools_dirs, catalog: snapshot.as_ref(), selected }).await;
+                    in_client_active = active;
+                    for command in commands {
+                        self.dispatch_command(command, catalog_champion, catalog.as_ref());
+                    }
                 }
             }
         }
 
+        native.shutdown().await;
         self.controller.hide();
         info!("Overlay session terminated");
     }
@@ -349,6 +371,7 @@ impl OverlaySession {
 }
 
 mod choice;
+mod native;
 
 use choice::handle_command;
 pub use choice::{RandomFallback, should_roll_random};

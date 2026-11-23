@@ -39,6 +39,10 @@ Dekan reads your installed League of Legends archives (`DATA/FINAL/Champions/*.w
   <img src="assets/urgot-ingame.png" alt="Dekan In-Game Preview" width="49%">
 </p>
 
+## Native in-client mode
+
+Enable **Native in-client mode** in Options to use the League client carousel and Dekan menu. The verified helper may request administrator approval to install its client launch shim and restart the interface while idle. Dekan itself remains unelevated. If the client connection fails, use the standalone picker. Disable the mode to remove the script and its shim; removal may request administrator approval. Native mode has not yet been validated in a live match.
+
 ## Installation
 
 > **Step-by-step installation tutorial:** Download the Windows installer below. The source build instructions are included in this README.

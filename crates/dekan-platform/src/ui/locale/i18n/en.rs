@@ -55,6 +55,8 @@ pub(super) static ENGLISH: Text = Text {
     panel_random_skin_hint: "Rolls a skin automatically when none is chosen.",
     menu_injection: "Inject skins",
     panel_injection_hint: "Applies skins and mods when a match starts.",
+    menu_in_client_ui: "Native in-client mode",
+    panel_in_client_ui_hint: "Choose skins in the League client. Enabling may request administrator approval and restart the client interface. The Dekan window remains available if the connection fails.",
     menu_light_loading: "Light loading",
     panel_light_loading_hint: "Loads files on demand for faster match entry.",
     check_injector: "Injector (tools folder)",

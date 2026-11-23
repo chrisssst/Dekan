@@ -19,6 +19,9 @@ pub static AUTO_ACCEPT: Preference =
 pub static RANDOM_SKIN: Preference =
     Preference::new("random_skin.json", "random skin when none is chosen", true);
 
+pub static IN_CLIENT_UI: Preference =
+    Preference::new("in_client_ui.json", "native in-client selection", false);
+
 pub static INJECTION: Preference = Preference::new("injection.json", "skin injection", true);
 
 pub static LIGHT_LOADING: Preference =

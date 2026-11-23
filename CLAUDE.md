@@ -47,16 +47,16 @@ layout"); a new module goes into its segment's folder. Crates with invariants of
 
 Each one has broken something before, or protects users or the trust model.
 
-1. The skin is picked in Dekan's own window; nothing runs inside the client, because client plugins were fragile
-   and a trust risk.
+1. Skin selection uses Dekan's themed window by default. The opt-in native client mode (ADR-033) uses the
+   supplied verified launcher and a local CDP session; the window remains available if native mode fails.
 2. The injector is armed during champion select, before the game process exists: arming late misses the game, and
    a game process older than two seconds is never hooked (a mid-load hook crashed it).
 3. Dekan never suspends the game, opens its threads or asks for `SeDebugPrivilege` (ADR-029): it never worked
    against the anti-cheat and it is what antivirus heuristics weigh most.
-4. Dekan runs unelevated (`asInvoker`); only `--install-injector` runs elevated, re-verifies the signature and
-   copies two files into Dekan's own `tools`. Least privilege, proven in a match.
+4. Dekan runs unelevated (`asInvoker`). Injector installation and opt-in client shim installation/removal
+   elevate only their verified helper. Native mode never overwrites another client debugger registration.
 5. The LCU is the source of truth for champion, phase and owned skins, re-read right before injection. The
-   injection target comes from Dekan's own window, never from the LCU.
+   injection target comes from a validated Dekan UI command (window or native client), never an unvalidated LCU selection.
 6. No `unwrap()`/`expect()` in runtime code (tests only), and every `let _ =` on a `Result` carries
    `// ignore-ok: <reason>`, because a swallowed error hides the cause in production (`cargo xtask adr008`).
 7. No unsupervised `tokio::spawn`: every task goes through `Supervisor`, so a dead task is reported.
