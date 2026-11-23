@@ -1,10 +1,25 @@
 use super::*;
 
+const MAX_CACHED_PREVIEWS: usize = 512;
+
 pub(super) async fn next_preview(
     fetches: &mut Option<PreviewFetches>,
 ) -> Option<(u32, Result<std::sync::Arc<[u8]>, String>)> {
     match fetches {
         Some(stream) => futures_util::StreamExt::next(stream).await,
+        None => std::future::pending().await,
+    }
+}
+
+pub(super) async fn next_urgent_preview(
+    urgent: &mut Option<catalog::UrgentPreview>,
+) -> (u32, Result<std::sync::Arc<[u8]>, String>) {
+    match urgent {
+        Some(task) => {
+            let result = task.await;
+            *urgent = None;
+            result
+        }
         None => std::future::pending().await,
     }
 }
@@ -30,39 +45,48 @@ impl OverlaySession {
             self.controller.set_chroma_preview(chroma_id, image.clone());
             return;
         }
-        if self.preview_fetches.is_some() {
-            debug!(
-                chroma_id,
-                asked = self.preview_tally.asked,
-                fetched = self.preview_tally.fetched,
-                failed = self.preview_tally.failed,
-                "Chroma preview asked while previews are still being fetched; it is shown when it arrives"
-            );
-            return;
-        }
         let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
             debug!(chroma_id, "Chroma preview asked for an entry without one");
             return;
         };
-        debug!(chroma_id, path, "Chroma preview fetched again on hover");
-        self.start_preview_fetches(vec![(chroma_id, path.to_owned())]);
+        debug!(chroma_id, path, "Chroma preview urgently fetched on hover");
+        self.urgent_preview = Some(catalog::fetch_single_chroma_preview(
+            chroma_id,
+            path.to_owned(),
+        ));
     }
 
     pub(super) fn start_preview_fetches(&mut self, previews: Vec<(u32, String)>) {
-        if previews.is_empty() {
+        let mut missing = Vec::with_capacity(previews.len());
+        for (id, path) in previews {
+            if let Some(image) = self.chroma_previews.get(&id) {
+                self.controller.set_chroma_preview(id, image.clone());
+            } else {
+                missing.push((id, path));
+            }
+        }
+        if missing.is_empty() {
             return;
         }
         self.preview_tally = PreviewTally {
-            asked: previews.len(),
+            asked: missing.len(),
             started: Some(std::time::Instant::now()),
             ..PreviewTally::default()
         };
-        self.preview_fetches = Some(catalog::chroma_preview_fetches(previews));
+        self.preview_fetches = Some(catalog::chroma_preview_fetches(missing));
     }
 
     pub(super) fn deliver_chroma_preview(&mut self, chroma_id: u32, image: std::sync::Arc<[u8]>) {
-        self.preview_tally.fetched += 1;
-        self.preview_tally.bytes += image.len();
+        let first_time = !self.chroma_previews.contains_key(&chroma_id);
+        if first_time {
+            self.preview_tally.fetched += 1;
+            self.preview_tally.bytes += image.len();
+            if self.chroma_previews.len() >= MAX_CACHED_PREVIEWS {
+                if let Some(&evict) = self.chroma_previews.keys().next() {
+                    self.chroma_previews.remove(&evict);
+                }
+            }
+        }
         debug!(
             chroma_id,
             bytes = image.len(),

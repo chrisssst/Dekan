@@ -12,7 +12,7 @@ pub use animation::{
     form_state, form_trace, form_transition, form_vfx, forms, gear_toggle, vfx_markers,
 };
 pub use audio::{form_sound, sound_bank};
-pub use generation::{builder, client_data, generator};
+pub use generation::{builder, client_data, generator, loading_name, tft};
 pub use mesh::{mesh_merge, skeleton, skinned_mesh};
 
 pub mod error;

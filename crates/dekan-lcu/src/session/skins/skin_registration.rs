@@ -6,9 +6,7 @@ use tracing::{debug, info, warn};
 
 use crate::client::LcuClient;
 
-const VERIFY_ATTEMPTS: u32 = 5;
-
-const VERIFY_INTERVAL: Duration = Duration::from_millis(100);
+const VERIFY_DELAYS_MS: [u64; 5] = [25, 50, 100, 100, 100];
 
 #[must_use]
 pub fn skin_to_register(
@@ -117,8 +115,8 @@ pub async fn register_skin(client: &LcuClient, skin_id: SkinId) -> RegistrationO
 
     let mut actual = None;
     let mut read_error = None;
-    for _ in 0..VERIFY_ATTEMPTS {
-        tokio::time::sleep(VERIFY_INTERVAL).await;
+    for delay_ms in VERIFY_DELAYS_MS {
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         actual = match client.get_champ_select_session().await {
             Ok(session) => session.local_player().map(|p| p.selected_skin_id),
             Err(e) => {

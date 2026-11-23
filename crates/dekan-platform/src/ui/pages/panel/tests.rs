@@ -3,7 +3,7 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 17] = [
+const ACTIONS: [PanelAction; 21] = [
     PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
@@ -19,6 +19,9 @@ const ACTIONS: [PanelAction; 17] = [
     PanelAction::OpenRelease,
     PanelAction::MarkProblem,
     PanelAction::ExportDiagnostics,
+    PanelAction::RepairSkins,
+    PanelAction::RepairClient,
+    PanelAction::OpenProject,
     PanelAction::About,
     PanelAction::Quit,
 ];
@@ -55,6 +58,8 @@ fn snapshot() -> PanelSnapshot {
                 detail: "refused".into(),
             },
         ],
+        stats: PanelStats::default(),
+        repair: PanelRepair::default(),
     }
 }
 
@@ -92,15 +97,24 @@ fn every_language_fills_every_label() {
             ("injection", &labels.injection),
             ("random", &labels.random_skin),
             ("light", &labels.light_loading),
+            ("in client", &labels.in_client_ui),
+            ("mode title", &labels.mode_title),
+            ("mode window", &labels.mode_window),
+            ("mode client", &labels.mode_client),
             ("accept", &labels.auto_accept),
             ("autostart", &labels.autostart),
             ("create", &labels.party_create),
             ("join", &labels.party_join),
             ("leave", &labels.party_leave),
             ("about", &labels.about),
+            ("open project", &labels.open_project),
+            ("project star hint", &labels.project_star_hint),
             ("quit", &labels.quit),
             ("mark", &labels.mark_problem),
             ("export", &labels.export_diagnostics),
+            ("repair skins", &labels.repair_skins),
+            ("repair client", &labels.repair_client),
+            ("repair running", &labels.repair_running),
         ] {
             assert!(!value.is_empty(), "{language:?} {name}");
         }
@@ -205,6 +219,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
     let clicks = [
         (0, text.panel_update_download, PanelAction::OpenRelease),
         (0, text.menu_injection, PanelAction::ToggleInjection),
+        (0, text.panel_open_project, PanelAction::OpenProject),
         (1, text.menu_random_skin, PanelAction::ToggleRandomSkin),
         (1, text.menu_light_loading, PanelAction::ToggleLightLoading),
         (1, text.menu_auto_accept, PanelAction::ToggleAutoAccept),
@@ -215,6 +230,8 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
         (3, text.folder_tools, PanelAction::OpenTools),
         (3, text.folder_logs, PanelAction::OpenLogs),
         (3, text.folder_restore_mods, PanelAction::RestoreMods),
+        (3, text.panel_repair_skins, PanelAction::RepairSkins),
+        (3, text.panel_repair_client, PanelAction::RepairClient),
         (3, text.panel_mark_problem, PanelAction::MarkProblem),
         (
             3,

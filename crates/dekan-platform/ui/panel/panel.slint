@@ -1,7 +1,10 @@
+import { ThemePicker } from "options/theme_picker.slint";
 import { Theme, ExposeLayer, GoldButton, Wordmark, StatusDot, Halo } from "../theme.slint";
 import { ScrollView } from "std-widgets.slint";
-import { PanelLabels, PanelCheckRow, PanelAction } from "panel_types.slint";
-import { Section, PanelTab, CheckRow, Toggle, Notice, PowerCard } from "panel_parts.slint";
+import { PanelLabels, PanelCheckRow, PanelSkinStatRow, PanelAction } from "panel_types.slint";
+import { Section, PanelTab, CheckRow, Toggle, Notice, PowerCard, AllClearBanner } from "panel_parts.slint";
+import { RepairBanner } from "panel_mode.slint";
+import { StatsCard } from "panel_stats.slint";
 
 export component ControlPanel inherits Window {
     in property <bool> expose-flip;
@@ -17,57 +20,66 @@ export component ControlPanel inherits Window {
     in property <string> update-line;
     in property <int> attention;
     in property <[PanelCheckRow]> checks;
+    in property <int> stats-wins;
+    in property <int> stats-losses;
+    in property <int> stats-winrate;
+    in property <[PanelSkinStatRow]> stats-rows;
+    in property <bool> repair-skins-busy;
+    in property <bool> repair-client-busy;
+    in property <int> repair-state;
+    in property <string> repair-message;
     in-out property <int> tab;
     callback action(PanelAction);
     callback theme-changed(int);
     title: "Dekan";
     icon: @image-url("../assets/logo.png");
-    preferred-width: 460px;
-    preferred-height: 640px;
-    min-width: 380px;
-    min-height: 420px;
+    preferred-width: 480px;
+    preferred-height: 600px;
+    min-width: 400px;
+    min-height: 440px;
     background: Theme.backdrop;
     default-font-family: Theme.sans;
 
     VerticalLayout {
         Rectangle {
             vertical-stretch: 0;
-            min-height: 96px;
+            min-height: 92px;
             Halo {
-                x: -50px;
-                y: -54px;
+                x: -44px;
+                y: -52px;
             }
             HorizontalLayout {
                 padding-left: 22px;
                 padding-right: 22px;
-                padding-top: 22px;
-                padding-bottom: 18px;
+                padding-top: 20px;
+                padding-bottom: 16px;
                 spacing: 16px;
                 Image {
                     source: @image-url("../assets/logo-56.png");
-                    width: 56px;
-                    height: 56px;
+                    width: 52px;
+                    height: 52px;
                 }
                 VerticalLayout {
                     alignment: center;
-                    spacing: 5px;
+                    spacing: 4px;
                     Wordmark {
                         version: root.labels.version;
-                        size: 11px;
+                        size: 12px;
                     }
                     HorizontalLayout {
-                        spacing: 9px;
+                        spacing: 8px;
                         alignment: start;
                         VerticalLayout {
-                            alignment: start;
-                            padding-top: 9px;
-                            StatusDot { }
+                            alignment: center;
+                            StatusDot {
+                                online: root.injection && root.attention == 0;
+                            }
                         }
                         Text {
                             text: root.status;
                             color: Theme.gold-bright;
                             font-family: Theme.serif;
-                            font-size: 18px;
+                            font-size: 17px;
                             font-weight: 700;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
@@ -81,43 +93,48 @@ export component ControlPanel inherits Window {
             padding-left: 20px;
             padding-right: 20px;
             track := Rectangle {
-                height: 42px;
-                border-radius: 11px;
+                height: 44px;
+                border-radius: 12px;
                 border-width: 1px;
                 border-color: Theme.surface-line;
                 background: Theme.input;
                 Rectangle {
                     y: 4px;
                     height: parent.height - 8px;
-                    border-radius: 8px;
+                    border-radius: 9px;
                     border-width: 1px;
                     border-color: Theme.gold-dim;
                     background: Theme.card-fill-selected;
-                    x: root.tab == 0 ? home.x : root.tab == 1 ? options.x : root.tab == 2 ? party.x : help.x;
-                    width: root.tab == 0 ? home.width : root.tab == 1 ? options.width : root.tab == 2 ? party.width : help.width;
+                    x: root.tab == 0 ? home.x : root.tab == 1 ? skins.x : root.tab == 2 ? party.x : support.x;
+                    width: root.tab == 0 ? home.width : root.tab == 1 ? skins.width : root.tab == 2 ? party.width : support.width;
                     animate x, width { duration: 260ms; easing: ease-out-quart; }
                 }
-                tabs := HorizontalLayout {
+                HorizontalLayout {
                     padding: 4px;
                     spacing: 2px;
                     home := PanelTab {
                         text: root.labels.tab-home;
+                        icon: "M 2 7.5 L 8 2.5 L 14 7.5 M 4 6.5 L 4 13.5 L 12 13.5 L 12 6.5";
                         active: root.tab == 0;
                         clicked => { root.tab = 0; }
                     }
-                    options := PanelTab {
+                    skins := PanelTab {
                         text: root.labels.tab-options;
+                        icon: "M 8 2 L 14 5.5 L 8 9 L 2 5.5 Z M 2 9 L 8 12.5 L 14 9";
                         active: root.tab == 1;
                         clicked => { root.tab = 1; }
                     }
                     party := PanelTab {
                         text: root.labels.tab-party;
+                        icon: "M 6 7 A 2.5 2.5 0 1 1 5.99 7 Z M 11.5 7.5 A 2 2 0 1 1 11.49 7.5 Z M 2 13.5 C 2 11 3.8 9.8 6 9.8 C 8.2 9.8 10 11 10 13.5 M 10 10.5 C 12 10.5 14 11.4 14 13.5";
                         active: root.tab == 2;
                         clicked => { root.tab = 2; }
                     }
-                    help := PanelTab {
+                    support := PanelTab {
                         text: root.labels.tab-help;
+                        icon: "M 8 2 L 13.5 4.2 L 13.5 8.5 C 13.5 11.4 11.1 13.2 8 14.2 C 4.9 13.2 2.5 11.4 2.5 8.5 L 2.5 4.2 Z";
                         active: root.tab == 3;
+                        badge: root.attention;
                         clicked => { root.tab = 3; }
                     }
                 }
@@ -147,50 +164,34 @@ export component ControlPanel inherits Window {
                             action: root.labels.see-diagnostics;
                             activated => { root.tab = 3; }
                         }
-                        if root.update-line == "" && root.attention == 0: Text {
-                            text: root.labels.all-clear;
-                            color: Theme.muted;
-                            font-size: Theme.text-base;
-                            wrap: word-wrap;
-                        }
                         PowerCard {
                             label: root.labels.injection;
                             hint: root.labels.injection-hint;
                             checked: root.injection;
                             toggled => { root.action(PanelAction.toggle-injection); }
                         }
+                        StatsCard {
+                            heading: root.labels.stats-title;
+                            empty-text: root.labels.stats-empty;
+                            games-suffix: root.labels.stats-games;
+                            wins-short: root.labels.stats-wins-short;
+                            losses-short: root.labels.stats-losses-short;
+                            wins: root.stats-wins;
+                            losses: root.stats-losses;
+                            winrate: root.stats-winrate;
+                            rows: root.stats-rows;
+                        }
+                        if root.update-line == "" && root.attention == 0: AllClearBanner {
+                            text: root.labels.all-clear;
+                        }
                     }
                     if root.tab == 1: Section {
-                        VerticalLayout {
-                            spacing: 7px;
-                            Text {
-                                text: root.labels.theme;
-                                color: Theme.text;
-                                font-size: Theme.text-base;
-                                font-weight: 600;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                GoldButton {
-                                    text: root.labels.theme-classic;
-                                    primary: Theme.mode == 0;
-                                    clicked => { root.theme-changed(0); }
-                                }
-                                GoldButton {
-                                    text: root.labels.theme-crimson;
-                                    primary: Theme.mode == 1;
-                                    clicked => { root.theme-changed(1); }
-                                }
-                                GoldButton {
-                                    text: root.labels.theme-obsidian;
-                                    primary: Theme.mode == 2;
-                                    clicked => { root.theme-changed(2); }
-                                }
-                            }
-                            Rectangle {
-                                height: 1px;
-                                background: Theme.surface-line;
-                            }
+                        ThemePicker {
+                            label: root.labels.theme;
+                            classic-label: root.labels.theme-classic;
+                            crimson-label: root.labels.theme-crimson;
+                            obsidian-label: root.labels.theme-obsidian;
+                            changed(mode) => { root.theme-changed(mode); }
                         }
                         Toggle {
                             divider: false;
@@ -217,23 +218,39 @@ export component ControlPanel inherits Window {
                         }
                     }
                     if root.tab == 2: Section {
-                        Text {
-                            text: root.party-line != "" ? root.party-line : root.labels.party-hint;
-                            color: root.party-line != "" ? Theme.gold-bright : Theme.muted;
-                            font-size: Theme.text-base;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                StatusDot {
+                                    online: root.in-room;
+                                }
+                            }
+                            Text {
+                                text: root.party-line != "" ? root.party-line : root.labels.party-hint;
+                                color: root.party-line != "" ? Theme.gold-bright : Theme.muted;
+                                font-size: Theme.text-base;
+                                font-weight: root.party-line != "" ? 600 : 400;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        if root.party-line != "": Text {
+                            text: root.labels.party-hint;
+                            color: Theme.muted;
+                            font-size: Theme.text-sm;
                             wrap: word-wrap;
                         }
                         if !root.in-room: HorizontalLayout {
                             spacing: 8px;
                             GoldButton {
                                 text: root.labels.party-create;
-                                hug: true;
                                 primary: true;
                                 clicked => { root.action(PanelAction.party-create); }
                             }
                             GoldButton {
                                 text: root.labels.party-join;
-                                hug: true;
                                 clicked => { root.action(PanelAction.party-join); }
                             }
                         }
@@ -248,7 +265,7 @@ export component ControlPanel inherits Window {
                         Section {
                             heading: root.labels.section-diagnostics;
                             VerticalLayout {
-                                spacing: 10px;
+                                spacing: 8px;
                                 for check in root.checks: CheckRow {
                                     check: check;
                                 }
@@ -266,11 +283,29 @@ export component ControlPanel inherits Window {
                             HorizontalLayout {
                                 spacing: 8px;
                                 GoldButton {
+                                    text: root.repair-skins-busy ? root.labels.repair-running : root.labels.repair-skins;
+                                    enabled: !root.repair-skins-busy;
+                                    clicked => { root.action(PanelAction.repair-skins); }
+                                }
+                                GoldButton {
+                                    text: root.repair-client-busy ? root.labels.repair-running : root.labels.repair-client;
+                                    enabled: !root.repair-client-busy;
+                                    clicked => { root.action(PanelAction.repair-client); }
+                                }
+                            }
+                            if root.repair-message != "": RepairBanner {
+                                state: root.repair-state;
+                                text: root.repair-message;
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                GoldButton {
                                     text: root.labels.mark-problem;
                                     clicked => { root.action(PanelAction.mark-problem); }
                                 }
                                 GoldButton {
                                     text: root.labels.export-diagnostics;
+                                    primary: true;
                                     clicked => { root.action(PanelAction.export-diagnostics); }
                                 }
                             }
@@ -326,6 +361,12 @@ export component ControlPanel inherits Window {
                 hug: true;
                 horizontal-stretch: 0;
                 clicked => { root.action(PanelAction.about); }
+            }
+            GoldButton {
+                text: root.labels.open-project;
+                hug: true;
+                horizontal-stretch: 0;
+                clicked => { root.action(PanelAction.open-project); }
             }
             Rectangle {
                 horizontal-stretch: 1;

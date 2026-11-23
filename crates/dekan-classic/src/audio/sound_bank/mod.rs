@@ -33,7 +33,7 @@ fn corrupt(what: String) -> ClassicError {
     ClassicError::Audio(what)
 }
 
-pub fn parse(bytes: &[u8]) -> Result<SoundBank, ClassicError> {
+pub fn parse_with_objects(bytes: &[u8]) -> Result<(SoundBank, Vec<Object>), ClassicError> {
     let r = Reader::new(bytes, corrupt);
     if r.take::<4>(0)? != *HEADER {
         return Err(r.fail("not a Wwise sound bank"));
@@ -49,8 +49,12 @@ pub fn parse(bytes: &[u8]) -> Result<SoundBank, ClassicError> {
         at += 8 + size;
     }
     let bank = SoundBank { sections };
-    bank.objects()?;
-    Ok(bank)
+    let objects = bank.objects()?;
+    Ok((bank, objects))
+}
+
+pub fn parse(bytes: &[u8]) -> Result<SoundBank, ClassicError> {
+    Ok(parse_with_objects(bytes)?.0)
 }
 
 impl SoundBank {

@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "League of Legends skin changer for Windows"
+description = "Dekan — League of Legends skin changer, chroma selector, TFT cosmetic unlocker, and custom mod manager (.fantome / .modpkg) for Windows"
 
 [lib]
 name = "dekan_app"

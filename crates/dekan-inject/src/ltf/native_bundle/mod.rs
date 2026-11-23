@@ -7,8 +7,8 @@ pub const BRIDGE: &str = "dekan_bridge.dll";
 pub const COMPAT_BRIDGE: &str = "bullet_bridge.dll";
 pub const SHIPPED_TOOLS: [&str; 3] = [LAUNCHER, BRIDGE, COMPAT_BRIDGE];
 
-const LAUNCHER_HASH: &str = "23c941d2df0041e0a8bfb7d2fb0f4504ad215fc5a8d5ec64fd95a067ac9966f5";
-const BRIDGE_HASH: &str = "2556c5e8c5d834eab710b77fb8e61844ef5665f593f71b7bd311af9f9a20d7c2";
+const LAUNCHER_HASH: &str = "7cfd70afaeeaa00cb2a0b6f900cf9c916b2b14a8ed047615b6687c7129fdf994";
+const BRIDGE_HASH: &str = "73c81ad10b5e5a7d4fb8503c6436cf45d7b0af3fd09932a96ef4e22f11f89a9c";
 
 pub fn source_name(name: &str) -> Option<&'static str> {
     match name {
@@ -30,7 +30,7 @@ pub fn verify_bytes(name: &str, bytes: &[u8]) -> Result<(), String> {
         .collect();
     if actual != expected {
         return Err(format!(
-            "Dekan native component {name} does not match this release; reinstall Dekan 2.2"
+            "Dekan native component {name} does not match this release; reinstall Dekan 2.3"
         ));
     }
     Ok(())

@@ -94,6 +94,7 @@ pub fn build_classic_catalog(
         quote: None,
         mods: ModsPanel::default(),
         notice: None,
+        party: Default::default(),
     };
     (catalog, dropped)
 }

@@ -7,15 +7,38 @@ use tracing::warn;
 
 pub const GAME_PATCH_FILE: &str = "game_patch.json";
 
+#[cfg(not(target_os = "macos"))]
 pub const GAME_EXES: [&str; 2] = ["League of Legends.exe", "League of Legends (TM) Client.exe"];
 
+#[cfg(target_os = "macos")]
+pub const GAME_EXES: [&str; 3] = [
+    "LeagueofLegends",
+    "League of Legends.exe",
+    "League of Legends (TM) Client.exe",
+];
+
+#[cfg(not(target_os = "macos"))]
 pub const CLIENT_EXES: [&str; 2] = ["LeagueClientUx.exe", "LeagueClient.exe"];
+
+#[cfg(target_os = "macos")]
+pub const CLIENT_EXES: [&str; 4] = [
+    "LeagueClientUx",
+    "LeagueClient",
+    "LeagueClientUx.exe",
+    "LeagueClient.exe",
+];
+
+const MACOS_BUNDLE_GAME_EXE: &str = "LeagueofLegends.app/Contents/MacOS/LeagueofLegends";
 
 #[must_use]
 pub fn game_exe(game_dir: &Path) -> PathBuf {
     GAME_EXES
         .iter()
         .map(|name| game_dir.join(name))
+        .chain([
+            game_dir.join(MACOS_BUNDLE_GAME_EXE),
+            game_dir.join("LeagueofLegends"),
+        ])
         .find(|path| path.is_file())
         .unwrap_or_else(|| game_dir.join(GAME_EXES[0]))
 }
@@ -72,7 +95,47 @@ pub fn read_time_date_stamp(path: &Path) -> Result<u32, GameVersionError> {
         context: format!("could not open {}", path.display()),
         source: e,
     })?;
-    time_date_stamp_from(&mut file)
+    match time_date_stamp_from(&mut file) {
+        Ok(stamp) => Ok(stamp),
+        Err(GameVersionError::BadDosSignature) => {
+            if let Some(stamp) = macho_stamp_from(&mut file) {
+                Ok(stamp)
+            } else {
+                Err(GameVersionError::BadDosSignature)
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn macho_stamp_from<R: Read + Seek>(reader: &mut R) -> Option<u32> {
+    reader.seek(SeekFrom::Start(0)).ok()?;
+    let mut buf = [0u8; 4096];
+    let mut read = 0usize;
+    while read < buf.len() {
+        match reader.read(&mut buf[read..]) {
+            Ok(0) => break,
+            Ok(n) => read += n,
+            Err(_) => return None,
+        }
+    }
+    if read < 32 {
+        return None;
+    }
+    let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
+    let is_macho = matches!(
+        magic,
+        0xFEED_FACF | 0xCFFA_EDFE | 0xFEED_FACE | 0xCEFA_EDFE | 0xCAFE_BABE | 0xBEBA_FECA
+    );
+    if !is_macho {
+        return None;
+    }
+    let mut hash: u32 = 0x811C_9DC5;
+    for &b in &buf[..read] {
+        hash ^= u32::from(b);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    Some(if hash == 0 { 1 } else { hash })
 }
 
 pub fn time_date_stamp_from<R: Read + Seek>(reader: &mut R) -> Result<u32, GameVersionError> {

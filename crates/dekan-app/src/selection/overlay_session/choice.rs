@@ -72,7 +72,10 @@ pub(super) fn handle_command(
         }
 
         OverlayCommand::SetMods { .. }
+        | OverlayCommand::SetIdentity { .. }
+        | OverlayCommand::JoinLobbyParty
         | OverlayCommand::OpenModsFolder
+        | OverlayCommand::OpenPanel
         | OverlayCommand::ImportMod { .. }
         | OverlayCommand::ChromaPreview { .. }
         | OverlayCommand::FocusChampion { .. }

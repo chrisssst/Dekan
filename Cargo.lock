@@ -1010,7 +1010,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
 name = "dekan-app"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "dekan-classic",
@@ -1040,7 +1040,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-classic"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dekan-core",
  "dekan-wad",
@@ -1052,7 +1052,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-core"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "futures-util",
  "serde",
@@ -1066,12 +1066,13 @@ dependencies = [
 
 [[package]]
 name = "dekan-inject"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "base64 0.23.1",
  "dekan-core",
  "dekan-platform",
  "dekan-wad",
+ "libc",
  "serde",
  "serde_json",
  "sha2",
@@ -1085,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-lcu"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "base64 0.23.1",
  "dekan-core",
@@ -1105,7 +1106,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-party"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "base64 0.23.1",
  "chacha20poly1305",
@@ -1125,7 +1126,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-platform"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dekan-core",
  "i-slint-backend-testing",
@@ -1145,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-relay"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dekan-core",
  "dekan-party",
@@ -1163,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "dekan-wad"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "flate2",
  "memmap2",
@@ -6515,7 +6516,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dekan-app",
  "dekan-classic",

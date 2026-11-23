@@ -4,7 +4,7 @@ mod build;
 mod injector;
 
 pub use build::{mod_compat, overlay, overlay_builder, overlay_cache};
-pub use injector::{dll_validator, overlay_process, trust};
+pub use injector::{dll_validator, macos_patcher, overlay_process, trust};
 
 pub mod error;
 pub mod ltf;

@@ -158,3 +158,28 @@ fn test_skins_without_forms_or_skin_object_are_left_alone() {
             .is_none()
     );
 }
+
+#[test]
+fn default_visible_part_shown_by_another_form_stays_visible_in_form_0() {
+    let raw = vec![
+        GearSwap {
+            show: vec![h("Form1"), h("Weapon1")],
+            hide: vec![h("Form2"), h("Weapon2")],
+            equip: None,
+            transition: None,
+        },
+        GearSwap {
+            show: vec![h("Form2"), h("Weapon2"), h("Persistent")],
+            hide: vec![h("Form1"), h("Weapon1")],
+            equip: None,
+            transition: None,
+        },
+    ];
+    let initially_hidden: BTreeSet<u32> = [h("Form2"), h("Weapon2")].into_iter().collect();
+    let normalized = keep_default_visible(&raw, &initially_hidden);
+    let parts = form_parts(&normalized);
+    assert!(parts[0].0.contains(&h("Persistent")));
+    assert!(!parts[0].1.contains(&h("Persistent")));
+    assert!(parts[1].0.contains(&h("Persistent")));
+    assert!(!parts[1].1.contains(&h("Persistent")));
+}

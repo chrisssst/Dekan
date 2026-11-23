@@ -1,0 +1,38 @@
+import { Theme, GoldButton } from "../../theme.slint";
+
+export component ThemePicker inherits VerticalLayout {
+    in property <string> label;
+    in property <string> classic-label;
+    in property <string> crimson-label;
+    in property <string> obsidian-label;
+    callback changed(int);
+    spacing: 7px;
+    Text {
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.text-base;
+        font-weight: 600;
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        GoldButton {
+            text: root.classic-label;
+            primary: Theme.mode == 0;
+            clicked => { root.changed(0); }
+        }
+        GoldButton {
+            text: root.crimson-label;
+            primary: Theme.mode == 1;
+            clicked => { root.changed(1); }
+        }
+        GoldButton {
+            text: root.obsidian-label;
+            primary: Theme.mode == 2;
+            clicked => { root.changed(2); }
+        }
+    }
+    Rectangle {
+        height: 1px;
+        background: Theme.surface-line;
+    }
+}

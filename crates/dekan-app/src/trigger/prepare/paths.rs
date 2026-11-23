@@ -112,22 +112,39 @@ pub enum ToolsSource {
 }
 
 pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
-    let complete = |dir: &PathBuf| {
-        (dir.join(LTF_LAUNCHER_EXE).is_file() && dir.join(LTF_BRIDGE_DLL).is_file())
-            || (dir.join("dekan-br.exe").is_file() && dir.join("dekan-br.dll").is_file())
-    };
-    if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
-        info!(tools = %dir.display(), "Injection tools found");
-        return (dir.clone(), ToolsSource::Own);
+    #[cfg(target_os = "macos")]
+    {
+        let dir = candidates.first().cloned().unwrap_or_default();
+        info!(tools = %dir.display(), "Built-in macOS Mach-O engine active");
+        return (dir, ToolsSource::Own);
     }
-    (
-        candidates.first().cloned().unwrap_or_default(),
-        ToolsSource::Missing,
-    )
+    #[cfg(not(target_os = "macos"))]
+    {
+        let complete = |dir: &PathBuf| {
+            (dir.join(LTF_LAUNCHER_EXE).is_file() && dir.join(LTF_BRIDGE_DLL).is_file())
+                || (dir.join("dekan-br.exe").is_file() && dir.join("dekan-br.dll").is_file())
+        };
+        if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
+            info!(tools = %dir.display(), "Injection tools found");
+            return (dir.clone(), ToolsSource::Own);
+        }
+        (
+            candidates.first().cloned().unwrap_or_default(),
+            ToolsSource::Missing,
+        )
+    }
 }
 
+#[cfg_attr(target_os = "macos", allow(unused_variables))]
 pub fn required_tool_files(paths: &ResolvedPaths) -> Vec<PathBuf> {
-    vec![paths.native_host_exe.clone(), paths.native_dll_path.clone()]
+    #[cfg(target_os = "macos")]
+    {
+        Vec::new()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        vec![paths.native_host_exe.clone(), paths.native_dll_path.clone()]
+    }
 }
 
 pub fn tools_ready(paths: &ResolvedPaths) -> bool {

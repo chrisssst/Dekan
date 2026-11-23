@@ -16,6 +16,7 @@ pub struct GameEvent {
     pub time: f64,
     pub killer: Option<String>,
     pub victim: Option<String>,
+    pub result: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +82,7 @@ pub fn parse_all_game_data(json: &Value) -> Option<AllGameData> {
                     time: e.get("EventTime").and_then(Value::as_f64).unwrap_or(0.0),
                     killer: as_champion(e.get("KillerName").and_then(Value::as_str)),
                     victim: as_champion(e.get("VictimName").and_then(Value::as_str)),
+                    result: e.get("Result").and_then(Value::as_str).map(str::to_owned),
                 })
                 .collect()
         })

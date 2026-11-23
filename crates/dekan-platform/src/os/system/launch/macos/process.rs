@@ -30,6 +30,29 @@ impl Drop for BackgroundThread {
     }
 }
 
+pub fn query_process_cmdline(pid: u32) -> Option<String> {
+    let output = std::process::Command::new("/bin/ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let cmd = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    (!cmd.is_empty()).then_some(cmd)
+}
+
+#[must_use]
+pub fn terminate_process(pid: u32) -> bool {
+    let Ok(raw_pid) = libc::c_int::try_from(pid) else {
+        return false;
+    };
+    if raw_pid <= 0 {
+        return false;
+    }
+    unsafe { libc::kill(raw_pid, libc::SIGTERM) == 0 }
+}
+
 pub struct ProcessFinder;
 
 impl ProcessFinder {

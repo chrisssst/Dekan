@@ -145,6 +145,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
         notice: None,
         classic: false,
         lobby: Vec::new(),
+        party: Default::default(),
     }
 }
 
@@ -388,7 +389,9 @@ mod preview;
 
 pub use classic::{build_classic_catalog, load_classic_catalog};
 use preview::PREVIEW_FETCHES;
-pub use preview::{PreviewFetches, chroma_preview_fetches};
+pub use preview::{
+    PreviewFetches, UrgentPreview, chroma_preview_fetches, fetch_single_chroma_preview,
+};
 
 #[cfg(test)]
 mod tests;

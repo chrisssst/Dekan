@@ -13,6 +13,7 @@ use crate::update_check::{REPOSITORY, Version};
 
 const SUMS_FILE: &str = "SHA256SUMS";
 pub const SIGNATURE_FILE: &str = "SHA256SUMS.sig";
+#[cfg(windows)]
 const FILE_SHARE_READ: u32 = 1;
 
 pub const SILENT_INSTALL: [&str; 6] = [
@@ -152,12 +153,16 @@ pub fn can_install(phase: GamePhase) -> bool {
 
 pub fn open_verified(setup: &StagedSetup) -> Result<std::fs::File, String> {
     use std::io::Read;
-    use std::os::windows::fs::OpenOptionsExt;
 
     let path = &setup.path;
-    let mut file = std::fs::OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        opts.share_mode(FILE_SHARE_READ);
+    }
+    let mut file = opts
         .open(path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut hasher = Sha256::new();

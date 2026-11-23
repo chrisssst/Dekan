@@ -1,9 +1,9 @@
+use chacha20poly1305::aead::Generate;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use chacha20poly1305::aead::Generate;
 use dekan_core::party::PartyStatus;
-use dekan_core::state::{AppState, StateReceiver, StateSender, set_party_peers, set_party_status};
+use dekan_core::state::{StateReceiver, StateSender, set_party_peers, set_party_status};
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -13,7 +13,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::crypto::{RoomCipher, room_id};
 use crate::error::PartyError;
-use crate::protocol::{Announcement, ClientMessage, RelayMessage, open_member};
+use crate::protocol::{
+    Announcement, ClientMessage, RelayMessage, announcement_from_state, open_member,
+};
 use crate::token::PartyToken;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -198,7 +200,7 @@ impl PartyClient {
         let mut warned_unreadable = false;
 
         loop {
-            let current = announcement(&state_rx.borrow_and_update(), self.member_id);
+            let current = announcement_from_state(&state_rx.borrow_and_update(), self.member_id);
             if announced.as_ref() != Some(&current) {
                 let skin = match &current {
                     Some(a) => Some(a.seal(cipher)?),
@@ -354,29 +356,6 @@ impl PartyClient {
         set_party_peers(&self.state_tx, peers);
         Ok(())
     }
-}
-
-fn announcement(state: &AppState, member_id: u64) -> Option<Announcement> {
-    if !state.party_share || !(state.phase.is_champ_select() || state.phase.is_in_game()) {
-        return None;
-    }
-    let champion_id = state.champion_id?;
-    let target = state
-        .overlay_target
-        .as_ref()
-        .filter(|t| t.matches_champion(champion_id))?;
-    let puuid = state.local_puuid.clone()?;
-    let announcement = Announcement {
-        member_id,
-        puuid,
-        champion_id,
-        skin_id: target.skin_id,
-        chroma_id: target.chroma_id,
-    };
-    if target.package_entry_id() == champion_id * 1000 || announcement.validate().is_err() {
-        return None;
-    }
-    Some(announcement)
 }
 
 async fn deliver<S>(write: &mut S, message: Message, within: Duration) -> Result<(), PartyError>

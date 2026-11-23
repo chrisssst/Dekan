@@ -9,13 +9,28 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 const LOG_FILES_KEPT: usize = 7;
 
 const DEFAULT_FILTER: &str = "info";
+const NOISY_HTTP_CRATES: &str =
+    "hyper_util=warn,hyper=warn,reqwest=warn,rustls=warn,h2=warn,tungstenite=warn,mio=warn";
+
+fn normalize_filter_spec(value: &str) -> String {
+    let trimmed = value.trim();
+    if !trimmed.contains(',')
+        && !trimmed.contains('=')
+        && (trimmed.eq_ignore_ascii_case("debug") || trimmed.eq_ignore_ascii_case("trace"))
+    {
+        format!("{trimmed},{NOISY_HTTP_CRATES}")
+    } else {
+        trimmed.to_owned()
+    }
+}
 
 fn env_filter(rejected: &mut Vec<String>) -> EnvFilter {
     for var in [dekan_core::env::LOG, "RUST_LOG"] {
         if let Ok(value) = std::env::var(var) {
             let value = value.trim();
             if !value.is_empty() {
-                match EnvFilter::try_new(value) {
+                let spec = normalize_filter_spec(value);
+                match EnvFilter::try_new(&spec) {
                     Ok(filter) => return filter,
                     Err(e) => {
                         rejected.push(format!("{var}='{value}': {e}"));
@@ -130,7 +145,15 @@ mod tests {
         assert_eq!(env_filter(&mut Vec::new()).to_string(), DEFAULT_FILTER);
 
         unsafe { std::env::set_var("DEKAN_LOG", "debug") };
-        assert_eq!(env_filter(&mut Vec::new()).to_string(), "debug");
+        let rendered = env_filter(&mut Vec::new()).to_string();
+        assert!(rendered.contains("debug"));
+        assert!(rendered.contains("hyper_util=warn"));
+        assert!(rendered.contains("reqwest=warn"));
+
+        unsafe { std::env::set_var("DEKAN_LOG", "dekan_app=trace,hyper_util=debug") };
+        let explicit = env_filter(&mut Vec::new()).to_string();
+        assert!(explicit.contains("dekan_app=trace"));
+        assert!(explicit.contains("hyper_util=debug"));
 
         unsafe { std::env::set_var("DEKAN_LOG", "=,,,=") };
         assert_eq!(env_filter(&mut Vec::new()).to_string(), DEFAULT_FILTER);

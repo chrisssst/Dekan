@@ -86,11 +86,15 @@ pub struct OverlaySession {
 
     preview_fetches: Option<PreviewFetches>,
 
+    urgent_preview: Option<catalog::UrgentPreview>,
+
     preview_tally: PreviewTally,
 
     pending_import: Option<PendingImport>,
 
     warm_turn: std::sync::Arc<std::sync::atomic::AtomicU64>,
+
+    panel_links: Option<dekan_platform::panel::PanelLinks>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +120,9 @@ impl OverlaySession {
     ) -> Self {
         let historic = historic_store::load(&mods.state_dir);
         let presets = preset_store::load(&mods.state_dir);
+        if let Some(identity) = mods::load_identity(&mods.state_dir) {
+            dekan_core::state::set_local_identity(&state_tx, Some(identity));
+        }
         Self {
             controller,
             commands,
@@ -137,10 +144,18 @@ impl OverlaySession {
             random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
             preview_fetches: None,
+            urgent_preview: None,
             preview_tally: PreviewTally::default(),
             pending_import: None,
             warm_turn: std::sync::Arc::default(),
+            panel_links: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_panel_links(mut self, links: Option<dekan_platform::panel::PanelLinks>) -> Self {
+        self.panel_links = links;
+        self
     }
 
     pub async fn run(mut self, token: CancellationToken) {
@@ -155,48 +170,7 @@ impl OverlaySession {
                 _ = token.cancelled() => break,
                 command = self.commands.recv() => {
                     match command {
-                        Some(OverlayCommand::SetMods { selection }) => {
-                            self.apply_mod_request(&selection, catalog_champion);
-                        }
-                        Some(OverlayCommand::OpenModsFolder) => self.open_mods_folder(),
-                        Some(OverlayCommand::Clear) => {
-                            self.dismiss_historic();
-                            self.random_declined = catalog_champion;
-                            handle_command(&self.state_tx, OverlayCommand::Clear, catalog.as_ref());
-                        }
-                        Some(OverlayCommand::Random) => self.roll_random(catalog.as_ref()),
-                        Some(OverlayCommand::ChromaPreview { id }) => {
-                            self.send_chroma_preview(id, catalog.as_ref());
-                        }
-                        Some(OverlayCommand::TogglePreset) => self.toggle_preset(catalog_champion),
-                        Some(OverlayCommand::SetProfile { name }) => {
-                            if self.presets.switch_to(&name) {
-                                info!(profile = %name, "Skin profile switched");
-                                self.profile_changed(catalog_champion);
-                            }
-                        }
-                        Some(OverlayCommand::NewProfile) => {
-                            let locale = catalog.as_ref().and_then(|c| c.locale.clone());
-                            self.new_profile(locale.as_deref(), catalog_champion);
-                        }
-                        Some(OverlayCommand::DeleteProfile) => {
-                            if let Some(name) = self.presets.delete_active() {
-                                info!(profile = %name, "Skin profile deleted; the default profile is active");
-                                self.profile_changed(catalog_champion);
-                            }
-                        }
-                        Some(OverlayCommand::FocusChampion { id }) => {
-                            if focus_lobby_champion(&self.state_tx, id) {
-                                info!(champion_id = id, "Lobby champion shown in the overlay");
-                            }
-                        }
-                        Some(OverlayCommand::ImportMod { category }) => {
-                            let locale = catalog.as_ref().and_then(|c| c.locale.clone());
-                            let alias = catalog.as_ref().and_then(|c| c.alias.clone());
-                            self.start_import(category, catalog_champion, alias, locale.as_deref());
-                        }
-                        Some(command) => handle_command(&self.state_tx, command, catalog.as_ref()),
-
+                        Some(cmd) => self.dispatch_command(cmd, catalog_champion, catalog.as_ref()),
                         None => {
                             warn!("Overlay command channel closed; the selection UI is gone");
                             break;
@@ -213,8 +187,12 @@ impl OverlaySession {
                     Some((id, Err(reason))) => self.count_failed_preview(id, reason),
                     None => self.finish_preview_fetches(),
                 },
+                (id, outcome) = next_urgent_preview(&mut self.urgent_preview) => match outcome {
+                    Ok(image) => self.deliver_chroma_preview(id, image),
+                    Err(reason) => debug!(chroma_id = id, reason, "Urgent chroma preview on hover not fetched"),
+                },
                 () = tokio::time::sleep(TRACK_INTERVAL) => {
-                    let (wanted, finalization, champion, target_stale, target, lcu_skin, confirmed, lobby) = {
+                    let (wanted, finalization, mut champion, target_stale, target, lcu_skin, confirmed, lobby, phase) = {
                         let state = self.state_rx.borrow_and_update();
                         (
                             wanted_for_state(&state),
@@ -225,8 +203,12 @@ impl OverlaySession {
                             state.selected_skin_id,
                             state.injection == InjectionStatus::Confirmed,
                             state.lobby.as_ref().map(dekan_core::lobby::LobbyPicks::champions),
+                            state.phase,
                         )
                     };
+                    if phase == GamePhase::Reconnect && champion.is_none() {
+                        champion = self.recover_reconnect_champion().await;
+                    }
                     let party = {
                         let state = self.state_rx.borrow();
                         dekan_core::party::party_summary(
@@ -268,12 +250,10 @@ impl OverlaySession {
                     };
                     if key != catalog_key {
                         catalog_key = key.clone();
-                        if champion != catalog_champion {
-                            self.chroma_previews.clear();
-                        }
                         catalog_champion = champion;
                         catalog = self.refresh_catalog(champion, key.lobby.as_deref()).await;
                         self.preview_fetches = None;
+                        self.urgent_preview = None;
                         if let Some(built) = catalog.as_ref() {
                             self.start_preview_fetches(built.chroma_preview_paths());
                         }
@@ -300,6 +280,7 @@ impl OverlaySession {
                         self.track_historic(champion_id, built, target.as_ref(), lcu_skin);
                         self.random_when_nothing_chosen(champion_id, built, finalization, lcu_skin);
                     }
+
                 }
             }
         }
@@ -340,17 +321,11 @@ impl OverlaySession {
         if !self.mods.injection_tools.iter().all(|file| file.is_file()) {
             built.notice = Some(catalog::CatalogNotice::ToolsMissing);
         }
-        let chromas = built
-            .skins
-            .iter()
-            .map(|skin| skin.chromas.len())
-            .sum::<usize>();
+        let chromas: usize = built.skins.iter().map(|s| s.chromas.len()).sum();
         let without_preview: Vec<u32> = built
             .skins
             .iter()
-            .flat_map(|skin| skin.chromas.iter())
-            .filter(|chroma| !chroma.has_preview)
-            .map(|chroma| chroma.id)
+            .flat_map(|s| s.chromas.iter().filter(|c| !c.has_preview).map(|c| c.id))
             .collect();
         info!(
             champion_id,
@@ -378,7 +353,7 @@ mod choice;
 use choice::handle_command;
 pub use choice::{RandomFallback, should_roll_random};
 use import::{PendingImport, next_import};
-use preview::{PreviewTally, next_preview};
+use preview::{PreviewTally, next_preview, next_urgent_preview};
 mod import;
 mod mods;
 mod preview;

@@ -49,6 +49,7 @@ pub fn tray_status(
 pub struct ReleaseNotices {
     pub dekan: dekan_app::update_check::UpdateNotice,
     pub custom_mods: dekan_app::mod_repair::CustomModsNotice,
+    pub repair: dekan_app::control_panel::RepairState,
 }
 
 pub fn panel_links_for(
@@ -71,6 +72,24 @@ pub fn panel_links_for(
                 false
             }
         };
+        let manager = match dekan_inject::ltf::check_manager_install() {
+            dekan_inject::ltf::ManagerInstallState::Ready { version, .. } => {
+                dekan_app::control_panel::ManagerStatus::Ready {
+                    version: version.map(dekan_platform::version::format_version),
+                }
+            }
+            dekan_inject::ltf::ManagerInstallState::Outdated { found, .. } => {
+                dekan_app::control_panel::ManagerStatus::Outdated {
+                    found: dekan_platform::version::format_version(found),
+                    required: dekan_platform::version::format_version(
+                        dekan_inject::ltf::MIN_MANAGER_VERSION,
+                    ),
+                }
+            }
+            dekan_inject::ltf::ManagerInstallState::Missing => {
+                dekan_app::control_panel::ManagerStatus::Missing
+            }
+        };
         let facts = dekan_app::control_panel::Facts {
             status: controller.status(),
             party_line,
@@ -81,11 +100,17 @@ pub fn panel_links_for(
             light_loading: dekan_platform::preferences::LIGHT_LOADING.is_enabled(),
             autostart,
             tools_present: dekan_app::control_panel::tools_present(&tools),
+            manager,
             game_found: dekan_app::control_panel::game_found(&game_dir),
             lcu_connected,
             elevated,
             update: notices.dekan.available().map(|latest| latest.to_string()),
             custom_mods: notices.custom_mods.summary(),
+            stats: dekan_platform::paths::state_dir()
+                .ok()
+                .map(|dir| dekan_app::stats::load_summary(&dir))
+                .unwrap_or_default(),
+            repair: notices.repair.snapshot(),
         };
         let snapshot = dekan_app::control_panel::snapshot(&facts, dekan_platform::i18n::text());
         let failing: Vec<String> = snapshot
@@ -125,6 +150,8 @@ pub struct TrayActions {
     pub links: dekan_platform::panel::PanelLinks,
     pub mark_state: dekan_core::state::StateReceiver,
     pub mark_live: dekan_app::live_game::LiveGame,
+    pub custom_mods: dekan_app::mod_repair::CustomModsNotice,
+    pub repair: dekan_app::control_panel::RepairState,
 }
 
 impl TrayActions {
@@ -266,10 +293,32 @@ impl TrayActions {
                     ),
                 }
             }
+            dekan_platform::tray::TrayEvent::RepairSkins => {
+                super::repair::spawn_repair_skins(
+                    self.repair.clone(),
+                    self.custom_mods.clone(),
+                    self.mod_roots.clone(),
+                    self.state_dir.clone(),
+                    self.notifier.clone(),
+                );
+            }
+            dekan_platform::tray::TrayEvent::RepairClient => {
+                super::repair::spawn_repair_client(
+                    self.repair.clone(),
+                    self.state_dir.clone(),
+                    self.notifier.clone(),
+                );
+            }
             dekan_platform::tray::TrayEvent::OpenRelease => {
                 let page = dekan_app::update_check::release_page();
                 if let Err(e) = dekan_platform::shell::open_web_page(&page) {
                     warn!(error = %e, page = %page, "Could not open the release page");
+                }
+            }
+            dekan_platform::tray::TrayEvent::OpenProject => {
+                let page = dekan_platform::star_gate::REPOSITORY_URL;
+                if let Err(e) = dekan_platform::shell::open_web_page(page) {
+                    warn!(error = %e, page = %page, "Could not open the GitHub repository page");
                 }
             }
             dekan_platform::tray::TrayEvent::ToggleAutostart => {

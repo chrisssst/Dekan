@@ -20,6 +20,11 @@ export struct PanelLabels {
     random-skin-hint: string,
     light-loading: string,
     light-loading-hint: string,
+    in-client-ui: string,
+    in-client-ui-hint: string,
+    mode-title: string,
+    mode-window: string,
+    mode-client: string,
     auto-accept: string,
     autostart: string,
     party-create: string,
@@ -30,11 +35,27 @@ export struct PanelLabels {
     open-tools: string,
     open-logs: string,
     about: string,
+    open-project: string,
+    project-star-hint: string,
     quit: string,
     update-download: string,
     mark-problem: string,
     mark-problem-hint: string,
     export-diagnostics: string,
+    repair-skins: string,
+    repair-client: string,
+    repair-running: string,
+    stats-title: string,
+    stats-empty: string,
+    stats-games: string,
+    stats-wins-short: string,
+    stats-losses-short: string,
+}
+
+export struct PanelSkinStatRow {
+    name: string,
+    record: string,
+    winrate: int,
 }
 
 export struct PanelCheckRow {
@@ -59,6 +80,9 @@ export enum PanelAction {
     open-release,
     mark-problem,
     export-diagnostics,
+    repair-skins,
+    repair-client,
+    open-project,
     about,
     quit,
 }

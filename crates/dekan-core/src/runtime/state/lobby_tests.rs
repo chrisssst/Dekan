@@ -203,6 +203,7 @@ fn stopping_to_share_drops_the_friends_picks() {
             champion_id: 1,
             skin_id: 1_004,
             chroma_id: None,
+            identity: None,
         }],
     );
     assert_eq!(rx.borrow().party_peers.len(), 1);

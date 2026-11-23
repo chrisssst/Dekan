@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::identity::IdentityLoadout;
 use crate::phase::GamePhase;
 use crate::selection::{ChampionId, ChromaId, SkinId};
 
@@ -16,6 +17,8 @@ pub struct PartyPeer {
     pub champion_id: ChampionId,
     pub skin_id: SkinId,
     pub chroma_id: Option<ChromaId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<IdentityLoadout>,
 }
 
 impl PartyPeer {
@@ -190,6 +193,7 @@ mod tests {
             champion_id,
             skin_id,
             chroma_id: None,
+            identity: None,
         }
     }
 

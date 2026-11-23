@@ -19,9 +19,7 @@ impl StandardChampion {
             return Err(ClassicError::InvalidAlias(alias.to_owned()));
         }
         let wad_path = game_dir
-            .join("DATA")
-            .join("FINAL")
-            .join("Champions")
+            .join("DATA/FINAL/Champions")
             .join(format!("{alias}.wad.client"));
         let wad = WadFile::open(&wad_path).map_err(ClassicError::Wad)?;
         let stamp = wad_stamp(&wad_path);
@@ -40,7 +38,11 @@ impl StandardChampion {
         self.options = options;
         self
     }
-
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: &Path) -> Self {
+        self.cache_dir = Some(cache_dir.to_path_buf());
+        self
+    }
     fn slot0_identity(&self, character: &str) -> Option<SlotIdentity> {
         identity_at(&self.wad, character, 0).map(|identity| SlotIdentity {
             classification: identity
@@ -49,7 +51,6 @@ impl StandardChampion {
             ..identity
         })
     }
-
     fn finish_slot0(
         &self,
         character: &str,
@@ -72,17 +73,12 @@ impl StandardChampion {
     }
 
     #[must_use]
-    pub fn with_cache_dir(mut self, cache_dir: &Path) -> Self {
-        self.cache_dir = Some(cache_dir.to_path_buf());
-        self
-    }
-
-    #[must_use]
     pub fn has_skin(&self, skin: u32) -> bool {
-        let main = self.alias.to_ascii_lowercase();
-        self.wad.contains(wad_path_hash(&skin_bin(&main, skin)))
+        self.wad.contains(wad_path_hash(&skin_bin(
+            &self.alias.to_ascii_lowercase(),
+            skin,
+        )))
     }
-
     #[must_use]
     pub fn skin_numbers(&self, limit: u32) -> Vec<u32> {
         (0..limit).filter(|n| self.has_skin(*n)).collect()
@@ -150,6 +146,10 @@ impl StandardChampion {
         self.wad.contains(wad_path_hash(&path.to_ascii_lowercase()))
     }
 
+    pub fn read_path(&self, path: &str) -> Result<Option<Vec<u8>>, ClassicError> {
+        Ok(self.wad.read(wad_path_hash(&path.to_ascii_lowercase()))?)
+    }
+
     pub fn read_skin_bin(
         &self,
         character: &str,
@@ -193,7 +193,7 @@ impl StandardChampion {
         self.build(skin, base_skin, Some(form), mods_dir)
     }
 
-    pub(crate) fn gear_body(&self, source: &[u8], key: u32) -> Result<Vec<u8>, ClassicError> {
+    pub fn gear_body(&self, source: &[u8], key: u32) -> Result<Vec<u8>, ClassicError> {
         let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
         if let Some(entry) = parsed.entries.iter().find(|e| e.key_hash == key) {
             return Ok(entry.body.clone());
@@ -214,14 +214,23 @@ impl StandardChampion {
     ) -> Result<String, ClassicError> {
         let main = self.alias.to_ascii_lowercase();
         let target_bin = skin_bin(&main, skin);
-        if !self.wad.contains(wad_path_hash(&target_bin)) {
-            return Err(ClassicError::SkinNotFound {
-                champion_id: 0,
-                skin_id: skin,
-            });
-        }
+        let source =
+            self.wad
+                .read(wad_path_hash(&target_bin))?
+                .ok_or(ClassicError::SkinNotFound {
+                    champion_id: 0,
+                    skin_id: skin,
+                })?;
 
-        let game_parent = self.parent_skin(skin);
+        let game_parent = match slot_identity(&source) {
+            Ok(identity) => {
+                (identity.parent != 0 && identity.parent != skin).then_some(identity.parent)
+            }
+            Err(e) => {
+                warn!(alias = %self.alias, skin, error = %e, "Skin identity unreadable; the client's parent skin is used");
+                None
+            }
+        };
         if game_parent.is_some() && base_skin.is_some() && game_parent != base_skin {
             debug!(
                 alias = %self.alias,
@@ -246,7 +255,7 @@ impl StandardChampion {
             "game_wad": self.wad_stamp,
             "generator": reuse::generator_stamp(),
             "options": format!("{:?}", self.options),
-            "baseskin_rebase": 9,
+            "baseskin_rebase": 10,
         });
         let _claim = reuse::Claim::wait_for(&final_dir);
         if reuse::already_built(&final_dir, &key) {
@@ -265,10 +274,6 @@ impl StandardChampion {
             .join(format!("{}.wad.client", self.alias));
         let characters_dir = wad_root.join("data").join("characters");
 
-        let source = self
-            .wad
-            .read(wad_path_hash(&target_bin))?
-            .ok_or_else(|| ClassicError::Bin(format!("{main} skin{skin}.bin not found in WAD")))?;
         let bins_dir = characters_dir.join(&main).join("skins");
         std::fs::create_dir_all(&bins_dir)?;
         let retargeted =
@@ -381,10 +386,8 @@ impl StandardChampion {
             meta.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest).map_err(|e| ClassicError::Bin(e.to_string()))?,
         )?;
-
         remove_if_present(&final_dir)?;
         std::fs::rename(&partial, &final_dir)?;
-
         info!(
             alias = %self.alias,
             skin,
@@ -392,7 +395,6 @@ impl StandardChampion {
             folder = %folder,
             "Standard skin mod generated directly from installed game WAD"
         );
-
         Ok(folder)
     }
 }

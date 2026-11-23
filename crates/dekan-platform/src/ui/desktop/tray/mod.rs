@@ -41,7 +41,13 @@ pub enum TrayEvent {
 
     OpenRelease,
 
+    OpenProject,
+
     MarkProblem,
 
     ExportDiagnostics,
+
+    RepairSkins,
+
+    RepairClient,
 }

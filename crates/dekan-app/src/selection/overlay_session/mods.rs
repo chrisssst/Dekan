@@ -1,5 +1,30 @@
 use super::*;
 
+pub(super) fn load_identity(
+    state_dir: &std::path::Path,
+) -> Option<dekan_core::identity::IdentityLoadout> {
+    let raw = std::fs::read_to_string(state_dir.join("identity.json")).ok()?;
+    let parsed: dekan_core::identity::IdentityLoadout = serde_json::from_str(&raw).ok()?;
+    parsed.normalized()
+}
+
+fn save_identity(
+    state_dir: &std::path::Path,
+    loadout: Option<&dekan_core::identity::IdentityLoadout>,
+) {
+    let path = state_dir.join("identity.json");
+    match loadout {
+        Some(value) => {
+            if let Ok(bytes) = serde_json::to_vec(value) {
+                let _ = dekan_platform::fs::atomic_write(&path, &bytes, false); // ignore-ok: best-effort identity persistence
+            }
+        }
+        None => {
+            let _ = std::fs::remove_file(&path); // ignore-ok: identity file may not exist yet
+        }
+    }
+}
+
 impl OverlaySession {
     pub(super) fn warm_champion(&self, alias: Option<String>) {
         let Some(alias) = alias else {
@@ -12,39 +37,20 @@ impl OverlaySession {
             return;
         };
         let cache_dir = self.mods.state_dir.clone();
-        let state_rx = self.state_rx.clone();
         let turn = std::sync::Arc::clone(&self.warm_turn);
         let mine = turn.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
         drop(tokio::task::spawn_blocking(move || {
-            let started = std::time::Instant::now();
+            if turn.load(std::sync::atomic::Ordering::Acquire) != mine
+                || dekan_classic::generator::companion_cache_is_current(
+                    &game_dir, &cache_dir, &alias,
+                )
+            {
+                return;
+            }
             if let Err(e) = dekan_classic::generator::StandardChampion::open(&game_dir, &alias)
                 .map(|champion| champion.with_cache_dir(&cache_dir).companions())
             {
                 debug!(error = %e, "Companion characters not indexed ahead of the build");
-            }
-            let skin_bin = dekan_wad::hash::wad_path_hash(&format!(
-                "data/characters/{}/skins/skin0.bin",
-                alias.to_ascii_lowercase()
-            ));
-            match dekan_inject::overlay_builder::read_wads_ahead(&game_dir, &[skin_bin], &|| {
-                state_rx.borrow().phase.is_in_game()
-                    || turn.load(std::sync::atomic::Ordering::Acquire) != mine
-            }) {
-                Ok(read) => info!(
-                    alias = %alias,
-                    files = read.files,
-                    bytes = read.bytes,
-                    elapsed_ms = started.elapsed().as_millis(),
-                    "Champion WAD read ahead; the patcher build finds it in the file cache"
-                ),
-                Err(dekan_inject::error::InjectError::Cancelled) => debug!(
-                    alias = %alias,
-                    elapsed_ms = started.elapsed().as_millis(),
-                    "Champion WAD read-ahead stopped: another champion took its place or the match started"
-                ),
-                Err(e) => {
-                    warn!(alias = %alias, error = %e, "Champion WAD not read ahead; the patcher build reads it from the disk")
-                }
             }
         }));
     }
@@ -126,5 +132,91 @@ impl OverlaySession {
         }
 
         self.controller.set_mod_selection(next.view(champion));
+    }
+
+    pub(super) fn dispatch_command(
+        &mut self,
+        command: OverlayCommand,
+        catalog_champion: Option<ChampionId>,
+        catalog: Option<&Catalog>,
+    ) {
+        match command {
+            OverlayCommand::SetMods { selection } => {
+                self.apply_mod_request(&selection, catalog_champion);
+            }
+            OverlayCommand::SetIdentity { loadout } => {
+                let clean = loadout.and_then(dekan_core::identity::IdentityLoadout::normalized);
+                save_identity(&self.mods.state_dir, clean.as_ref());
+                dekan_core::state::set_local_identity(&self.state_tx, clean);
+                info!("Customize Identity loadout updated");
+            }
+            OverlayCommand::JoinLobbyParty => {
+                dekan_core::state::set_party_share(&self.state_tx, true);
+                drop(tokio::task::spawn_blocking(|| {
+                    let _ = dekan_platform::party_dialog::dismiss_lobby_invite(); // ignore-ok: dialog may not be open
+                }));
+                info!("Party: joined lobby sharing from in-client button");
+            }
+            OverlayCommand::OpenModsFolder => self.open_mods_folder(),
+            OverlayCommand::OpenPanel => {
+                if let Some(links) = self.panel_links.clone() {
+                    dekan_platform::panel::show_panel(links);
+                }
+            }
+            OverlayCommand::Clear => {
+                self.dismiss_historic();
+                self.random_declined = catalog_champion;
+                handle_command(&self.state_tx, OverlayCommand::Clear, catalog);
+            }
+            OverlayCommand::Random => self.roll_random(catalog),
+            OverlayCommand::ChromaPreview { id } => {
+                self.send_chroma_preview(id, catalog);
+            }
+            OverlayCommand::TogglePreset => self.toggle_preset(catalog_champion),
+            OverlayCommand::SetProfile { name } => {
+                if self.presets.switch_to(&name) {
+                    info!(profile = %name, "Skin profile switched");
+                    self.profile_changed(catalog_champion);
+                }
+            }
+            OverlayCommand::NewProfile => {
+                let locale = catalog.and_then(|c| c.locale.clone());
+                self.new_profile(locale.as_deref(), catalog_champion);
+            }
+            OverlayCommand::DeleteProfile => {
+                if let Some(name) = self.presets.delete_active() {
+                    info!(profile = %name, "Skin profile deleted; the default profile is active");
+                    self.profile_changed(catalog_champion);
+                }
+            }
+            OverlayCommand::FocusChampion { id } => {
+                if focus_lobby_champion(&self.state_tx, id) {
+                    info!(champion_id = id, "Lobby champion shown in the overlay");
+                }
+            }
+            OverlayCommand::ImportMod { category } => {
+                let locale = catalog.and_then(|c| c.locale.clone());
+                let alias = catalog.and_then(|c| c.alias.clone());
+                self.start_import(category, catalog_champion, alias, locale.as_deref());
+            }
+            other => handle_command(&self.state_tx, other, catalog),
+        }
+    }
+
+    pub(super) async fn recover_reconnect_champion(&mut self) -> Option<ChampionId> {
+        let client = dekan_lcu::client::LcuClient::discover().await.ok()?;
+        let live = dekan_lcu::live_selection::resolve_live_selection(&client, None)
+            .await
+            .ok()?;
+        info!(
+            champion_id = live.champion_id,
+            skin_id = live.skin_id,
+            "Recovered champion on reconnect screen so skin selection is available"
+        );
+        dekan_core::state::set_champion(&self.state_tx, live.champion_id);
+        if live.skin_id != 0 {
+            dekan_core::state::set_selected_skin(&self.state_tx, live.skin_id);
+        }
+        Some(live.champion_id)
     }
 }

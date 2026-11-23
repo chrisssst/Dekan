@@ -1,0 +1,174 @@
+import { Theme, Surface, CheckGlyph } from "../theme.slint";
+
+component ModeOption inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> selected;
+    callback picked();
+    property <bool> hot: touch.has-hover;
+    property <bool> focused: keys.has-focus;
+    horizontal-stretch: 1;
+    min-height: 54px;
+    border-radius: 10px;
+    border-width: root.focused ? 2px : 1px;
+    border-color: root.focused ? Theme.gold-bright : root.selected ? Theme.gold : root.hot ? Theme.control-line : Theme.surface-line;
+    background: root.selected ? Theme.card-fill-selected : root.hot ? Theme.surface-hover : Theme.surface;
+    drop-shadow-blur: root.selected ? 10px : 0px;
+    drop-shadow-color: Theme.gold.with-alpha(0.22);
+    animate border-color, background, drop-shadow-blur { duration: 160ms; }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Path {
+                width: 16px;
+                height: 16px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                stroke: root.selected ? Theme.gold-bright : root.hot ? Theme.text : Theme.muted;
+                stroke-width: 1.5px;
+                fill: transparent;
+                commands: root.icon;
+                animate stroke { duration: 150ms; }
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.selected ? Theme.gold-bright : root.hot ? Theme.text : Theme.muted;
+            font-size: Theme.text-md;
+            font-weight: root.selected ? 700 : 500;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            animate color { duration: 150ms; }
+        }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.picked();
+                return accept;
+            }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.picked(); }
+}
+
+export component ModeCard inherits Surface {
+    in property <string> heading;
+    in property <string> window-label;
+    in property <string> client-label;
+    in property <bool> in-client;
+    callback toggled();
+    border-radius: 14px;
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+        Text {
+            text: root.heading;
+            color: Theme.gold;
+            font-size: Theme.text-sm;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            ModeOption {
+                label: root.window-label;
+                icon: "M 2 3 L 14 3 L 14 13 L 2 13 Z M 2 6 L 14 6";
+                selected: !root.in-client;
+                picked => {
+                    if root.in-client {
+                        root.toggled();
+                    }
+                }
+            }
+            ModeOption {
+                label: root.client-label;
+                icon: "M 5 3.5 L 11 3.5 L 11 12.5 L 5 12.5 Z M 1.5 5.5 L 3.5 5.5 L 3.5 10.5 L 1.5 10.5 Z M 12.5 5.5 L 14.5 5.5 L 14.5 10.5 L 12.5 10.5 Z";
+                selected: root.in-client;
+                picked => {
+                    if !root.in-client {
+                        root.toggled();
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component RepairBanner inherits Rectangle {
+    in property <int> state;
+    in property <string> text;
+    property <float> phase: mod(animation-tick() / 1100ms, 1.0);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: root.state == 3 ? Theme.danger : root.state == 2 ? Theme.cyan : Theme.gold-dim;
+    background: root.state == 3 ? Theme.danger.with-alpha(0.15) : root.state == 2 ? Theme.surface : Theme.card;
+    VerticalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            if root.state == 2: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    background: Theme.cyan.with-alpha(0.2);
+                    CheckGlyph {
+                        x: 4px;
+                        y: 4px;
+                        stroke: Theme.cyan;
+                    }
+                }
+            }
+            if root.state != 2: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.state == 3 ? Theme.danger : Theme.gold;
+                }
+            }
+            Text {
+                text: root.text;
+                color: root.state == 3 ? Theme.danger-text : root.state == 2 ? Theme.text : Theme.gold-bright;
+                font-size: Theme.text-sm;
+                font-weight: 500;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+            }
+        }
+        if root.state == 1: Rectangle {
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.surface-line;
+            clip: true;
+            Rectangle {
+                width: parent.width * 0.36;
+                height: parent.height;
+                border-radius: 2px;
+                x: (parent.width + self.width) * root.phase - self.width;
+                background: @linear-gradient(90deg, Theme.gold-dim 0%, Theme.gold-bright 50%, Theme.cyan 100%);
+            }
+        }
+    }
+}

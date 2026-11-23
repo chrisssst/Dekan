@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
+use crate::identity::IdentityLoadout;
 use crate::lobby::{LobbyPicks, LobbySlot};
 use crate::mods::ModSelection;
 use crate::overlay::OverlayTarget;
@@ -12,17 +13,12 @@ use crate::selection::{ChampionId, SkinId};
 pub enum InjectionStatus {
     #[default]
     Idle,
-
     Pending,
-
     Confirmed,
-
     Unconfirmed,
-
     Failed {
         error: String,
     },
-
     PatcherExited {
         code: i32,
     },
@@ -31,36 +27,22 @@ pub enum InjectionStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppState {
     pub phase: GamePhase,
-
     pub champion_id: Option<ChampionId>,
-
     pub selected_skin_id: Option<SkinId>,
-
     pub overlay_target: Option<OverlayTarget>,
-
     pub lcu_connected: bool,
-
     pub injection: InjectionStatus,
-
     pub mods: ModSelection,
-
     pub local_puuid: Option<String>,
-
     pub team: Vec<TeamMember>,
-
     pub party_status: PartyStatus,
-
     pub party_hosting: bool,
-
     pub party_peers: Vec<PartyPeer>,
-
     pub party_share: bool,
-
     pub lobby_party: Option<LobbyParty>,
-
     pub lobby: Option<LobbyPicks>,
-
     pub queue: Option<QueueInfo>,
+    pub local_identity: Option<IdentityLoadout>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +50,13 @@ pub struct QueueInfo {
     pub queue_id: u32,
     pub game_mode: String,
     pub map_id: u32,
+}
+
+impl QueueInfo {
+    #[must_use]
+    pub fn is_tft(&self) -> bool {
+        self.map_id == 22 || self.game_mode.eq_ignore_ascii_case("TFT")
+    }
 }
 
 impl Default for AppState {
@@ -89,6 +78,7 @@ impl Default for AppState {
             lobby_party: None,
             lobby: None,
             queue: None,
+            local_identity: None,
         }
     }
 }
@@ -384,6 +374,16 @@ pub fn set_phase(tx: &StateSender, phase: GamePhase) {
 pub fn set_lcu_connected(tx: &StateSender, connected: bool) {
     tx.send_modify(|state| {
         state.lcu_connected = connected;
+    });
+}
+
+pub fn set_local_identity(tx: &StateSender, loadout: Option<IdentityLoadout>) {
+    tx.send_if_modified(|state| {
+        if state.local_identity == loadout {
+            return false;
+        }
+        state.local_identity = loadout;
+        true
     });
 }
 

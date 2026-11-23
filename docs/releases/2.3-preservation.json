@@ -1,0 +1,116 @@
+{
+  "version": "2.3",
+  "basis": "Maintainer-provided Dekan 2.2 plus public 1.16 source fixes",
+  "protected_files": {
+    "crates/dekan-app/src/game/discord_presence.rs": {
+      "unchanged": true,
+      "sha256": "3b12bdfde8b10fb2f07d8e61daa2ab697fea52c1c54aaa19d78a45a1987155b8"
+    },
+    ".env.example": {
+      "unchanged": true,
+      "sha256": "50551de22aa55d2192717437eba1349072e4c31f0d4a970e56e750d655fafde1"
+    },
+    ".github/workflows/release.yml": {
+      "unchanged": true,
+      "sha256": "9f1395f739febe032cdc4f9ab4271adf601f2c57d2397b69591d06881c208b4f"
+    },
+    ".github/workflows/promote.yml": {
+      "unchanged": true,
+      "sha256": "ea3c16d488ed369d580a0165701753bc679c66d5130a13f82d6dd9e3a54b2c7d"
+    },
+    ".github/workflows/star-notify.yml": {
+      "unchanged": true,
+      "sha256": "04fc21a05fe9b3c19ea7a6cbb0768e3e791a7ab168b918d2110fe6751cb8f222"
+    },
+    "crates/dekan-party/src/transport/config.rs": {
+      "unchanged": true,
+      "sha256": "144cec5bd43acde03b1d1c820ce8ecf94f94f321d0d24008d4d8c2af3fa38af9"
+    },
+    "relay-worker/wrangler.toml": {
+      "unchanged": true,
+      "sha256": "127676d7437634d1f2e3ec30214792a88af0c9f37db2207447a74f44e44c2d70"
+    },
+    "LICENSE": {
+      "unchanged": true,
+      "sha256": "a45edd5214c04678a1c7d0bf3a44f768b7ff46e73db3d587b316da67196780e8"
+    },
+    "assets/dekan.ico": {
+      "unchanged": true,
+      "sha256": "0c1bacc20d7936e2c046616e3675f777a85d36a44cfdb6052617195c86f08f80"
+    },
+    "assets/urgot-ingame.png": {
+      "unchanged": true,
+      "sha256": "7112ddde762e157db63414be5bd8b8e7f30cf6b3fc0574b9f93168f8443e72e4"
+    },
+    "assets/dekan.png": {
+      "unchanged": true,
+      "sha256": "950b280afabb3394cc75eb1595fb75c28278488f803503b28a15d9f406d5b229"
+    },
+    "assets/dekan-banner.png": {
+      "unchanged": true,
+      "sha256": "d9198cbfd2dcd839f6e1ddc1f3fcb65c434e9ccdfc3aaa5e6e4e1bd2eb7e4484"
+    },
+    "assets/urgot-select.png": {
+      "unchanged": true,
+      "sha256": "c5a35de766f28e7bf1c233ed111f4abdd32aa7ff729e72d1f6cb46fa34b14830"
+    },
+    "crates/dekan-platform/ui/assets/logo-56.png": {
+      "unchanged": true,
+      "sha256": "649952a36d70655f6bbdb879e5004c5395f1a14d2ef0077c697acf6bbceb387f"
+    },
+    "crates/dekan-platform/ui/assets/logo-30.png": {
+      "unchanged": true,
+      "sha256": "649952a36d70655f6bbdb879e5004c5395f1a14d2ef0077c697acf6bbceb387f"
+    },
+    "crates/dekan-platform/ui/assets/logo.png": {
+      "unchanged": true,
+      "sha256": "649952a36d70655f6bbdb879e5004c5395f1a14d2ef0077c697acf6bbceb387f"
+    },
+    "crates/dekan-platform/ui/assets/logo-40.png": {
+      "unchanged": true,
+      "sha256": "649952a36d70655f6bbdb879e5004c5395f1a14d2ef0077c697acf6bbceb387f"
+    }
+  },
+  "configuration": {
+    "crates/dekan-app/src/updates/self_update/mod.rs": {
+      "configuration_unchanged": true,
+      "configuration_sha256": "cacdeec0076f2160732336ab641f70b8be1fa95067f893d7575d771fe6c0492d"
+    },
+    "crates/dekan-app/src/boot/startup/star_gate/github.rs": {
+      "configuration_unchanged": true,
+      "configuration_sha256": "5bab7d75a27529df971b2ca177d5f087407a10be39509d9b15bbf76665788a48"
+    }
+  },
+  "theme_palette_preserved": true,
+  "themes": [
+    "Classic",
+    "Crimson",
+    "Obsidian"
+  ],
+  "languages": [
+    "tr",
+    "en"
+  ],
+  "github_repository": "chrisssst/Dekan",
+  "bridge_manifest": {
+    "origin": "Latest Windows x64 bridge files supplied by the maintainer with the 1.16 update",
+    "files": [
+      {
+        "file": "dekan_launcher.exe",
+        "size": 376832,
+        "sha256": "7cfd70afaeeaa00cb2a0b6f900cf9c916b2b14a8ed047615b6687c7129fdf994"
+      },
+      {
+        "file": "dekan_bridge.dll",
+        "size": 530432,
+        "sha256": "73c81ad10b5e5a7d4fb8503c6436cf45d7b0af3fd09932a96ef4e22f11f89a9c"
+      }
+    ],
+    "compatibility_alias": {
+      "file": "bullet_bridge.dll",
+      "source": "dekan_bridge.dll",
+      "reason": "The supplied launcher requires this basename; the installer marks this duplicate hidden."
+    }
+  },
+  "live_match_tested": false
+}

@@ -13,6 +13,7 @@ pub(crate) struct WelcomeContent {
     pub pill: &'static str,
     pub items: Vec<&'static str>,
     pub dismiss: &'static str,
+    pub project: &'static str,
 }
 
 pub(crate) fn welcome_content(text: &crate::i18n::Text) -> WelcomeContent {
@@ -25,6 +26,7 @@ pub(crate) fn welcome_content(text: &crate::i18n::Text) -> WelcomeContent {
             text.welcome_quote,
         ]),
         dismiss: text.welcome_dismiss,
+        project: text.panel_open_project,
     }
 }
 
@@ -37,6 +39,7 @@ pub(crate) fn about_content(text: &crate::i18n::Text) -> WelcomeContent {
             text.about_quote,
         ]),
         dismiss: text.about_dismiss,
+        project: text.panel_open_project,
     }
 }
 
@@ -64,6 +67,7 @@ pub(crate) fn fill(window: &WelcomeWindow, content: &WelcomeContent) {
     let items: Vec<SharedString> = content.items.iter().map(|item| (*item).into()).collect();
     window.set_items(ModelRc::new(VecModel::from(items)));
     window.set_dismiss_label(content.dismiss.into());
+    window.set_project_label(content.project.into());
 }
 
 fn open(content: &WelcomeContent, auto_dismiss: Option<Duration>) {
@@ -83,6 +87,11 @@ fn open(content: &WelcomeContent, auto_dismiss: Option<Duration>) {
     window.on_dismiss(move || {
         if let Some(window) = weak.upgrade() {
             close(&window);
+        }
+    });
+    window.on_open_project(|| {
+        if let Err(e) = crate::shell::open_web_page(crate::star_gate::REPOSITORY_URL) {
+            warn!(error = %e, "Could not open the GitHub repository page");
         }
     });
     if let Err(e) = window.show() {

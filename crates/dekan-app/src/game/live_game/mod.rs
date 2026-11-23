@@ -106,16 +106,23 @@ struct MatchWatch {
     roster_logged: bool,
     warned_event_ids: bool,
     warned_silence: bool,
+    recorded_result: bool,
     last_error: Option<String>,
 }
 
 impl MatchWatch {
-    fn observe(&mut self, data: &AllGameData, live: &LiveGame, now: SystemTime) {
+    fn observe(
+        &mut self,
+        data: &AllGameData,
+        live: &LiveGame,
+        now: SystemTime,
+        selected_skin_id: Option<u32>,
+    ) {
         self.answered += 1;
         self.timeline.push((now, data.game_time));
         if !self.roster_logged {
             if data.players.is_empty() {
-                return self.finish(data, live, now);
+                return self.finish(data, live, now, selected_skin_id);
             }
             self.roster_logged = true;
             if !data.players.iter().any(|p| p.local) {
@@ -150,10 +157,16 @@ impl MatchWatch {
                 }
             }
         }
-        self.finish(data, live, now);
+        self.finish(data, live, now, selected_skin_id);
     }
 
-    fn finish(&mut self, data: &AllGameData, live: &LiveGame, now: SystemTime) {
+    fn finish(
+        &mut self,
+        data: &AllGameData,
+        live: &LiveGame,
+        now: SystemTime,
+        selected_skin_id: Option<u32>,
+    ) {
         if !self.warned_event_ids && data.events.iter().any(|e| e.id < 0) {
             self.warned_event_ids = true;
             warn!(
@@ -170,6 +183,25 @@ impl MatchWatch {
                 victim = ?event.victim,
                 "Live game event"
             );
+            if !self.recorded_result && event.name == "GameEnd" {
+                let won = match event.result.as_deref() {
+                    Some("Win") => Some(true),
+                    Some("Lose") => Some(false),
+                    _ => None,
+                };
+                if let Some(won) = won {
+                    self.recorded_result = true;
+                    if let Ok(state_dir) = dekan_platform::paths::state_dir() {
+                        let local = data.players.iter().find(|p| p.local);
+                        let champ = local.map(|p| p.champion.as_str()).unwrap_or_default();
+                        let skin_name = local.map(|p| p.skin_name.as_str()).unwrap_or_default();
+                        let skin_id = selected_skin_id.unwrap_or(0);
+                        crate::game::stats::record_match(
+                            &state_dir, skin_id, champ, skin_name, won,
+                        );
+                    }
+                }
+            }
         }
         self.last_event = data.events.iter().map(|e| e.id).fold(seen, i64::max);
         self.last_players = data.players.clone();
@@ -261,8 +293,15 @@ pub async fn run(
         }
         if let Some(current) = &mut watch {
             current.polls += 1;
+            let picked = {
+                let st = state_rx.borrow();
+                st.overlay_target
+                    .as_ref()
+                    .map(|t| t.chroma_id.unwrap_or(t.skin_id))
+                    .or(st.selected_skin_id)
+            };
             match poll(&client).await {
-                Ok(data) => current.observe(&data, &live, SystemTime::now()),
+                Ok(data) => current.observe(&data, &live, SystemTime::now(), picked),
                 Err(e) => {
                     debug!(error = %e, "Live game data not available yet");
                     if current.polls >= SILENT_POLLS_BEFORE_WARNING

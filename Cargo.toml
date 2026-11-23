@@ -20,7 +20,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "2.2.0"
+version = "2.3.0"
 authors = ["Dekan"]
 edition = "2024"
 rust-version = "1.85"
@@ -65,7 +65,6 @@ slint = { version = "1.18.1", default-features = false, features = [
 slint-build = "1.18.1"
 i-slint-backend-testing = "1.18.1"
 raw-window-handle = "0.6"
-ciborium = "0.2.2"
 
 [profile.release]
 lto = true

@@ -7,9 +7,27 @@ impl InjectionTrigger {
         }
 
         let mut mods = Vec::new();
+        let mut loading_picks = Vec::new();
         for (champ_id, entry_id) in key.picks() {
             match self.prepare_mods(champ_id, entry_id).await {
-                Some(prepared) => mods.extend(prepared),
+                Some(prepared) => {
+                    if let Some(first) = prepared.first() {
+                        let parent_skin_id = {
+                            let state = self.state_rx.borrow();
+                            state
+                                .overlay_target
+                                .as_ref()
+                                .filter(|t| t.champion_id == champ_id)
+                                .map(|t| t.skin_id)
+                        };
+                        loading_picks.push(dekan_classic::loading_name::LoadingNamePick {
+                            mod_folder: self.paths.mods_dir.join(first),
+                            skin_id: entry_id,
+                            parent_skin_id,
+                        });
+                    }
+                    mods.extend(prepared);
+                }
                 None if !key.lobby => return None,
                 None => warn!(
                     champ_id,
@@ -19,6 +37,7 @@ impl InjectionTrigger {
             }
         }
 
+        let mut other_mod_paths: Vec<PathBuf> = Vec::new();
         if key.mods != 0 {
             let (selection, champions) = {
                 let state = self.state_rx.borrow();
@@ -60,7 +79,12 @@ impl InjectionTrigger {
             })
             .await;
             match staged {
-                Ok(staged) => mods.extend(staged),
+                Ok(staged) => {
+                    for name in &staged {
+                        other_mod_paths.push(self.paths.mods_dir.join(name));
+                    }
+                    mods.extend(staged);
+                }
                 Err(e) => {
                     warn!(error = %e, "Custom mod staging task failed; continuing without them")
                 }
@@ -68,7 +92,28 @@ impl InjectionTrigger {
         }
 
         if key.party != 0 {
-            mods.extend(self.party_mods(key).await);
+            let party = self.party_mods(key).await;
+            for name in &party {
+                other_mod_paths.push(self.paths.mods_dir.join(name));
+            }
+            mods.extend(party);
+        }
+
+        if !loading_picks.is_empty() {
+            let game_dir = self.effective_game_dir(None);
+            let mods_dir = self.paths.mods_dir.clone();
+            if let Ok(Some(loading_mod)) = tokio::task::spawn_blocking(move || {
+                dekan_classic::loading_name::build_loading_name_mod(
+                    &game_dir,
+                    &mods_dir,
+                    &loading_picks,
+                    &other_mod_paths,
+                )
+            })
+            .await
+            {
+                mods.push(loading_mod);
+            }
         }
 
         if mods.is_empty() {

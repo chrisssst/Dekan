@@ -63,6 +63,74 @@ pub fn terminate_process(pid: u32) -> bool {
     ok
 }
 
+#[must_use]
+#[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
+pub fn query_process_cmdline(pid: u32) -> Option<String> {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        if pid == 0 {
+            return None;
+        }
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let result = read_cmdline_query_only(handle);
+        let _ = CloseHandle(handle); // ignore-ok: process handle released after cmdline query
+        result
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    None
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn read_cmdline_query_only(handle: HANDLE) -> Option<String> {
+    #[repr(C)]
+    struct UnicodeStr {
+        length: u16,
+        maximum_length: u16,
+        buffer: *const u16,
+    }
+
+    const PROCESS_COMMAND_LINE_INFORMATION: u32 = 60;
+    let mut needed = 0u32;
+    let probe = unsafe {
+        NtQueryInformationProcess(
+            handle,
+            PROCESS_COMMAND_LINE_INFORMATION,
+            core::ptr::null_mut(),
+            0,
+            &mut needed,
+        )
+    };
+    let _ = probe; // ignore-ok: initial query populates required buffer size in needed
+    for _ in 0..3 {
+        let cap = (needed as usize).max(std::mem::size_of::<UnicodeStr>());
+        let mut buf = vec![0u8; cap];
+        let status = unsafe {
+            NtQueryInformationProcess(
+                handle,
+                PROCESS_COMMAND_LINE_INFORMATION,
+                buf.as_mut_ptr().cast(),
+                cap as u32,
+                &mut needed,
+            )
+        };
+        if status >= 0 {
+            let ustr = unsafe { &*(buf.as_ptr().cast::<UnicodeStr>()) };
+            if ustr.buffer.is_null() || ustr.length == 0 {
+                return Some(String::new());
+            }
+            let units = usize::from(ustr.length) / 2;
+            let base = buf.as_ptr() as usize;
+            let ptr = ustr.buffer as usize;
+            if ptr < base || ptr.saturating_add(units * 2) > base.saturating_add(buf.len()) {
+                return None;
+            }
+            let slice = unsafe { std::slice::from_raw_parts(ustr.buffer, units) };
+            return Some(String::from_utf16_lossy(slice));
+        }
+    }
+    None
+}
+
 #[cfg(target_arch = "x86_64")]
 unsafe fn read_peb_desktop_info(handle: HANDLE) -> Option<String> {
     #[repr(C)]

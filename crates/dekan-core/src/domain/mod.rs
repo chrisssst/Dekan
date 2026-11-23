@@ -1,6 +1,7 @@
 mod play;
 mod skins;
 
+pub use play::identity;
 pub use play::lobby;
 pub use play::overlay;
 pub use play::party;

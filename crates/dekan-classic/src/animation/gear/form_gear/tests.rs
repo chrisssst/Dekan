@@ -307,3 +307,54 @@ fn test_a_part_hidden_from_the_start_counts_only_where_a_form_shows_it() {
         "the first form never shows the part, so it needs no copy"
     );
 }
+
+#[test]
+fn sahn_uzal_persistent_face_keeps_base_material_in_form_0_and_copies_for_form_1() {
+    let gears = vec![
+        gear(Vec::new()),
+        gear(vec![mesh(vec![named(
+            "materialOverride",
+            list(vec![material("Persistent", 99)]),
+        )])]),
+        gear(Vec::new()),
+    ];
+    let raw = vec![
+        GearSwap {
+            show: vec![h("Form1"), h("Weapon1")],
+            hide: vec![h("Form2"), h("Weapon2")],
+            equip: None,
+            transition: None,
+        },
+        GearSwap {
+            show: vec![h("Form2"), h("Weapon2"), h("Persistent")],
+            hide: vec![h("Form1"), h("Weapon1")],
+            equip: None,
+            transition: None,
+        },
+        GearSwap {
+            show: vec![h("Form2"), h("Weapon2"), h("Persistent")],
+            hide: vec![h("Form1"), h("Weapon1")],
+            equip: None,
+            transition: None,
+        },
+    ];
+    let initially_hidden: BTreeSet<u32> = [h("Form2"), h("Weapon2")].into_iter().collect();
+    let normalized = keep_default_visible(&raw, &initially_hidden);
+    let plan = material_plan(&gears, &normalized, &initially_hidden).expect("plan");
+    assert!(
+        plan.overrides.is_empty(),
+        "form 0 uses the skin's own Persistent material; form 1 must not overwrite it"
+    );
+    assert_eq!(plan.copies.len(), 1);
+    assert_eq!(plan.copies[0].name, "Persistent_F1");
+    assert_eq!(plan.copies[0].form, 1);
+    let moved = with_copies(&normalized, &plan.copies);
+    let parts = form_parts(&moved);
+    assert!(parts[0].0.contains(&h("Persistent")));
+    assert!(!parts[0].1.contains(&h("Persistent")));
+    assert!(parts[0].1.contains(&h("Persistent_F1")));
+    assert!(parts[1].0.contains(&h("Persistent_F1")));
+    assert!(parts[1].1.contains(&h("Persistent")));
+    assert!(parts[2].0.contains(&h("Persistent")));
+    assert!(!parts[2].1.contains(&h("Persistent")));
+}
