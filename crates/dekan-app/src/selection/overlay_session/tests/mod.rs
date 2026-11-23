@@ -124,6 +124,7 @@ fn zed_catalog() -> Catalog {
         notice: None,
         classic: false,
         lobby: Vec::new(),
+        party: Default::default(),
     }
 }
 

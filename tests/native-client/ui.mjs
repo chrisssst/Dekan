@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { parseHTML } = require(process.env.DEKAN_DOM_MODULE || 'linkedom');
+const root = path.resolve(import.meta.dirname, '../../crates/dekan-app/src/selection/native_client/web');
+const files = ['i18n.js', 'core.js', 'mods.js', 'identity/identity.js', 'identity/identity-render.js', 'carousel.js'];
+const css = fs.readFileSync(path.join(root, 'native.css'), 'utf8');
+const icon = 'data:image/png;base64,' + fs.readFileSync(path.resolve(import.meta.dirname, '../../crates/dekan-platform/ui/assets/logo-56.png')).toString('base64');
+const source = `(function(){ ${files.map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n')} })()`;
+const { window } = parseHTML('<html lang="en"><head></head><body><div class="right-nav-menu"></div></body></html>');
+const intervals = new Map();
+const timers = new Map();
+let nextTimer = 0;
+const storage = new Map();
+const originalFetch = async () => ({ ok: false });
+const context = vm.createContext({
+    CSS: css, DEKAN_ICON_URI: icon,
+    window, document: window.document, navigator: { language: 'en', clipboard: { writeText() {} } },
+    MutationObserver: window.MutationObserver, MessageEvent, WebSocket: class {}, Response,
+    setInterval: (fn) => { const id = ++nextTimer; intervals.set(id, fn); return id; },
+    clearInterval: (id) => intervals.delete(id),
+    setTimeout: (fn) => { const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout: (id) => timers.delete(id), console,
+});
+window.Element.prototype.getBoundingClientRect = () => ({ left: 100, top: 100, bottom: 150, width: 50, height: 50 });
+window.fetch = originalFetch;
+window.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
+window.__dekanLanguage = 'en';
+const opened = [];
+window.open = url => opened.push(url);
+assert.equal(vm.runInContext(source, context), true);
+const api = window.__dekanInClient;
+assert.equal(api.version, 18);
+const catalog = { champion_id: 0, skins: [], mods: { map: [{id:'map-a', name:'Map A'}], selection:{} }, party:{joinable_friends:2,connected_members:0} };
+assert.deepEqual(Array.from(api.sync(catalog, null)), []);
+const document = window.document;
+const nav = document.getElementById('dekan-nav-btn');
+assert.ok(nav, 'Dekan navigation icon is inserted');
+assert.equal(nav.title, 'Dekan');
+const event = { stopPropagation() {}, preventDefault() {} };
+const clickTab = label => {
+    const button = Array.from(document.querySelectorAll('.dekan-pop-tab')).find(b => b.textContent === label);
+    assert.ok(button, `tab ${label}`); button.onclick(event);
+};
+const clickButton = text => {
+    const button = Array.from(document.querySelectorAll('.dekan-pop-btn')).find(b => b.textContent === text);
+    assert.ok(button, `button ${text}`); button.onclick(event);
+};
+nav.onclick(event);
+clickTab('Home');
+assert.ok(document.body.textContent.includes('DEKAN'));
+assert.ok(!document.body.textContent.includes('Bullet'));
+clickButton('Star Dekan on GitHub');
+assert.equal(opened.pop(), 'https://github.com/chrisssst/Dekan');
+nav.onclick(event); clickTab('Support'); clickButton('Discord');
+assert.equal(opened.pop(), 'https://discord.gg/dekan');
+nav.onclick(event); clickTab('Party'); clickButton('Join Lobby Party (2)');
+assert.equal(api.drain(null)[0].type, 'join_lobby_party');
+nav.onclick(event); clickTab('Mods');
+const mod = document.querySelector('.dekan-chip');
+assert.equal(mod.textContent, 'Map A'); mod.onclick(event);
+const command = api.drain(null)[0];
+assert.equal(command.type, 'set_mods'); assert.equal(command.selection.map, 'map-a');
+const carousel = document.createElement('div');
+carousel.className = 'skin-selection-carousel';
+carousel.innerHTML = '<div class="skin-selection-item skin-carousel-offset-2"><img src="/lol-game-data/assets/v1/champion-splashes/238/238001.jpg"></div>';
+document.body.appendChild(carousel);
+const champion = { ...catalog, champion_id: 238, champion_name: 'Zed', skins: [{id:238001,name:'Shockblade Zed',chromas:[{id:238015,name:'Ruby',color:'#ff0000',form:false}]}] };
+const picked = api.sync(champion, null);
+assert.equal(picked[0].type, 'select'); assert.equal(picked[0].id, 238001);
+const chroma = document.querySelector('.dekan-chroma-btn');
+assert.ok(chroma, 'client carousel offers chroma button');
+chroma.onclick({ ...event, stopImmediatePropagation() {} });
+const swatches = document.querySelectorAll('.dekan-swatch');
+assert.equal(swatches.length, 2);
+swatches[1].dispatchEvent(new window.Event('click', { bubbles:true }));
+const variant = api.drain(238001);
+assert.equal(variant[0].type, 'select'); assert.equal(variant[0].id, 238015);
+carousel.remove();
+window.__dekanLanguage = 'tr';
+api.sync(catalog, null);
+nav.onclick(event);
+if (!document.getElementById('dekan-nav-popover')) nav.onclick(event);
+clickTab('Ana sayfa');
+assert.ok(document.body.textContent.includes('İstemci içi mod etkin'));
+clickButton('GitHub’da Dekan’a yıldız ver');
+assert.equal(opened.pop(), 'https://github.com/chrisssst/Dekan');
+assert.equal(api.cleanup(), true);
+assert.equal(window.__dekanInClient, undefined);
+assert.equal(document.getElementById('dekan-nav-btn'), null);
+assert.equal(document.getElementById('dekan-in-client-style'), null);
+assert.equal(document.getElementById('dekan-id-style'), null);
+assert.equal(window.fetch, originalFetch);
+assert.equal(intervals.size, 0);
+assert.equal(timers.size, 0);
+assert.equal(vm.runInContext(source, context), true, 'script reinstalls after cleanup');
+window.__dekanInClient.cleanup();
+console.log('Native client DOM fixture passed: branding, destinations, TR/EN, carousel/chroma selection, mod/party commands, cleanup and reinstall.');

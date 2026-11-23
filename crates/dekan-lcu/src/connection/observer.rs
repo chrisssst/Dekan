@@ -176,6 +176,16 @@ impl LcuObserver {
     }
 
     async fn sync_initial_state(&self, rest_client: &LcuClient) {
+        match rest_client.get_current_summoner().await {
+            Ok(summoner) if !summoner.puuid.is_empty() => {
+                debug!("Current summoner identified on LCU connect");
+                let current_team = self.state_tx.borrow().team.clone();
+                dekan_core::state::set_team(&self.state_tx, Some(summoner.puuid), current_team);
+            }
+            Ok(_) => warn!("The client returned the current summoner without an id"),
+            Err(e) => warn!(error = %e, "Could not read the current summoner on LCU connect"),
+        }
+
         match rest_client.get_gameflow_phase().await {
             Ok(initial_phase) => {
                 info!(phase = ?initial_phase, "Initial LCU gameflow phase synced");
@@ -204,20 +214,38 @@ impl LcuObserver {
                         }
                     }
                 }
+
+                if matches!(
+                    initial_phase,
+                    GamePhase::Reconnect | GamePhase::InProgress | GamePhase::GameStart
+                ) {
+                    self.sync_live_game_selection(rest_client).await;
+                }
             }
             Err(e) => {
                 warn!(error = %e, "Could not sync the initial gameflow phase; the state may be stale until the next client event");
             }
         }
+    }
 
-        match rest_client.get_current_summoner().await {
-            Ok(summoner) if !summoner.puuid.is_empty() => {
-                debug!("Current summoner identified on LCU connect");
-                let current_team = self.state_tx.borrow().team.clone();
-                dekan_core::state::set_team(&self.state_tx, Some(summoner.puuid), current_team);
+    async fn sync_live_game_selection(&self, rest_client: &LcuClient) {
+        let known_champion = self.state_tx.borrow().champion_id;
+        match crate::live_selection::resolve_live_selection(rest_client, known_champion).await {
+            Ok(live) => {
+                info!(
+                    champion_id = live.champion_id,
+                    skin_id = live.skin_id,
+                    source = ?live.source,
+                    "Live match champion recovered from LCU gameflow session"
+                );
+                dekan_core::state::set_champion(&self.state_tx, live.champion_id);
+                if live.skin_id != 0 {
+                    dekan_core::state::set_selected_skin(&self.state_tx, live.skin_id);
+                }
             }
-            Ok(_) => warn!("The client returned the current summoner without an id"),
-            Err(e) => warn!(error = %e, "Could not read the current summoner on LCU connect"),
+            Err(e) => {
+                debug!(error = %e, "Live match champion unavailable from LCU gameflow session");
+            }
         }
     }
 
@@ -288,7 +316,16 @@ impl LcuObserver {
                 msg_opt = ws_stream.next() => {
                     match msg_opt {
                         Some(Ok(Message::Text(text))) => match LcuEvent::parse(&text) {
-                            Ok(Some(event)) => dispatch_event_to_state(&self.state_tx, &event),
+                            Ok(Some(event)) => {
+                                dispatch_event_to_state(&self.state_tx, &event);
+                                let needs_reconnect_champ = {
+                                    let s = self.state_tx.borrow();
+                                    s.phase == GamePhase::Reconnect && s.champion_id.is_none()
+                                };
+                                if needs_reconnect_champ {
+                                    self.sync_live_game_selection(&rest_client).await;
+                                }
+                            }
                             Ok(None) => {}
                             Err(e) => {
                                 undecodable_frames += 1;

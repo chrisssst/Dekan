@@ -104,6 +104,7 @@ pub(super) fn catalog() -> Catalog {
         notice: None,
         classic: false,
         lobby: Vec::new(),
+        party: Default::default(),
     }
 }
 
@@ -256,4 +257,37 @@ fn overlay_starts_with_the_saved_theme_and_tracks_changes_without_selection_comm
         assert_eq!(card_ids(&view), initial_cards);
         assert!(commands.try_recv().is_err());
     }
+}
+
+#[test]
+fn chroma_previews_store_raw_bytes_across_catalogs_and_decode_lazily_on_hover() {
+    let (view, _commands) = open_overlay();
+    let png_bytes: std::sync::Arc<[u8]> =
+        std::sync::Arc::from(include_bytes!("../../../../ui/assets/logo-56.png").as_slice());
+    with_overlay(|overlay| {
+        overlay.deliver_raw_preview(238_070, png_bytes.clone());
+        assert!(overlay.raw_previews.contains_key(&238_070));
+        assert!(
+            !overlay.previews.contains_key(&238_070),
+            "raw bytes are not decoded eagerly when the chroma is not hovered"
+        );
+        let gem = views::ChromaGem {
+            id: 238_070,
+            name: "Esmeralda".into(),
+            color: slint::Color::from_rgb_u8(0x40, 0xc0, 0xff),
+            form: false,
+            has_preview: true,
+        };
+        overlay.show_preview(&gem, 100.0, 100.0);
+        assert!(
+            overlay.previews.contains_key(&238_070),
+            "hovering decodes and caches the image"
+        );
+        overlay.set_catalog(catalog());
+        assert!(
+            overlay.raw_previews.contains_key(&238_070),
+            "cached previews survive a catalog refresh"
+        );
+    });
+    assert!(view.get_preview_image().size().width > 0);
 }

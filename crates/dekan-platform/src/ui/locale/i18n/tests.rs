@@ -54,6 +54,8 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.manager_outdated_body, "found"),
             (text.manager_outdated_body, "dekan"),
             (text.manager_outdated_body, "required"),
+            (text.detail_manager_outdated, "found"),
+            (text.detail_manager_outdated, "required"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),

@@ -1,7 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+use crate::identity::IdentityLoadout;
 use crate::mods::ModSelectionView;
 use crate::selection::{ChampionId, ChromaId, SkinId};
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InClientPartyView {
+    pub joinable_friends: usize,
+    pub connected_members: usize,
+    pub local_identity: Option<IdentityLoadout>,
+    pub peer_identities: Vec<(String, IdentityLoadout)>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OverlayCommand {
@@ -13,7 +22,13 @@ pub enum OverlayCommand {
 
     SetMods { selection: ModSelectionView },
 
+    SetIdentity { loadout: Option<IdentityLoadout> },
+
+    JoinLobbyParty,
+
     OpenModsFolder,
+
+    OpenPanel,
 
     ImportMod { category: crate::mods::ModCategory },
 
@@ -118,6 +133,8 @@ pub struct Catalog {
     pub classic: bool,
 
     pub lobby: Vec<LobbyChampion>,
+
+    pub party: InClientPartyView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -6,7 +6,9 @@ export component WelcomeWindow inherits Window {
     in property <string> pill;
     in property <[string]> items;
     in property <string> dismiss-label;
+    in property <string> project-label;
     callback dismiss();
+    callback open-project();
     property <bool> shown;
     title: "Dekan — League of Legends Skin Changer";
     icon: @image-url("assets/logo.png");
@@ -131,14 +133,23 @@ export component WelcomeWindow inherits Window {
         }
         HorizontalLayout {
             alignment: center;
+            spacing: 12px;
             GoldButton {
-                width: 230px;
+                width: 190px;
                 min-height: 40px;
                 horizontal-stretch: 0;
                 primary: true;
                 font-size: Theme.text-base;
                 text: root.dismiss-label;
                 clicked => { root.dismiss(); }
+            }
+            if root.project-label != "": GoldButton {
+                hug: true;
+                min-height: 40px;
+                horizontal-stretch: 0;
+                font-size: Theme.text-base;
+                text: root.project-label;
+                clicked => { root.open-project(); }
             }
         }
     }

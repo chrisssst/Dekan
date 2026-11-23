@@ -1,9 +1,11 @@
 use super::*;
 
-pub(super) const PREVIEW_FETCHES: usize = 4;
+pub(super) const PREVIEW_FETCHES: usize = 16;
 
 pub type PreviewFetches =
     futures_util::stream::BoxStream<'static, (u32, Result<Arc<[u8]>, String>)>;
+
+pub type UrgentPreview = futures_util::future::BoxFuture<'static, (u32, Result<Arc<[u8]>, String>)>;
 
 pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
     use futures_util::StreamExt;
@@ -23,6 +25,18 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
                 .buffer_unordered(PREVIEW_FETCHES)
         })
         .boxed()
+}
+
+pub fn fetch_single_chroma_preview(chroma_id: u32, path: String) -> UrgentPreview {
+    use futures_util::FutureExt;
+    async move {
+        let image = match lcu_client().await {
+            Some(client) => fetch_chroma_preview(&client, &path).await,
+            None => Err("the League client could not be reached".to_owned()),
+        };
+        (chroma_id, image)
+    }
+    .boxed()
 }
 
 pub(super) async fn fetch_chroma_preview(

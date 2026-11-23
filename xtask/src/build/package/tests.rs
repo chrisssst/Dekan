@@ -7,7 +7,8 @@ fn the_shipped_tools_are_the_native_engine_files_dekan_loads() {
         [
             "dekan_launcher.exe",
             "dekan_bridge.dll",
-            "bullet_bridge.dll"
+            "bullet_bridge.dll",
+            "bullet_launcher.exe"
         ]
     );
 }

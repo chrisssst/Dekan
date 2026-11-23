@@ -77,10 +77,14 @@ Source: "..\dist\dekan.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\tools\dekan_launcher.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\dist\tools\dekan_bridge.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\dist\tools\bullet_bridge.dll"; DestDir: "{app}\tools"; Attribs: hidden; Flags: ignoreversion
+Source: "..\dist\tools\bullet_launcher.exe"; DestDir: "{app}\tools"; Attribs: hidden; Flags: ignoreversion
 Source: "..\assets\dekan.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\party.json"; DestDir: "{localappdata}\Dekan\state"; Flags: onlyifdoesntexist
+
+[INI]
+Filename: "{app}\language.ini"; Section: "ui"; Key: "language"; String: "{language}"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\dekan.ico"
@@ -97,6 +101,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
 
 [UninstallDelete]
+Type: files; Name: "{app}\language.ini"
 Type: filesandordirs; Name: "{localappdata}\Dekan\logs"
 Type: filesandordirs; Name: "{localappdata}\Dekan\state"
 Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
@@ -106,6 +111,7 @@ Type: filesandordirs; Name: "{localappdata}\Dekan\tools"
 Type: files; Name: "{app}\tools\dekan_launcher.exe"
 Type: files; Name: "{app}\tools\dekan_bridge.dll"
 Type: files; Name: "{app}\tools\bullet_bridge.dll"
+Type: files; Name: "{app}\tools\bullet_launcher.exe"
 Type: files; Name: "{app}\tools\dekan-br.exe"
 Type: files; Name: "{app}\tools\dekan-br.dll"
 Type: dirifempty; Name: "{app}\tools"
@@ -122,10 +128,29 @@ begin
   Result := WizardSilent and (ExpandConstant('{param:relaunch|0}') = '1');
 end;
 
+procedure RemoveNativeClientShim;
+var
+  Launcher, Current: String;
+  ExitCode: Integer;
+begin
+  Launcher := ExpandConstant('{app}\tools\bullet_launcher.exe');
+  if not RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LeagueClientUx.exe', 'Debugger', Current) then Exit;
+  if CompareText(Current, '"' + Launcher + '" --ux-shim') <> 0 then Exit;
+  if not FileExists(Launcher) then Exit;
+  try
+    if CompareText(GetSHA256OfFile(Launcher), '7cfd70afaeeaa00cb2a0b6f900cf9c916b2b14a8ed047615b6687c7129fdf994') <> 0 then Exit;
+    if not Exec(Launcher, '--remove-ux-shim', '', SW_HIDE, ewWaitUntilTerminated, ExitCode) then
+      Log('Dekan client shim removal did not launch');
+  except
+    Log('Dekan client shim could not be verified for removal');
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir, Listing: String;
 begin
+  if CurUninstallStep = usUninstall then RemoveNativeClientShim;
   if CurUninstallStep = usPostUninstall then
   begin
     DataDir := ExpandConstant('{localappdata}\Dekan');

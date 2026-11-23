@@ -264,6 +264,18 @@ pub fn repair_custom_mods(
         warn!(game_dir = %game_dir.display(), "Custom mods not checked at startup: the game executable was not found");
         return report;
     };
+    let mut root_mods = Vec::with_capacity(roots.len());
+    let mut total_mods = 0usize;
+    for root in roots {
+        let mut mods = Vec::new();
+        collect_mods(root, &mut mods);
+        total_mods += mods.len();
+        root_mods.push((root, mods));
+    }
+    if total_mods == 0 {
+        debug!("No custom mods found; skipping game WAD indexing at startup");
+        return report;
+    }
     let game = match get_or_index_game(game_dir) {
         Ok(game) => game,
         Err(e) => {
@@ -290,9 +302,7 @@ pub fn repair_custom_mods(
     let mut unstamped = 0usize;
     let mut first_unstamped: Option<String> = None;
     let mut repairer = Repairer::new(&game, &hashes);
-    for root in roots {
-        let mut mods = Vec::new();
-        collect_mods(root, &mut mods);
+    for (root, mods) in root_mods {
         let cx = Context {
             root,
             state: state_dir,

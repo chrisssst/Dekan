@@ -28,6 +28,7 @@ pub enum TrayEvent {
 
     ToggleRandomSkin,
     ToggleLightLoading,
+    ToggleInClientUi,
 
     Quit,
 
@@ -41,7 +42,13 @@ pub enum TrayEvent {
 
     OpenRelease,
 
+    OpenProject,
+
     MarkProblem,
 
     ExportDiagnostics,
+
+    RepairSkins,
+
+    RepairClient,
 }

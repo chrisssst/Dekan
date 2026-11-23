@@ -111,15 +111,20 @@ impl OverlayProcess {
     }
 
     pub fn exited(&mut self) -> Option<i32> {
-        let child = self.child.as_mut()?;
-        match child.try_wait() {
-            Ok(Some(status)) => Some(status.code().unwrap_or(-1)),
-            Ok(None) => None,
-            Err(e) => {
-                warn!(error = %e, "The patcher's exit status could not be read");
-                None
-            }
+        if let Some(child) = self.child.as_mut() {
+            return match child.try_wait() {
+                Ok(Some(status)) => Some(status.code().unwrap_or(-1)),
+                Ok(None) => None,
+                Err(e) => {
+                    warn!(error = %e, "The patcher's exit status could not be read");
+                    None
+                }
+            };
         }
+        self._stdout_reader
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+            .then_some(0)
     }
 
     pub async fn exited_within(&mut self, grace: Duration) -> Option<i32> {

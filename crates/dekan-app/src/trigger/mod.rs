@@ -353,6 +353,9 @@ impl InjectionTrigger {
         }
 
         drop(arming);
+        if let Some(running) = active_overlay.take() {
+            running.shutdown().await;
+        }
         if let Some(stale) = armed.take() {
             stale.overlay.shutdown().await;
         }

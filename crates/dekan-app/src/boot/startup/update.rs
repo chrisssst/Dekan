@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -174,6 +175,7 @@ pub fn run_installer(install: Option<ReadyInstall>, instance_guard: Option<Singl
     drop(instance_guard);
     let mut command = std::process::Command::new(&install.setup.path);
     command.args(self_update::SILENT_INSTALL);
+    #[cfg(windows)]
     if let Some(dir) = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))

@@ -147,7 +147,7 @@ pub(crate) fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-pub(crate) const SHIPPED_TOOLS: [&str; 3] = dekan_inject::ltf::native_bundle::SHIPPED_TOOLS;
+pub(crate) const SHIPPED_TOOLS: [&str; 4] = dekan_inject::ltf::native_bundle::SHIPPED_TOOLS;
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {

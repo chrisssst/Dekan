@@ -42,13 +42,9 @@ macro_rules! warn_once {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Lockfile {
     pub process_name: String,
-
     pub pid: u32,
-
     pub port: u16,
-
     pub auth_token: String,
-
     pub protocol: String,
 }
 
@@ -180,12 +176,10 @@ impl Lockfile {
         for proc_name in &dekan_platform::game_version::CLIENT_EXES {
             match ProcessFinder::find_process_path(proc_name) {
                 Ok(Some(exe_path)) => {
-                    let mut candidates = Vec::with_capacity(2);
-                    if let Some(parent) = exe_path.parent() {
-                        candidates.push(parent.join("lockfile"));
-                        if let Some(grandparent) = parent.parent() {
-                            candidates.push(grandparent.join("lockfile"));
-                        }
+                    let mut candidates = Vec::with_capacity(8);
+                    for ancestor in exe_path.ancestors().skip(1).take(7) {
+                        candidates.push(ancestor.join("lockfile"));
+                        candidates.push(ancestor.join("Contents/LoL/lockfile"));
                     }
 
                     for candidate in &candidates {
@@ -220,10 +214,12 @@ impl Lockfile {
         }
 
         for install in dekan_platform::paths::riot_league_installs() {
-            let candidate = install.join("lockfile");
-            if candidate.is_file() {
-                debug!(path = %candidate.display(), source = "riot-client-installs", "Lockfile located");
-                return Some(candidate);
+            for sub in ["lockfile", "Contents/LoL/lockfile"] {
+                let candidate = install.join(sub);
+                if candidate.is_file() {
+                    debug!(path = %candidate.display(), source = "riot-client-installs", "Lockfile located");
+                    return Some(candidate);
+                }
             }
         }
 
@@ -249,23 +245,59 @@ impl Lockfile {
         }
     }
 
-    pub fn discover(explicit_path: Option<&Path>) -> Result<Self, LcuError> {
-        let path = Self::find_lockfile_path(explicit_path).ok_or(LcuError::LockfileNotFound)?;
-        let lockfile = Self::from_file(&path)?;
-
-        if !lockfile.is_client_alive() {
-            warn_once!(
-                &format!("stale:{}:{}", path.display(), lockfile.pid),
-                path = %path.display(),
-                pid = lockfile.pid,
-                port = lockfile.port,
-                "Stale lockfile: the client process is gone. Not connecting"
-            );
-            return Err(LcuError::LockfileNotFound);
+    #[must_use]
+    pub fn parse_ux_cmdline(cmdline: &str, pid: u32) -> Option<Self> {
+        let port = extract_flag(cmdline, "--app-port=")?
+            .parse::<u16>()
+            .ok()
+            .filter(|&p| p > 0)?;
+        let auth_token = extract_flag(cmdline, "--remoting-auth-token=")?;
+        if auth_token.is_empty() {
+            return None;
         }
+        Some(Self {
+            process_name: "LeagueClientUx".to_owned(),
+            pid,
+            port,
+            auth_token,
+            protocol: "https".to_owned(),
+        })
+    }
 
-        clear_report();
-        Ok(lockfile)
+    pub fn discover(explicit_path: Option<&Path>) -> Result<Self, LcuError> {
+        if let Some(path) = Self::find_lockfile_path(explicit_path) {
+            if let Ok(lockfile) = Self::from_file(&path) {
+                if lockfile.is_client_alive() {
+                    clear_report();
+                    return Ok(lockfile);
+                }
+                warn_once!(
+                    &format!("stale:{}:{}", path.display(), lockfile.pid),
+                    path = %path.display(),
+                    pid = lockfile.pid,
+                    port = lockfile.port,
+                    "Stale lockfile: the client process is gone. Not connecting"
+                );
+            }
+        }
+        for proc_name in &dekan_platform::game_version::CLIENT_EXES {
+            if let Some(pid) = ProcessFinder::find_process_by_name(proc_name)
+                .ok()
+                .flatten()
+                && let Some(cmd) = dekan_platform::process::query_process_cmdline(pid)
+                && let Some(found) = Self::parse_ux_cmdline(&cmd, pid)
+            {
+                debug!(
+                    pid = found.pid,
+                    port = found.port,
+                    token_len = found.auth_token.len(),
+                    "LCU credentials recovered from LeagueClientUx command line"
+                );
+                clear_report();
+                return Ok(found);
+            }
+        }
+        Err(LcuError::LockfileNotFound)
     }
 
     #[must_use]
@@ -286,82 +318,16 @@ impl Lockfile {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_valid_lockfile() {
-        let content = "LeagueClient:12345:55667:supersecrettoken:https\n";
-        let lockfile = Lockfile::parse(content).expect("valid lockfile");
-
-        assert_eq!(lockfile.process_name, "LeagueClient");
-        assert_eq!(lockfile.pid, 12345);
-        assert_eq!(lockfile.port, 55667);
-        assert_eq!(lockfile.auth_token, "supersecrettoken");
-        assert_eq!(lockfile.protocol, "https");
-
-        assert_eq!(lockfile.base_url(), "https://127.0.0.1:55667");
-        assert_eq!(lockfile.ws_url(), "wss://127.0.0.1:55667");
-
-        let auth = lockfile.basic_auth_header();
-        assert!(auth.starts_with("Basic "));
-        let raw_b64 = &auth["Basic ".len()..];
-        let decoded = String::from_utf8(BASE64.decode(raw_b64).unwrap()).unwrap();
-        assert_eq!(decoded, "riot:supersecrettoken");
-    }
-
-    #[test]
-    fn test_rejects_missing_fields() {
-        let content = "LeagueClient:12345:55667:token";
-        let err = Lockfile::parse(content).unwrap_err();
-        match err {
-            LcuError::InvalidLockfile(msg) => assert!(msg.contains("expected 5")),
-            other => panic!("expected InvalidLockfile, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_rejects_invalid_port() {
-        let content = "LeagueClient:12345:notaport:token:https";
-        let err = Lockfile::parse(content).unwrap_err();
-        match err {
-            LcuError::InvalidLockfile(msg) => assert!(msg.contains("invalid port")),
-            other => panic!("expected InvalidLockfile, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_rejects_empty_token() {
-        let content = "LeagueClient:12345:55667::https";
-        let err = Lockfile::parse(content).unwrap_err();
-        match err {
-            LcuError::InvalidLockfile(msg) => assert!(msg.contains("token is empty")),
-            other => panic!("expected InvalidLockfile, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_find_lockfile_path_explicit() {
-        let dir = std::env::temp_dir().join(format!("dekan_test_lock_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir); // ignore-ok: test temp dir
-        let lock_path = dir.join("lockfile");
-
-        let live_pid = std::process::id();
-        std::fs::write(
-            &lock_path,
-            format!("LeagueClient:{live_pid}:456:secret:https"),
-        )
-        .unwrap();
-
-        let found = Lockfile::find_lockfile_path(Some(&lock_path));
-        assert_eq!(found, Some(lock_path.clone()));
-
-        let lock = Lockfile::discover(Some(&lock_path)).unwrap();
-        assert_eq!(lock.pid, live_pid);
-        assert_eq!(lock.port, 456);
-        assert_eq!(lock.auth_token, "secret");
-
-        let _ = std::fs::remove_dir_all(&dir); // ignore-ok: test temp dir teardown
-    }
+fn extract_flag(cmdline: &str, prefix: &str) -> Option<String> {
+    let idx = cmdline.find(prefix)?;
+    let rest = &cmdline[idx + prefix.len()..];
+    let val = if let Some(quoted) = rest.strip_prefix('"') {
+        quoted.split('"').next()?
+    } else {
+        rest.split_whitespace().next()?.trim_matches('"')
+    };
+    Some(val.to_owned())
 }
+
+#[cfg(test)]
+mod tests;

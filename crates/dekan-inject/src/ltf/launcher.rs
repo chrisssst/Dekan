@@ -42,22 +42,17 @@ pub fn check_manager_install() -> ManagerInstallState {
 
 #[must_use]
 pub fn find_manager_manager() -> Option<PathBuf> {
-    let program_files = std::env::var("ProgramFiles").ok().map(PathBuf::from);
-    let local_app = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
-
-    let mut candidates = Vec::new();
-    if let Some(pf) = program_files {
-        candidates.push(pf.join("LTK Manager").join("ltk-manager.exe"));
-    }
-    if let Some(la) = local_app {
-        candidates.push(
-            la.join("Programs")
-                .join("LTK Manager")
-                .join("ltk-manager.exe"),
-        );
-    }
-
-    candidates.into_iter().find(|p| p.is_file())
+    let override_path = std::env::var("DEKAN_LTK_MANAGER")
+        .or_else(|_| std::env::var("LTK_MANAGER_EXE"))
+        .ok()
+        .map(PathBuf::from)
+        .filter(|path| path.is_file());
+    override_path.or_else(|| {
+        dekan_platform::version::discover_installed_exe(
+            &["ltk manager", "leaguetoolkit"],
+            &["ltk-manager.exe", "LTK Manager.exe"],
+        )
+    })
 }
 
 #[must_use]
@@ -77,7 +72,7 @@ pub async fn ensure_bridge_running(
     timeout: Duration,
 ) -> Result<BridgeClient, InjectError> {
     let (launcher_exe, bridge_dll) = find_launcher_tools(tools_dirs).ok_or_else(|| {
-        InjectError::Process("Dekan bridge tools are missing; reinstall Dekan 2.2".into())
+        InjectError::Process("Dekan bridge tools are missing; reinstall Dekan 2.3".into())
     })?;
     let tools_dir = launcher_exe
         .parent()

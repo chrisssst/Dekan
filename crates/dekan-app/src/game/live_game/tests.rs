@@ -57,6 +57,7 @@ fn a_skin_change_during_the_match_updates_what_is_marked() {
         &data,
         &live,
         SystemTime::UNIX_EPOCH + Duration::from_secs(1_000),
+        None,
     );
     assert_eq!(watch.last_event, 2, "every event is seen once");
     assert_eq!(live.latest().map(|s| s.skin_id), Some(0));
@@ -66,6 +67,7 @@ fn a_skin_change_during_the_match_updates_what_is_marked() {
         &data,
         &live,
         SystemTime::UNIX_EPOCH + Duration::from_secs(1_060),
+        None,
     );
     let latest = live.latest().expect("snapshot");
     assert_eq!((latest.skin_id, latest.game_time), (44, 700.0));

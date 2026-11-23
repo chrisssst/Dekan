@@ -58,6 +58,7 @@ struct Overlay {
     origin: Option<SelectionOrigin>,
     columns: usize,
     tiles: HashMap<u32, slint::Image>,
+    raw_previews: HashMap<u32, Arc<[u8]>>,
     previews: HashMap<u32, slint::Image>,
     preview_for: Option<u32>,
     presets: PresetsView,
@@ -151,7 +152,7 @@ impl OverlayController {
     }
 
     pub fn set_chroma_preview(&self, chroma_id: u32, image: Arc<[u8]>) {
-        self.post(move |overlay| overlay.deliver_preview(chroma_id, &image));
+        self.post(move |overlay| overlay.deliver_raw_preview(chroma_id, image));
     }
 
     pub fn click(&self, entry_id: u32) {

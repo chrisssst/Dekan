@@ -76,6 +76,14 @@ impl StandardChampion {
         };
         let generated = generated.as_slice();
         let swaps = swaps_of(&gear_bodies)?;
+        let initially_hidden: BTreeSet<u32> =
+            crate::form_marker::mesh_text(generated, "initialSubmeshToHide")?
+                .unwrap_or_default()
+                .split(|c: char| c.is_whitespace() || matches!(c, ',' | '|' | ':'))
+                .filter(|name| !name.is_empty())
+                .map(prop_key_hash)
+                .collect();
+        let swaps = crate::form_state::keep_default_visible(&swaps, &initially_hidden);
         let mut coverage = crate::form_gear::gear_coverage(source, &gear_bodies, &swaps)?;
         coverage.model = merged.as_ref().map(|m| m.outcome());
         if coverage.mesh_swap {
@@ -92,13 +100,6 @@ impl StandardChampion {
             .into_iter()
             .map(|name| name.to_ascii_lowercase())
             .collect();
-        let initially_hidden: BTreeSet<u32> =
-            crate::form_marker::mesh_text(generated, "initialSubmeshToHide")?
-                .unwrap_or_default()
-                .split(|c: char| c.is_whitespace() || matches!(c, ',' | '|' | ':'))
-                .filter(|name| !name.is_empty())
-                .map(prop_key_hash)
-                .collect();
         let mut materials =
             crate::form_gear::material_plan(&gear_bodies, &swaps, &initially_hidden)?;
         materials

@@ -162,6 +162,8 @@ async fn star_lost(state_dir: &Path) -> Option<String> {
     }
 }
 
+const STAR_RECHECK_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(300);
+
 pub async fn watch_star(
     state_dir: PathBuf,
     mut state: dekan_core::state::StateReceiver,
@@ -169,6 +171,7 @@ pub async fn watch_star(
     token: CancellationToken,
 ) {
     let mut last = GamePhase::None;
+    let mut last_confirmed: Option<std::time::Instant> = None;
     loop {
         tokio::select! {
             () = token.cancelled() => return,
@@ -182,7 +185,7 @@ pub async fn watch_star(
         let entered =
             phase != last && matches!(phase, GamePhase::Matchmaking | GamePhase::ChampSelect);
         last = phase;
-        if !entered {
+        if !entered || last_confirmed.is_some_and(|t| t.elapsed() < STAR_RECHECK_COOLDOWN) {
             continue;
         }
         if let Some(login) = star_lost(&state_dir).await {
@@ -195,6 +198,7 @@ pub async fn watch_star(
             shutdown.cancel();
             return;
         }
+        last_confirmed = Some(std::time::Instant::now());
     }
 }
 

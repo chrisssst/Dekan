@@ -59,6 +59,23 @@ pub(super) fn source_keys(character: &str, links: &[String]) -> HashSet<u32> {
         .collect()
 }
 
+pub(super) fn check_mod_metadata(mod_root: &Path, finding: &mut SkinFinding) {
+    for rel in ["META/info.json", "META/manifest.json"] {
+        let path = mod_root.join(rel);
+        let Ok(bytes) = std::fs::read(&path) else {
+            finding
+                .stale_references
+                .push(format!("missing metadata file '{rel}'"));
+            continue;
+        };
+        if serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
+            finding
+                .stale_references
+                .push(format!("invalid JSON in metadata file '{rel}'"));
+        }
+    }
+}
+
 pub(super) fn check_generated_bins(
     champion: &StandardChampion,
     maps: &MapIndex,
@@ -80,6 +97,14 @@ pub(super) fn check_generated_bins(
                 .push(format!("{character}: generated bin unreadable"));
             continue;
         };
+        for prop_entry in &bin.entries {
+            if dekan_wad::prop::tree::parse_fields(&prop_entry.body).is_err() {
+                finding.stale_references.push(format!(
+                    "{character}: entry {:08x} failed field parse",
+                    prop_entry.key_hash
+                ));
+            }
+        }
         let stale = source_keys(&character, &bin.links);
         let stuck = bin
             .entries
@@ -105,23 +130,189 @@ pub(super) fn check_generated_bins(
     }
 }
 
+pub(super) fn valid_texture_bytes(bytes: &[u8]) -> bool {
+    (bytes.len() >= 12
+        && bytes.starts_with(b"TEX\0")
+        && u16::from_le_bytes([bytes[4], bytes[5]]) > 0
+        && u16::from_le_bytes([bytes[6], bytes[7]]) > 0)
+        || (bytes.len() >= 128 && bytes.starts_with(b"DDS "))
+        || bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || bytes.starts_with(b"\xFF\xD8\xFF")
+        || (bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP")
+}
+
+pub(super) fn has_skin_numbered_ref(value: &str, character: &str) -> bool {
+    for segment in value.split('_') {
+        let low = segment.to_ascii_lowercase();
+        if let Some(at) = low.rfind("skin") {
+            let after = &low[at + 4..];
+            let digit_len = after.bytes().take_while(u8::is_ascii_digit).count();
+            let (digits, tail, head) = (&after[..digit_len], &after[digit_len..], &low[..at]);
+            if !digits.is_empty()
+                && digits.bytes().any(|b| b != b'0')
+                && head.bytes().all(|b| b.is_ascii_alphabetic())
+                && tail.bytes().all(|b| b.is_ascii_alphabetic())
+            {
+                return true;
+            }
+        }
+    }
+    let lower = value.to_ascii_lowercase();
+    let char_low = character.to_ascii_lowercase();
+    let plain = char_low.strip_prefix("jade_").unwrap_or(&char_low);
+    let needle = format!("{plain}skin");
+    let mut from = 0;
+    while let Some(pos) = lower[from..].find(&needle) {
+        let after = from + pos + needle.len();
+        if lower
+            .as_bytes()
+            .get(after)
+            .is_some_and(|b| b.is_ascii_digit() && *b != b'0')
+        {
+            return true;
+        }
+        from = after;
+    }
+    false
+}
+
+fn check_single_generated_file(path: &str, bytes: &[u8], finding: &mut SkinFinding) {
+    if path.ends_with(".skn") {
+        if bytes.get(0..4) != Some(&0x0011_2233u32.to_le_bytes()) {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid .skn magic"));
+            return;
+        }
+        let major = bytes
+            .get(4..6)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .unwrap_or(0);
+        if !(1..=4).contains(&major) {
+            finding
+                .stale_references
+                .push(format!("{path}: unsupported .skn major {major}"));
+            return;
+        }
+        if major == 4 {
+            match dekan_classic::skinned_mesh::parse(bytes) {
+                Ok(mesh) => {
+                    if let Err(e) = mesh.validate_submesh_indices() {
+                        finding.stale_references.push(format!("{path}: {e}"));
+                    }
+                    if mesh.submeshes.is_empty()
+                        || mesh.vertices.is_empty()
+                        || mesh.indices.is_empty()
+                        || !(52..=72).contains(&mesh.vertex_size)
+                    {
+                        finding
+                            .stale_references
+                            .push(format!("{path}: degenerate .skn geometry"));
+                    }
+                }
+                Err(e) => finding.stale_references.push(format!("{path}: {e}")),
+            }
+        }
+    } else if path.ends_with(".skl") {
+        if let Ok(skl) = dekan_classic::skeleton::parse(bytes) {
+            let len = skl.joints.len() as i16;
+            if skl.joints.is_empty() || skl.joints.iter().any(|j| j.parent < -1 || j.parent >= len)
+            {
+                finding
+                    .stale_references
+                    .push(format!("{path}: invalid skeleton joint hierarchy"));
+            }
+        }
+    } else if path.ends_with(".anm") {
+        if bytes.len() < 12 || (!bytes.starts_with(b"r3d2anmd") && !bytes.starts_with(b"r3d2canm"))
+        {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid .anm header"));
+        }
+    } else if path.ends_with(".tex")
+        || path.ends_with(".dds")
+        || path.ends_with(".png")
+        || path.ends_with(".jpg")
+        || path.ends_with(".jpeg")
+        || path.ends_with(".webp")
+    {
+        if !valid_texture_bytes(bytes) {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid texture header"));
+        }
+    } else if path.ends_with(".bnk") {
+        if !bytes.starts_with(b"BKHD") || dekan_classic::sound_bank::parse(bytes).is_err() {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid .bnk soundbank"));
+        }
+    } else if path.ends_with(".wpk") {
+        if bytes.len() < 12 || !bytes.starts_with(b"r3d2") {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid .wpk header"));
+        }
+    } else if path.ends_with(".wem") {
+        if bytes.len() < 12 || !bytes.starts_with(b"RIFF") {
+            finding
+                .stale_references
+                .push(format!("{path}: invalid .wem header"));
+        }
+    } else if path.ends_with(".bin") {
+        match dekan_wad::prop::parse_prop_file(bytes) {
+            Ok(prop) => {
+                for entry in &prop.entries {
+                    if dekan_wad::prop::tree::parse_fields(&entry.body).is_err() {
+                        finding.stale_references.push(format!(
+                            "{path}: entry {:08x} failed field parse",
+                            entry.key_hash
+                        ));
+                    }
+                }
+            }
+            Err(e) => finding
+                .stale_references
+                .push(format!("{path}: invalid PROP bin: {e}")),
+        }
+    } else if (path.ends_with(".scb") && !bytes.starts_with(b"r3d2Mesh"))
+        || (path.ends_with(".sco") && !bytes.starts_with(b"[ObjectBegin]"))
+        || (path.ends_with(".mapgeo") && !bytes.starts_with(b"OEGM"))
+        || (path.ends_with(".nvr") && !bytes.starts_with(b"NVR\0"))
+        || (path.ends_with(".wgeo") && !bytes.starts_with(b"WGEO"))
+        || (path.ends_with(".stringtable") && !bytes.starts_with(b"RST"))
+        || ((path.ends_with(".gmesh")
+            || path.ends_with(".tmesh")
+            || path.ends_with(".troybin")
+            || path.ends_with(".aimesh_ngrid")
+            || path.ends_with(".ngrid_overlay")
+            || path.ends_with(".rg_overlay"))
+            && bytes.is_empty())
+    {
+        finding
+            .stale_references
+            .push(format!("{path}: invalid format header or empty payload"));
+    }
+}
+
 pub(super) fn check_generated_meshes(
     wad_root: &Path,
     written: &HashSet<String>,
     finding: &mut SkinFinding,
 ) {
-    for path in written.iter().filter(|path| path.ends_with(".skn")) {
+    let mut seen_hashes = HashSet::with_capacity(written.len());
+    for path in written {
+        let hash = wad_path_hash(path);
+        if hash == 0 || !seen_hashes.insert(hash) {
+            finding.stale_references.push(format!(
+                "{path}: invalid or colliding WAD path hash {hash:016x}"
+            ));
+        }
         let Ok(bytes) = std::fs::read(wad_root.join(path)) else {
             continue;
         };
-        if bytes.get(4..6) != Some(&4u16.to_le_bytes()) {
-            continue;
-        }
-        let check = dekan_classic::skinned_mesh::parse(&bytes)
-            .and_then(|mesh| mesh.validate_submesh_indices());
-        if let Err(error) = check {
-            finding.stale_references.push(format!("{path}: {error}"));
-        }
+        check_single_generated_file(path, &bytes, finding);
     }
 }
 

@@ -1,20 +1,25 @@
 {
-  "origin": "Files supplied by the maintainer for the Dekan 2.2 native bridge integration",
+  "origin": "Latest Windows x64 bridge files supplied by the maintainer with the 1.16 update",
   "files": [
     {
       "file": "dekan_launcher.exe",
-      "size": 336384,
-      "sha256": "23c941d2df0041e0a8bfb7d2fb0f4504ad215fc5a8d5ec64fd95a067ac9966f5"
+      "size": 376832,
+      "sha256": "7cfd70afaeeaa00cb2a0b6f900cf9c916b2b14a8ed047615b6687c7129fdf994"
     },
     {
       "file": "dekan_bridge.dll",
-      "size": 527872,
-      "sha256": "2556c5e8c5d834eab710b77fb8e61844ef5665f593f71b7bd311af9f9a20d7c2"
+      "size": 530432,
+      "sha256": "73c81ad10b5e5a7d4fb8503c6436cf45d7b0af3fd09932a96ef4e22f11f89a9c"
     }
   ],
   "compatibility_alias": {
     "file": "bullet_bridge.dll",
     "source": "dekan_bridge.dll",
     "reason": "The supplied launcher requires this basename; the installer marks this duplicate hidden."
+  },
+  "client_shim_compatibility_alias": {
+    "file": "bullet_launcher.exe",
+    "source": "dekan_launcher.exe",
+    "reason": "The supplied helper recognizes its own IFEO registration by the bullet_launcher basename and --ux-shim flag; the installer marks this identical copy hidden."
   }
 }

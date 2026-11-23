@@ -106,6 +106,7 @@ fn test_restore_waits_for_a_running_check_and_a_check_waits_for_restore() {
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup
 }
 
+#[cfg(windows)]
 #[test]
 fn test_a_restore_that_cannot_put_a_file_back_reports_it_and_keeps_the_rest_consistent() {
     let dir = temp("restore_fail");

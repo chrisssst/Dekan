@@ -14,7 +14,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::{HRESULT, PWSTR};
 
-pub use super::desktop::{is_default_desktop, process_desktop, terminate_process};
+pub use super::desktop::{
+    is_default_desktop, process_desktop, query_process_cmdline, terminate_process,
+};
 
 use tracing::debug;
 

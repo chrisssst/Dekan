@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use dekan_wad::hash::wad_path_hash;
 use dekan_wad::wad::WadFile;
@@ -83,77 +83,80 @@ pub(super) struct ParsedEventBank {
     pub version: u32,
     sections: Vec<Section>,
     objects: Vec<Object>,
+    event_index: HashMap<u32, usize>,
     pub modified: bool,
 }
 
 impl ParsedEventBank {
     pub fn parse_bytes(bytes: &[u8]) -> Result<Self, ClassicError> {
-        let bank = sound_bank::parse(bytes)?;
+        let (bank, objects) = sound_bank::parse_with_objects(bytes)?;
         let version = bank
             .version()
             .ok_or_else(|| ClassicError::Audio("bank has no BKHD chunk".into()))?;
-        let objects = bank.objects()?;
+        let mut event_index = HashMap::new();
+        for (idx, obj) in objects.iter().enumerate() {
+            if obj.kind == HIRC_EVENT {
+                event_index.entry(obj.id).or_insert(idx);
+            }
+        }
         Ok(Self {
             version,
             sections: bank.sections,
             objects,
+            event_index,
             modified: false,
         })
     }
 
     pub fn event_ids(&self) -> Vec<u32> {
-        self.objects
-            .iter()
-            .filter(|o| o.kind == HIRC_EVENT)
-            .map(|o| o.id)
-            .collect()
+        self.event_index.keys().copied().collect()
     }
 
     pub fn has_event(&self, event_id: u32) -> bool {
-        self.objects
-            .iter()
-            .any(|o| o.kind == HIRC_EVENT && o.id == event_id)
+        self.event_index.contains_key(&event_id)
     }
 
     pub fn event_actions(&self, event_id: u32) -> Option<Vec<u32>> {
-        let obj = self
-            .objects
-            .iter()
-            .find(|o| o.kind == HIRC_EVENT && o.id == event_id)?;
+        let &idx = self.event_index.get(&event_id)?;
+        let obj = self.objects.get(idx)?;
         decode_actions(&obj.payload, self.version)
     }
 
     pub fn set_or_add_event(&mut self, event_id: u32, actions: &[u32]) {
         let body = encode_actions(actions, self.version);
-        let mut found = false;
-        for obj in &mut self.objects {
-            if obj.kind == HIRC_EVENT && obj.id == event_id {
-                found = true;
+        if let Some(&idx) = self.event_index.get(&event_id) {
+            if let Some(obj) = self.objects.get_mut(idx) {
                 if obj.payload != body {
-                    obj.payload = body.clone();
+                    obj.payload = body;
                     self.modified = true;
                 }
             }
-        }
-        if !found {
+        } else {
+            let idx = self.objects.len();
             self.objects.push(Object {
                 kind: HIRC_EVENT,
                 id: event_id,
                 payload: body,
             });
+            self.event_index.insert(event_id, idx);
             self.modified = true;
         }
     }
 
     pub fn remove_event(&mut self, event_id: u32) -> bool {
-        let before = self.objects.len();
+        if self.event_index.remove(&event_id).is_none() {
+            return false;
+        }
         self.objects
             .retain(|o| !(o.kind == HIRC_EVENT && o.id == event_id));
-        let changed = self.objects.len() != before;
-        if changed {
-            self.modified = true;
+        self.event_index.clear();
+        for (idx, obj) in self.objects.iter().enumerate() {
+            if obj.kind == HIRC_EVENT {
+                self.event_index.entry(obj.id).or_insert(idx);
+            }
         }
-        changed
+        self.modified = true;
+        true
     }
 
     pub fn write(&self) -> Result<Vec<u8>, ClassicError> {
@@ -289,10 +292,15 @@ pub(super) fn sidecar_path(source: &str) -> String {
     format!("{prefix}{stem}_basetag_events.bnk")
 }
 
+pub(super) struct LocaleWadSlot {
+    path: PathBuf,
+    opened: Option<Option<WadFile>>,
+}
+
 pub(super) fn load_bank(
     main_wad: &WadFile,
     wad_root: &Path,
-    locale_wads: &mut Option<Vec<WadFile>>,
+    locale_wads: &mut Option<Vec<LocaleWadSlot>>,
     bank_path: &str,
 ) -> Option<LoadedBank> {
     let lower = bank_path.to_ascii_lowercase();
@@ -315,22 +323,26 @@ pub(super) fn load_bank(
             bank,
         });
     }
-    let wads = locale_wads.get_or_insert_with(|| discover_locale_wads(main_wad.path()));
-    for lwad in wads.iter() {
-        if let Ok(Some(bytes)) = lwad.read(hash) {
-            if let Ok(bank) = ParsedEventBank::parse_bytes(&bytes) {
-                return Some(LoadedBank {
-                    path: bank_path.to_owned(),
-                    localized: true,
-                    bank,
-                });
-            }
+    let slots = locale_wads.get_or_insert_with(|| discover_locale_wad_paths(main_wad.path()));
+    for slot in slots.iter_mut() {
+        let wad_opt = slot
+            .opened
+            .get_or_insert_with(|| WadFile::open(&slot.path).ok());
+        if let Some(lwad) = wad_opt.as_ref()
+            && let Ok(Some(bytes)) = lwad.read(hash)
+            && let Ok(bank) = ParsedEventBank::parse_bytes(&bytes)
+        {
+            return Some(LoadedBank {
+                path: bank_path.to_owned(),
+                localized: true,
+                bank,
+            });
         }
     }
     None
 }
 
-fn discover_locale_wads(main_path: &Path) -> Vec<WadFile> {
+fn discover_locale_wad_paths(main_path: &Path) -> Vec<LocaleWadSlot> {
     let Some(dir) = main_path.parent() else {
         return Vec::new();
     };
@@ -357,9 +369,10 @@ fn discover_locale_wads(main_path: &Path) -> Vec<WadFile> {
             continue;
         };
         if is_locale_segment(locale) {
-            if let Ok(wad) = WadFile::open(&p) {
-                out.push(wad);
-            }
+            out.push(LocaleWadSlot {
+                path: p,
+                opened: None,
+            });
         }
     }
     out

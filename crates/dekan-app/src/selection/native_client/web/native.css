@@ -1,0 +1,173 @@
+
+    .skin-selection-carousel .skin-selection-item.disabled,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"] {
+      filter: grayscale(0) saturate(1.1) contrast(1.05) !important; -webkit-filter: grayscale(0) saturate(1.1) contrast(1.05) !important;
+      pointer-events: auto !important; cursor: pointer !important;
+    }
+    .skin-selection-carousel .skin-selection-item .skin-selection-thumbnail,
+    .skin-selection-carousel .skin-selection-item.disabled .skin-selection-thumbnail,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"] .skin-selection-thumbnail {
+      filter: grayscale(0) saturate(1.15) contrast(1.05) !important; -webkit-filter: grayscale(0) saturate(1.15) contrast(1.05) !important;
+      transition: filter 0.2s ease !important;
+    }
+    .skin-selection-carousel .skin-selection-item:not(.skin-selection-item-selected):hover .skin-selection-thumbnail {
+      filter: brightness(1.2) saturate(1.12) !important; -webkit-filter: brightness(1.2) saturate(1.12) !important;
+    }
+    .skin-selection-carousel .skin-selection-item.disabled::before,
+    .skin-selection-carousel .skin-selection-item.disabled::after,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"]::before,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"]::after,
+    .skin-selection-carousel .skin-selection-item.disabled .skin-selection-thumbnail::before,
+    .skin-selection-carousel .skin-selection-item.disabled .skin-selection-thumbnail::after,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"] .skin-selection-thumbnail::before,
+    .skin-selection-carousel .skin-selection-item[aria-disabled="true"] .skin-selection-thumbnail::after { display: none !important; }
+    .skin-selection-carousel .skin-selection-item.dekan-skin-hidden {
+      pointer-events: none !important; opacity: 0 !important; visibility: hidden !important;
+    }
+    .locked-state, .skin-RP-price, .unlock-skin-hit-area, .unlock-skin-hit-area .locked-state,
+    .skin-selection-item-information.loyalty-reward-icon,
+    .quick-play-skin-select-component .thumbnail-wrapper.unowned .locked-overlay,
+    .skins-pane .skins-pane__locked-overlay, .skins-pane .skins-pane__locked-icon,
+    .shared-skin-chroma-modal, .chroma-button.chroma-selection, .outer-mask .chroma-button, .chroma.icon {
+      display: none !important; pointer-events: none !important;
+    }
+    .champion-select .uikit-background-switcher.locked:after { background: none !important; }
+    .thumbnail-wrapper, .skin-thumbnail-img, .skins-pane .skins-pane__skin-card, .skins-pane .skins-pane__skin-image {
+      filter: grayscale(0) saturate(1) contrast(1) !important; -webkit-filter: grayscale(0) saturate(1) contrast(1) !important;
+    }
+    .quick-play-skin-select-component .thumbnail-wrapper.unowned { pointer-events: auto !important; cursor: pointer !important; opacity: 1 !important; }
+    .skin-selection-carousel-container { clip-path: inset(-16px 0px -36px 0px) !important; }
+    .skin-selection-carousel-container .skin-selection-carousel .skin-selection-item .skin-selection-thumbnail {
+      height: 100% !important; margin: 0 !important; transform: none !important;
+    }
+    .skin-selection-carousel .skin-selection-item.skin-carousel-offset-2 .skin-selection-thumbnail {
+      outline: 2px solid #d2b26e; outline-offset: -2px; box-shadow: inset 0 0 12px rgba(210, 178, 110, 0.35);
+    }
+    .dekan-chroma-btn {
+      position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%) translateY(50%);
+      width: 26px; height: 26px; border-radius: 50%; padding: 2px; box-sizing: border-box;
+      background: linear-gradient(0deg, #695625 0%, #a9852d 28%, #b88d35 88%, #e0c48a 100%);
+      display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 30;
+      pointer-events: auto !important; -webkit-app-region: no-drag;
+      box-shadow: 0 2px 8px rgba(1, 10, 19, 0.85); user-select: none;
+      transition: transform 0.14s ease, box-shadow 0.14s ease;
+    }
+    .dekan-chroma-btn:hover { transform: translateX(-50%) translateY(50%) scale(1.1); box-shadow: 0 0 12px rgba(210, 178, 110, 0.65); }
+    .skins-pane .skins-pane__skin-card--center-tile .dekan-chroma-btn {
+      bottom: 12px; transform: translateX(-50%); z-index: 50;
+    }
+    .skins-pane .skins-pane__skin-card--center-tile .dekan-chroma-btn:hover {
+      transform: translateX(-50%) scale(1.1);
+    }
+    .dekan-chroma-core {
+      width: 100%; height: 100%; border-radius: 50%; border: 2px solid #010a13; box-sizing: border-box;
+      background: url(/fe/lol-champ-select/images/config/button-chroma.png) center/contain no-repeat,
+        conic-gradient(#d2b26e, #18d4c4, #a855f7, #e05263, #d2b26e);
+      box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.7);
+    }
+    #dekan-chroma-flyout {
+      position: fixed; z-index: 10000; pointer-events: auto !important; -webkit-app-region: no-drag;
+      overflow: visible; -webkit-user-select: none;
+    }
+    #dekan-chroma-flyout .champ-select-chroma-modal {
+      width: 305px; display: flex; flex-direction: column; background: #010a13; position: relative;
+      border: 2px solid transparent; border-image: linear-gradient(to top, #785a28 0%, #c8aa6e 100%) 1;
+      box-shadow: 0 0 0 1px rgba(1, 10, 19, 0.85), 0 12px 32px rgba(0, 0, 0, 0.92);
+    }
+    #dekan-chroma-flyout .chroma-information {
+      width: 100%; height: 305px; position: relative; border-bottom: 1px solid #463714;
+      background-color: #010a13; background-size: cover; background-position: center;
+      background-image: url("/lol-game-data/assets/content/src/LeagueClient/GameModeAssets/Classic_SRU/img/champ-select-flyout-background.jpg");
+    }
+    #dekan-chroma-flyout .chroma-information-image {
+      position: absolute; inset: 8px 8px 34px 8px; display: flex; align-items: center; justify-content: center;
+    }
+    #dekan-chroma-flyout .chroma-information-image img {
+      max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none;
+    }
+    #dekan-chroma-flyout .child-skin-name {
+      position: absolute; left: 0; right: 0; bottom: 8px; padding: 0 12px; text-align: center;
+      color: #f0e6d2; font-family: "LoL Display", "Beaufort for LOL", serif;
+      font-size: 19px; font-weight: 700; letter-spacing: 0.03em;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+    }
+    #dekan-chroma-flyout .chroma-selection {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+      gap: 9px; padding: 10px 12px; max-height: 98px; overflow-y: auto; background: #010a13;
+    }
+    #dekan-chroma-flyout .dekan-swatch {
+      width: 22px; height: 22px; border-radius: 50%; border: 2px solid #010a13; box-sizing: border-box;
+      box-shadow: 0 0 0 1px #463714; cursor: pointer; transition: box-shadow 0.14s ease, transform 0.12s ease;
+    }
+    #dekan-chroma-flyout .dekan-swatch:hover { box-shadow: 0 0 0 2px #f0e6d2; transform: scale(1.08); }
+    #dekan-chroma-flyout .dekan-swatch.active { box-shadow: 0 0 0 2px #c8aa6e, 0 0 8px rgba(200, 170, 110, 0.65); }
+    #dekan-chroma-flyout .dekan-flyout-forms {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; background: #010a13;
+      justify-content: center; overflow-y: auto; max-height: 108px;
+    }
+    #dekan-chroma-flyout .dekan-form-pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+      border: 1px solid #463714; background: #0a1420; color: #cdbe91;
+      font-family: "Beaufort for LOL", "Spiegel", sans-serif; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.04em; cursor: pointer; transition: border-color 0.14s ease, background 0.14s ease;
+    }
+    #dekan-chroma-flyout .dekan-form-pill:hover,
+    #dekan-chroma-flyout .dekan-form-pill.active {
+      border-color: #c8aa6e; background: #1e2328; color: #f0e6d2;
+    }
+    #dekan-chroma-flyout .dekan-form-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    lol-uikit-navigation-item#dekan-nav-btn { cursor: pointer; pointer-events: auto !important; -webkit-app-region: no-drag; }
+    lol-uikit-navigation-item#dekan-nav-btn .menu-item-icon-wrapper { width: 32px; height: 32px; }
+    lol-uikit-navigation-item#dekan-nav-btn .menu-item-glow { margin-left: 16px; }
+    lol-uikit-navigation-item#dekan-nav-btn .menu-item-icon.dekan-nav-ico { width: 32px; height: 32px; margin: 0 0 0 -16px; }
+    lol-uikit-navigation-item#dekan-nav-btn.open .menu-item-icon { background: rgb(240, 230, 210); }
+    #dekan-nav-popover {
+      position: fixed; z-index: 10001; pointer-events: auto !important; -webkit-app-region: no-drag;
+      overflow: visible; -webkit-user-select: none;
+    }
+    #dekan-nav-popover .dekan-pop-frame {
+      width: 344px; max-height: 440px; display: flex; flex-direction: column;
+      background: #010a13; color: #cdbe91; overflow: hidden;
+      border: 2px solid transparent; border-image: linear-gradient(to top, #785a28 0%, #c8aa6e 100%) 1;
+      box-shadow: 0 0 0 1px rgba(1, 10, 19, 0.85), 0 14px 36px rgba(0, 0, 0, 0.92);
+      font-family: "Spiegel", "Segoe UI", sans-serif;
+    }
+    #dekan-nav-popover .dekan-pop-head {
+      display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 0;
+      border-bottom: 1px solid #463714; background: linear-gradient(180deg, #091422 0%, #010a13 100%);
+    }
+    #dekan-nav-popover .dekan-pop-brand {
+      font-family: "Beaufort for LOL", "LoL Display", serif; font-size: 13px; font-weight: 700;
+      letter-spacing: 0.14em; color: #f0e6d2; padding-bottom: 10px;
+    }
+    #dekan-nav-popover .dekan-pop-tabs { display: flex; gap: 14px; }
+    #dekan-nav-popover .dekan-pop-tab {
+      border: 0; border-bottom: 2px solid transparent; background: transparent; color: #a09b8c;
+      font-family: "Beaufort for LOL", serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; padding: 2px 2px 9px; cursor: pointer;
+    }
+    #dekan-nav-popover .dekan-pop-tab:hover { color: #f0e6d2; }
+    #dekan-nav-popover .dekan-pop-tab.active { color: #f0e6d2; border-bottom-color: #c8aa6e; }
+    #dekan-nav-popover .dekan-pop-body { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+    #dekan-nav-popover .dekan-mod-group-title {
+      font-family: "Beaufort for LOL", serif; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; color: #c8aa6e; text-transform: uppercase; margin-bottom: 5px;
+    }
+    #dekan-nav-popover .dekan-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    #dekan-nav-popover .dekan-chip {
+      border: 1px solid #463714; background: #0a1420; color: #cdbe91;
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #dekan-nav-popover .dekan-chip:hover { border-color: #c8aa6e; color: #f0e6d2; }
+    #dekan-nav-popover .dekan-chip.active { border-color: #c8aa6e; background: #1e2328; color: #f0e6d2; }
+    #dekan-nav-popover .dekan-pop-btn {
+      width: 100%; border: 1px solid #785a28; background: #1e2328; color: #cdbe91;
+      font-family: "Beaufort for LOL", serif; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 12px; cursor: pointer; text-align: center;
+    }
+    #dekan-nav-popover .dekan-pop-btn.primary {
+      border-color: #c8aa6e; background: linear-gradient(180deg, #1e282d 0%, #141a20 100%); color: #f0e6d2;
+    }
+    #dekan-nav-popover .dekan-pop-btn:hover { border-color: #f0e6d2; background: #1e282d; color: #f0e6d2; }
+    #dekan-nav-popover .dekan-pop-empty { font-size: 12px; color: #a09b8c; line-height: 1.4; }

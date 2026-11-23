@@ -6,8 +6,21 @@ use dekan_platform::panel::{PanelCheck, PanelSnapshot};
 
 mod export;
 mod redact;
+mod repair;
 
 pub use export::export_diagnostics;
+pub use repair::{
+    REPAIR_STATE_BUSY, REPAIR_STATE_ERROR, REPAIR_STATE_IDLE, REPAIR_STATE_OK, RepairClientReport,
+    RepairSkinsReport, RepairState, format_client_feedback, format_skins_feedback, repair_client,
+    repair_skins_and_mods,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManagerStatus {
+    Ready { version: Option<String> },
+    Outdated { found: String, required: String },
+    Missing,
+}
 
 #[derive(Debug, Clone)]
 pub struct Facts {
@@ -18,13 +31,17 @@ pub struct Facts {
     pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
+    pub in_client_ui: bool,
     pub autostart: bool,
     pub tools_present: bool,
+    pub manager: ManagerStatus,
     pub game_found: bool,
     pub lcu_connected: bool,
     pub elevated: bool,
     pub update: Option<String>,
     pub custom_mods: Option<crate::mod_repair::ScanSummary>,
+    pub stats: dekan_platform::panel::PanelStats,
+    pub repair: dekan_platform::panel::PanelRepair,
 }
 
 #[must_use]
@@ -76,6 +93,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         injection: facts.injection,
         random_skin: facts.random_skin,
         light_loading: facts.light_loading,
+        in_client_ui: facts.in_client_ui,
         autostart: facts.autostart,
         update_line: facts.update.as_deref().map(|latest| {
             fill(
@@ -84,6 +102,8 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 dekan_platform::version::display_version(),
             )
         }),
+        stats: facts.stats.clone(),
+        repair: facts.repair.clone(),
         checks: vec![
             check(
                 text.check_injector,
@@ -95,6 +115,24 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 }
                 .to_owned(),
             ),
+            {
+                let (ok, detail) = match &facts.manager {
+                    ManagerStatus::Ready { version: Some(v) } => {
+                        (true, format!("{} (v{v})", text.detail_ok))
+                    }
+                    ManagerStatus::Ready { version: None } => (true, text.detail_ok.to_owned()),
+                    ManagerStatus::Outdated { found, required } => (
+                        false,
+                        fill(
+                            &fill(text.detail_manager_outdated, "found", found),
+                            "required",
+                            required,
+                        ),
+                    ),
+                    ManagerStatus::Missing => (false, text.detail_manager_missing.to_owned()),
+                };
+                check(text.check_manager, ok, detail)
+            },
             check(
                 text.check_game,
                 facts.game_found,

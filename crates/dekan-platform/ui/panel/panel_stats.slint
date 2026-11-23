@@ -1,0 +1,141 @@
+import { Theme } from "../theme.slint";
+import { PanelSkinStatRow } from "panel_types.slint";
+
+export component StatsCard inherits Rectangle {
+    in property <string> heading;
+    in property <string> empty-text;
+    in property <string> games-suffix;
+    in property <string> wins-short;
+    in property <string> losses-short;
+    in property <int> wins: 0;
+    in property <int> losses: 0;
+    in property <int> winrate: 0;
+    in property <[PanelSkinStatRow]> rows: [];
+
+    property <int> total: root.wins + root.losses;
+    property <bool> positive: root.winrate >= 50;
+
+    border-radius: 12px;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.surface-line;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: root.heading;
+                color: Theme.gold-bright;
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                letter-spacing: 0.9px;
+                vertical-alignment: center;
+            }
+            if root.total > 0: Text {
+                text: root.total + " " + root.games-suffix;
+                color: Theme.muted;
+                font-size: Theme.text-xs;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.total == 0: Text {
+            text: root.empty-text;
+            color: Theme.muted;
+            font-size: Theme.text-sm;
+            wrap: word-wrap;
+        }
+
+        if root.total > 0: VerticalLayout {
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                Text {
+                    text: root.winrate + "%";
+                    color: root.positive ? Theme.cyan : Theme.danger-text;
+                    font-size: Theme.text-xl;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text {
+                            text: root.wins + root.wins-short;
+                            color: Theme.cyan;
+                            font-size: Theme.text-sm;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "/";
+                            color: Theme.muted;
+                            font-size: Theme.text-sm;
+                        }
+                        Text {
+                            text: root.losses + root.losses-short;
+                            color: Theme.danger-text;
+                            font-size: Theme.text-sm;
+                            font-weight: 700;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 6px;
+                border-radius: 3px;
+                background: #3b1e24;
+                clip: true;
+
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    height: parent.height;
+                    width: parent.width * clamp(root.winrate, 0, 100) / 100;
+                    border-radius: 3px;
+                    background: Theme.cyan;
+                }
+            }
+
+            if root.rows.length > 0: Rectangle {
+                height: 1px;
+                background: Theme.surface-line;
+            }
+
+            for row in root.rows: HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: row.name;
+                    color: Theme.text;
+                    font-size: Theme.text-sm;
+                    font-weight: 500;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: row.record;
+                    color: Theme.muted;
+                    font-size: Theme.text-xs;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: row.winrate + "%";
+                    color: row.winrate >= 50 ? Theme.cyan : Theme.danger-text;
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    min-width: 32px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

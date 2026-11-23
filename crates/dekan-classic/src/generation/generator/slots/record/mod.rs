@@ -29,34 +29,6 @@ pub(crate) fn skin_bin_facts(bytes: &[u8]) -> Option<SkinBinFacts> {
     })
 }
 
-pub(crate) fn object_changes(source: &[u8], generated: &[u8]) -> Vec<serde_json::Value> {
-    let (Ok(before), Ok(after)) = (parse_prop_file(source), parse_prop_file(generated)) else {
-        return Vec::new();
-    };
-    after
-        .entries
-        .iter()
-        .map(|made| {
-            let original = before
-                .entries
-                .iter()
-                .find(|e| e.class_hash == made.class_hash);
-            let changes = original.map(|o| dekan_wad::prop::diff_fields(&o.body, &made.body));
-            serde_json::json!({
-                "class": format!("{:08x}", made.class_hash),
-                "key": format!("{:08x}", made.key_hash),
-                "source_key": original.map(|o| format!("{:08x}", o.key_hash)),
-                "bytes": made.body.len(),
-                "field_changes": match changes {
-                    Some(Ok(list)) => serde_json::to_value(list).unwrap_or_default(),
-                    Some(Err(e)) => serde_json::json!({ "unreadable": e.to_string() }),
-                    None => serde_json::json!({ "unreadable": "no object of this class in the source bin" }),
-                },
-            })
-        })
-        .collect()
-}
-
 pub(crate) fn generated_bin_record(
     alias: &str,
     character: &str,
@@ -78,14 +50,6 @@ pub(crate) fn generated_bin_record(
     };
     let before = facts(source, "source");
     let after = facts(generated, "generated");
-    let objects = object_changes(source, generated);
-    let changed_fields: usize = objects
-        .iter()
-        .filter_map(|o| o["field_changes"].as_array().map(Vec::len))
-        .sum();
-    let unreadable = objects
-        .iter()
-        .any(|o| o["field_changes"].get("unreadable").is_some());
     let source_checksum = format!("{:016x}", dekan_wad::hash::content_checksum(source));
     let generated_checksum = format!("{:016x}", dekan_wad::hash::content_checksum(generated));
     let graph = after.animation_graph.map(|h| format!("{h:08x}"));
@@ -104,25 +68,8 @@ pub(crate) fn generated_bin_record(
         classification_after = ?after.classification,
         animation_graph = ?graph,
         animation_graph_is_source = before.animation_graph == after.animation_graph,
-        changed_fields,
-        unreadable_objects = unreadable,
         "Skin bin generated for slot 0"
     );
-    for object in &objects {
-        if let Some(list) = object["field_changes"].as_array() {
-            for change in list {
-                debug!(
-                    alias,
-                    character,
-                    class = %object["class"],
-                    path = %change["path"],
-                    before = %change["before"],
-                    after = %change["after"],
-                    "Generated field differs from the source bin"
-                );
-            }
-        }
-    }
     debug!(alias, character, source_skin, links = ?after.links, "Skin bin links");
     serde_json::json!({
         "character": character,
@@ -133,11 +80,11 @@ pub(crate) fn generated_bin_record(
         "source_checksum": source_checksum,
         "generated_bytes": generated.len(),
         "generated_checksum": generated_checksum,
+        "source_objects": before.objects,
+        "kept_objects": after.objects,
         "links": after.links,
-        "source_links": before.links,
         "classification_before": before.classification,
         "classification_after": after.classification,
         "animation_graph": graph,
-        "objects": objects,
     })
 }

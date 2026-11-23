@@ -1,3 +1,6 @@
+mod install;
+pub use install::installed_language;
+
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +53,9 @@ impl Language {
 
     #[must_use]
     pub fn for_locale(locale: Option<&str>) -> Self {
-        locale.and_then(Self::from_locale).unwrap_or(Self::Turkish)
+        installed_language()
+            .or_else(|| locale.and_then(Self::from_locale))
+            .unwrap_or(Self::Turkish)
     }
 
     #[must_use]
@@ -79,6 +84,9 @@ pub fn reset_active_language() {
 
 #[must_use]
 pub fn active_language() -> Language {
+    if let Some(language) = installed_language() {
+        return language;
+    }
     match *ACTIVE_LANGUAGE.read().unwrap_or_else(|e| e.into_inner()) {
         Some(lang) => lang,
         None => Language::Turkish,
@@ -146,14 +154,21 @@ pub struct Text {
     pub panel_random_skin_hint: &'static str,
     pub menu_injection: &'static str,
     pub panel_injection_hint: &'static str,
+    pub panel_mode_title: &'static str,
+    pub panel_mode_window: &'static str,
+    pub menu_in_client_ui: &'static str,
+    pub panel_in_client_ui_hint: &'static str,
     pub menu_light_loading: &'static str,
     pub panel_light_loading_hint: &'static str,
     pub check_injector: &'static str,
+    pub check_manager: &'static str,
     pub check_game: &'static str,
     pub check_client: &'static str,
     pub check_privileges: &'static str,
     pub detail_ok: &'static str,
     pub detail_injector_missing: &'static str,
+    pub detail_manager_missing: &'static str,
+    pub detail_manager_outdated: &'static str,
     pub detail_game_missing: &'static str,
     pub detail_client_connected: &'static str,
     pub detail_client_waiting: &'static str,
@@ -180,6 +195,8 @@ pub struct Text {
     pub panel_mark_problem: &'static str,
     pub panel_mark_problem_hint: &'static str,
     pub panel_export_diagnostics: &'static str,
+    pub panel_open_project: &'static str,
+    pub panel_project_star_hint: &'static str,
 
     pub missing_tools_title: &'static str,
     pub missing_tools_body: &'static str,
@@ -314,6 +331,22 @@ pub struct Text {
     pub manager_missing_body: &'static str,
     pub manager_outdated_title: &'static str,
     pub manager_outdated_body: &'static str,
+
+    pub panel_repair_skins: &'static str,
+    pub panel_repair_client: &'static str,
+    pub panel_repair_running: &'static str,
+    pub panel_repair_skins_running: &'static str,
+    pub panel_repair_skins_done: &'static str,
+    pub panel_repair_skins_done_warn: &'static str,
+    pub panel_repair_skins_no_game: &'static str,
+    pub panel_repair_client_running: &'static str,
+    pub panel_repair_client_done: &'static str,
+    pub panel_repair_client_partial: &'static str,
+    pub panel_stats_title: &'static str,
+    pub panel_stats_empty: &'static str,
+    pub panel_stats_games: &'static str,
+    pub panel_stats_wins_short: &'static str,
+    pub panel_stats_losses_short: &'static str,
 }
 
 #[must_use]

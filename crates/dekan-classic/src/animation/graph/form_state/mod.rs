@@ -75,6 +75,29 @@ pub fn form_drivers(markers: &[u32]) -> Vec<Value> {
 }
 
 #[must_use]
+pub fn keep_default_visible(swaps: &[GearSwap], initially_hidden: &BTreeSet<u32>) -> Vec<GearSwap> {
+    let touched: BTreeSet<u32> = swaps
+        .iter()
+        .flat_map(|s| s.show.iter().chain(s.hide.iter()).copied())
+        .collect();
+    swaps
+        .iter()
+        .map(|swap| {
+            let mut next = swap.clone();
+            for &part in &touched {
+                if !initially_hidden.contains(&part)
+                    && !next.show.contains(&part)
+                    && !next.hide.contains(&part)
+                {
+                    next.show.push(part);
+                }
+            }
+            next
+        })
+        .collect()
+}
+
+#[must_use]
 pub fn form_parts(swaps: &[GearSwap]) -> Vec<(Vec<u32>, Vec<u32>)> {
     let parts: BTreeSet<u32> = swaps.iter().flat_map(|s| s.show.iter().copied()).collect();
     swaps

@@ -6,9 +6,17 @@ use tracing::debug;
 use crate::error::PlatformError;
 
 pub fn install_dir() -> Result<PathBuf, PlatformError> {
-    let base = std::env::var("PROGRAMFILES")
-        .map_err(|_| PlatformError::Path("PROGRAMFILES not set".into()))?;
-    Ok(PathBuf::from(base).join("Dekan"))
+    if let Ok(base) = std::env::var("PROGRAMFILES") {
+        return Ok(PathBuf::from(base).join("Dekan"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(PathBuf::from("/Applications/Dekan.app/Contents/MacOS"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(PlatformError::Path("PROGRAMFILES not set".into()))
+    }
 }
 
 pub fn data_dir() -> Result<PathBuf, PlatformError> {
@@ -58,26 +66,65 @@ pub fn riot_league_installs() -> Vec<PathBuf> {
     riot_installs(&mut Vec::new())
 }
 
+fn riot_metadata_dir(notes: &mut Vec<String>) -> Option<PathBuf> {
+    if let Ok(program_data) = std::env::var("ProgramData") {
+        return Some(
+            PathBuf::from(program_data)
+                .join("Riot Games")
+                .join("Metadata"),
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let shared = PathBuf::from("/Users/Shared/Riot Games/Metadata");
+        if shared.exists() {
+            return Some(shared);
+        }
+    }
+    notes.push("ProgramData is not set".into());
+    None
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables, clippy::ptr_arg))]
+fn append_macos_default_installs(installs: &mut Vec<PathBuf>) {
+    #[cfg(target_os = "macos")]
+    {
+        let mut defaults = vec![
+            PathBuf::from("/Applications/League of Legends.app/Contents/LoL"),
+            PathBuf::from("/Applications/League of Legends.app"),
+        ];
+        if let Some(home) = std::env::home_dir() {
+            defaults.push(home.join("Applications/League of Legends.app/Contents/LoL"));
+            defaults.push(home.join("Applications/League of Legends.app"));
+        }
+        for candidate in defaults {
+            if candidate.exists() && !installs.contains(&candidate) {
+                installs.push(candidate);
+            }
+        }
+    }
+}
+
 fn riot_installs(notes: &mut Vec<String>) -> Vec<PathBuf> {
-    let Ok(program_data) = std::env::var("ProgramData") else {
-        notes.push("ProgramData is not set".into());
-        return Vec::new();
+    let mut installs = Vec::new();
+    let Some(metadata) = riot_metadata_dir(notes) else {
+        append_macos_default_installs(&mut installs);
+        return installs;
     };
-    let metadata = PathBuf::from(program_data)
-        .join("Riot Games")
-        .join("Metadata");
     let entries = match std::fs::read_dir(&metadata) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             notes.push(format!("no Riot metadata folder at {}", metadata.display()));
-            return Vec::new();
+            append_macos_default_installs(&mut installs);
+            return installs;
         }
         Err(e) => {
             notes.push(format!(
                 "Riot metadata folder {} unreadable: {e}",
                 metadata.display()
             ));
-            return Vec::new();
+            append_macos_default_installs(&mut installs);
+            return installs;
         }
     };
     let mut patchlines: Vec<String> = Vec::new();
@@ -99,7 +146,6 @@ fn riot_installs(notes: &mut Vec<String>) -> Vec<PathBuf> {
 
     patchlines.sort_by_key(|name| (name != "league_of_legends.live", name.clone()));
 
-    let mut installs = Vec::new();
     for name in &patchlines {
         let settings = metadata
             .join(name)
@@ -112,6 +158,7 @@ fn riot_installs(notes: &mut Vec<String>) -> Vec<PathBuf> {
             Err(e) => notes.push(format!("{} unreadable: {e}", settings.display())),
         }
     }
+    append_macos_default_installs(&mut installs);
     installs
 }
 
@@ -188,9 +235,28 @@ pub fn normalize_game_dir(path: &Path) -> Option<PathBuf> {
     if is_valid_game_dir(path) {
         return Some(path.to_path_buf());
     }
-    [path.join("Game"), path.with_file_name("Game")]
-        .into_iter()
-        .find(|candidate| is_valid_game_dir(candidate))
+    for candidate in [
+        path.join("Game"),
+        path.with_file_name("Game"),
+        path.join("Contents/LoL/Game"),
+        path.join("LoL/Game"),
+    ] {
+        if is_valid_game_dir(&candidate) {
+            return Some(candidate);
+        }
+    }
+    for ancestor in path.ancestors().skip(1).take(7) {
+        if is_valid_game_dir(ancestor) {
+            return Some(ancestor.to_path_buf());
+        }
+        for sub in ["Game", "Contents/LoL/Game"] {
+            let candidate = ancestor.join(sub);
+            if is_valid_game_dir(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -274,6 +340,21 @@ mod tests {
         assert_eq!(normalize_game_dir(&client_root), Some(game_dir.clone()));
 
         assert_eq!(normalize_game_dir(&game_dir), Some(game_dir));
+
+        let mac_app = temp.join("League of Legends.app");
+        let mac_game = mac_app.join("Contents/LoL/Game");
+        let mac_exe_dir = mac_game.join("LeagueofLegends.app/Contents/MacOS");
+        let mac_client_dir = mac_app.join(
+            "Contents/LoL/LeagueClient.app/Contents/Helpers/LeagueClientUx.app/Contents/MacOS",
+        );
+        std::fs::create_dir_all(mac_game.join("DATA")).expect("mac DATA");
+        std::fs::create_dir_all(&mac_exe_dir).expect("mac exe dir");
+        std::fs::create_dir_all(&mac_client_dir).expect("mac client dir");
+        std::fs::write(mac_exe_dir.join("LeagueofLegends"), b"macho").expect("mac exe");
+        assert!(is_valid_game_dir(&mac_game));
+        assert_eq!(normalize_game_dir(&mac_app), Some(mac_game.clone()));
+        assert_eq!(normalize_game_dir(&mac_exe_dir), Some(mac_game.clone()));
+        assert_eq!(normalize_game_dir(&mac_client_dir), Some(mac_game));
 
         let _ = std::fs::remove_dir_all(&temp); // ignore-ok: cleanup fixture after test
     }

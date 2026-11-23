@@ -10,13 +10,19 @@ fn facts() -> Facts {
         injection: true,
         random_skin: true,
         light_loading: true,
+        in_client_ui: false,
         autostart: false,
         tools_present: true,
+        manager: ManagerStatus::Ready {
+            version: Some("1.33.0".into()),
+        },
         game_found: true,
         lcu_connected: true,
         elevated: false,
         update: None,
         custom_mods: None,
+        stats: dekan_platform::panel::PanelStats::default(),
+        repair: dekan_platform::panel::PanelRepair::default(),
     }
 }
 
@@ -187,17 +193,130 @@ fn test_a_room_you_created_says_so_until_you_leave() {
 #[test]
 fn test_missing_pieces_are_reported() {
     let text = Language::Turkish.text();
-    let snapshot = snapshot(
+    let snap = snapshot(
         &Facts {
             tools_present: false,
+            manager: ManagerStatus::Missing,
             game_found: false,
             lcu_connected: false,
             ..facts()
         },
         text,
     );
-    let details: Vec<&str> = snapshot.checks.iter().map(|c| c.detail.as_str()).collect();
+    let details: Vec<&str> = snap.checks.iter().map(|c| c.detail.as_str()).collect();
     assert!(details.contains(&text.detail_injector_missing));
+    assert!(details.contains(&text.detail_manager_missing));
     assert!(details.contains(&text.detail_game_missing));
     assert!(details.contains(&text.detail_client_waiting));
+
+    let outdated = snapshot(
+        &Facts {
+            manager: ManagerStatus::Outdated {
+                found: "1.29.0".into(),
+                required: "1.33.0".into(),
+            },
+            ..facts()
+        },
+        text,
+    );
+    let row = outdated
+        .checks
+        .into_iter()
+        .find(|c| c.label == text.check_manager)
+        .expect("manager check row");
+    assert!(!row.ok);
+    assert!(row.detail.contains("1.29.0") && row.detail.contains("1.33.0"));
+}
+
+#[test]
+fn test_repair_state_prevents_concurrent_runs_and_transitions_cleanly() {
+    let state = RepairState::default();
+    assert!(state.begin_skins("running skins"));
+    assert!(!state.begin_skins("duplicate skins"));
+    let busy = state.snapshot();
+    assert!(busy.skins_busy);
+    assert_eq!(busy.state, REPAIR_STATE_BUSY);
+    assert_eq!(busy.message, "running skins");
+
+    state.finish_skins(true, "skins fixed".into());
+    let done = state.snapshot();
+    assert!(!done.skins_busy);
+    assert_eq!(done.state, REPAIR_STATE_OK);
+    assert_eq!(done.message, "skins fixed");
+
+    assert!(state.begin_client("running client"));
+    assert!(!state.begin_client("duplicate client"));
+    state.finish_client(false, "file locked".into());
+    let failed = state.snapshot();
+    assert!(!failed.client_busy);
+    assert_eq!(failed.state, REPAIR_STATE_ERROR);
+    assert_eq!(failed.message, "file locked");
+}
+
+#[test]
+fn test_repair_feedback_formatting_covers_all_languages_and_outcomes() {
+    for lang in [Language::Turkish, Language::English] {
+        let text = lang.text();
+        let (ok, msg) = format_skins_feedback(
+            &RepairSkinsReport {
+                cleared_generated: 3,
+                checked: 5,
+                repaired: 2,
+                incompatible: 0,
+                game_found: true,
+                totals: None,
+            },
+            text,
+        );
+        assert!(ok);
+        assert!(msg.contains('3') && msg.contains('5') && msg.contains('2') && !msg.contains('{'));
+
+        let (warn_ok, warn_msg) = format_skins_feedback(
+            &RepairSkinsReport {
+                cleared_generated: 1,
+                checked: 2,
+                repaired: 1,
+                incompatible: 1,
+                game_found: true,
+                totals: None,
+            },
+            text,
+        );
+        assert!(!warn_ok);
+        assert!(!warn_msg.contains('{'));
+
+        let (no_game_ok, no_game_msg) = format_skins_feedback(
+            &RepairSkinsReport {
+                cleared_generated: 2,
+                game_found: false,
+                ..RepairSkinsReport::default()
+            },
+            text,
+        );
+        assert!(!no_game_ok);
+        assert!(no_game_msg.contains('2') && !no_game_msg.contains('{'));
+
+        let (client_ok, client_msg) = format_client_feedback(
+            &RepairClientReport {
+                cleared_caches: 4,
+                stopped_processes: 1,
+                reset_bridge: true,
+                warnings: Vec::new(),
+            },
+            text,
+        );
+        assert!(client_ok);
+        assert!(client_msg.contains('4') && !client_msg.contains('{'));
+
+        let (partial_ok, partial_msg) = format_client_feedback(
+            &RepairClientReport {
+                cleared_caches: 2,
+                warnings: vec!["overlay: busy".into()],
+                ..RepairClientReport::default()
+            },
+            text,
+        );
+        assert!(!partial_ok);
+        assert!(partial_msg.contains("overlay: busy") && !partial_msg.contains('{'));
+    }
 }

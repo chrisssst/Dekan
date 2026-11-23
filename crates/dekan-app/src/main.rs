@@ -14,6 +14,7 @@ const INSTANCE_NAME: &str = "dekan";
 
 const BLOCKING_TASKS_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
+#[cfg(not(target_os = "macos"))]
 fn main() -> Result<()> {
     boot::cli::attach_parent_console();
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -22,6 +23,11 @@ fn main() -> Result<()> {
     let outcome = runtime.block_on(run());
     runtime.shutdown_timeout(BLOCKING_TASKS_GRACE);
     outcome
+}
+
+#[cfg(target_os = "macos")]
+fn main() -> Result<()> {
+    boot::cli::run_macos_main(BLOCKING_TASKS_GRACE, || Box::pin(run()))
 }
 
 async fn run() -> Result<()> {
@@ -174,6 +180,7 @@ async fn run() -> Result<()> {
             e
         })
         .ok();
+    dekan_platform::preferences::IN_CLIENT_UI.load();
     let injection = dekan_platform::preferences::INJECTION.load();
     info!(enabled = injection, "Skin injection setting loaded");
     let random_skin = dekan_platform::preferences::RANDOM_SKIN.load();
@@ -222,6 +229,7 @@ async fn run() -> Result<()> {
                 }
             }));
         }
+        let repair_state = dekan_app::control_panel::RepairState::default();
         let links = boot::panel::panel_links_for(
             &tray_controller,
             state_rx.clone(),
@@ -231,6 +239,7 @@ async fn run() -> Result<()> {
             boot::panel::ReleaseNotices {
                 dekan: update_notice.clone(),
                 custom_mods: custom_mods_notice.clone(),
+                repair: repair_state.clone(),
             },
         );
         boot::tasks::spawn_custom_mods_notice(
@@ -254,6 +263,8 @@ async fn run() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
+            custom_mods: custom_mods_notice.clone(),
+            repair: repair_state,
         };
 
         supervisor.spawn_essential("tray-events", move |child_token| async move {
@@ -322,7 +333,7 @@ async fn run() -> Result<()> {
     };
 
     if instance_guard.is_some() {
-        boot::tasks::spawn_activation_listener(&mut supervisor, panel_links);
+        boot::tasks::spawn_activation_listener(&mut supervisor, panel_links.clone());
     }
 
     match dekan_platform::overlay_window::OverlayWindow::spawn() {
@@ -334,7 +345,8 @@ async fn run() -> Result<()> {
                 state_rx.clone(),
                 library_root,
                 mods_config,
-            );
+            )
+            .with_panel_links(panel_links);
             supervisor.spawn_essential("overlay-session", move |child_token| async move {
                 session.run(child_token).await;
                 drop(overlay);

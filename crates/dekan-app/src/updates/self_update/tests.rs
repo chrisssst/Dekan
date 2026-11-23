@@ -135,8 +135,11 @@ fn test_the_installer_is_hashed_again_and_held_before_it_runs() {
         sha256: encode_hex(&Sha256::digest(b"setup")),
     };
     let held = open_verified(&staged).expect("verified");
-    assert!(std::fs::write(&path, b"swapped").is_err());
-    assert!(std::fs::remove_file(&path).is_err());
+    #[cfg(windows)]
+    {
+        assert!(std::fs::write(&path, b"swapped").is_err());
+        assert!(std::fs::remove_file(&path).is_err());
+    }
     drop(held);
     std::fs::write(&path, b"swapped").expect("rewrite");
     assert!(open_verified(&staged).is_err());

@@ -36,6 +36,7 @@ fn catalog(skins: Vec<CatalogSkin>) -> Catalog {
         notice: None,
         classic: false,
         lobby: Vec::new(),
+        party: Default::default(),
     }
 }
 

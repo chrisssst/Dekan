@@ -1,4 +1,6 @@
+use dekan_core::identity::IdentityLoadout;
 use dekan_core::party::PartyPeer;
+use dekan_core::state::AppState;
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::{RoomCipher, SealedBlob};
@@ -41,6 +43,8 @@ pub struct Announcement {
     pub champion_id: u32,
     pub skin_id: u32,
     pub chroma_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<IdentityLoadout>,
 }
 
 const MAX_PUUID_LEN: usize = 100;
@@ -56,6 +60,18 @@ impl Announcement {
                 .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         {
             return bad("puuid");
+        }
+        if let Some(identity) = self.identity.as_ref()
+            && let Err(why) = identity.validate()
+        {
+            return bad(why);
+        }
+        let identity_only = self.champion_id == 0
+            && self.skin_id == 0
+            && self.chroma_id.is_none()
+            && self.identity.as_ref().is_some_and(|id| !id.is_empty());
+        if identity_only {
+            return Ok(());
         }
 
         if self.champion_id == 0 || self.champion_id >= 70_000 {
@@ -76,6 +92,46 @@ impl Announcement {
     pub fn seal(&self, cipher: &RoomCipher) -> Result<SealedBlob, PartyError> {
         cipher.seal(&serde_json::to_vec(self)?)
     }
+}
+
+#[must_use]
+pub fn announcement_from_state(state: &AppState, member_id: u64) -> Option<Announcement> {
+    if !state.party_share {
+        return None;
+    }
+    let puuid = state.local_puuid.clone()?;
+    let identity = state
+        .local_identity
+        .clone()
+        .filter(|id| !id.is_empty() && id.validate().is_ok());
+    if (state.phase.is_champ_select() || state.phase.is_in_game())
+        && let Some(champion_id) = state.champion_id
+        && let Some(target) = state
+            .overlay_target
+            .as_ref()
+            .filter(|t| t.matches_champion(champion_id))
+        && target.package_entry_id() != champion_id * 1000
+    {
+        let announcement = Announcement {
+            member_id,
+            puuid,
+            champion_id,
+            skin_id: target.skin_id,
+            chroma_id: target.chroma_id,
+            identity,
+        };
+        return announcement.validate().ok().map(|()| announcement);
+    }
+    let identity = identity?;
+    let announcement = Announcement {
+        member_id,
+        puuid,
+        champion_id: 0,
+        skin_id: 0,
+        chroma_id: None,
+        identity: Some(identity),
+    };
+    announcement.validate().ok().map(|()| announcement)
 }
 
 pub fn open_member(
@@ -107,6 +163,7 @@ pub fn open_member(
         champion_id: announcement.champion_id,
         skin_id: announcement.skin_id,
         chroma_id: announcement.chroma_id,
+        identity: announcement.identity,
     }))
 }
 
@@ -121,6 +178,7 @@ mod tests {
             champion_id: 103,
             skin_id: 103_015,
             chroma_id: Some(103_020),
+            identity: None,
         }
     }
 

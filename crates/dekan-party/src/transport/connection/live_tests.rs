@@ -83,6 +83,7 @@ async fn live_relay_recovers_from_refusal_and_relays_an_encrypted_pick() {
         receive(&mut second, false).await;
         let cipher = RoomCipher::new(token.key());
         let pick = Announcement {
+            identity: None,
             member_id: 1,
             puuid: "dekan-connectivity-probe".into(),
             champion_id: 238,

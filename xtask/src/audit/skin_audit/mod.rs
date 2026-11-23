@@ -156,8 +156,10 @@ pub fn audit_champion(
                 finding.source_links_dropped =
                     !keeps_source_links(&champion, &main, skin, &characters.join(&main));
                 let written: HashSet<String> = generated_paths(&wad_root).into_iter().collect();
+                checks::check_mod_metadata(&staging.join(&folder), &mut finding);
                 check_generated_bins(&champion, maps, &characters, &written, &mut finding);
                 checks::check_generated_meshes(&wad_root, &written, &mut finding);
+                form_checks::check_skin_fidelity(&champion, &main, skin, &wad_root, &mut finding);
                 finding.shared_with_map = generated_paths(&wad_root)
                     .into_iter()
                     .filter_map(|path| {
@@ -187,8 +189,17 @@ pub fn audit_champion(
                         let written: HashSet<String> =
                             generated_paths(&wad_root).into_iter().collect();
                         let characters = wad_root.join("data").join("characters");
+                        checks::check_mod_metadata(&staging.join(&folder), &mut finding);
                         check_generated_bins(&champion, maps, &characters, &written, &mut finding);
                         checks::check_generated_meshes(&wad_root, &written, &mut finding);
+                        form_checks::check_baked_form_fidelity(
+                            &champion,
+                            &main,
+                            skin,
+                            form,
+                            &wad_root,
+                            &mut finding,
+                        );
                         if !settings.keep {
                             let _ = std::fs::remove_dir_all(staging.join(&folder)); // ignore-ok: probe scratch folder
                         }
@@ -347,7 +358,9 @@ relatorio: {} ({} s)",
     }
 }
 
+mod asset_checks;
 mod checks;
+mod form_checks;
 mod report;
 
 use checks::{check_generated_bins, generated_paths, keeps_source_links, maps_holding, skin_bin};

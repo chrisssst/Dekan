@@ -50,6 +50,7 @@ fn recent_logs(
         }
     }
     logs.sort();
+    logs.reverse();
     Ok(logs)
 }
 
@@ -98,14 +99,33 @@ fn write_zip(
         .compression_method(zip::CompressionMethod::Deflated);
     let stored = deflated.compression_method(zip::CompressionMethod::Stored);
     let mut total = 0u64;
+    let mut included = 0usize;
     for (name, path) in files {
         let image = name.starts_with("screenshots/");
+        let raw_len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if total + raw_len > DIAGNOSTIC_MAX_BYTES {
+            if included > 0 {
+                warn!(
+                    file = %name,
+                    bytes = raw_len,
+                    "Skipping oversized file in diagnostics export to stay within budget"
+                );
+                continue;
+            }
+            return Err(format!(
+                "logs larger than the diagnostic limit ({} bytes after {name})",
+                total + raw_len
+            ));
+        }
         let mut bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         if !image {
             bytes = redact::redact(&String::from_utf8_lossy(&bytes), profile).into_bytes();
         }
         total += bytes.len() as u64;
         if total > DIAGNOSTIC_MAX_BYTES {
+            if included > 0 {
+                continue;
+            }
             return Err(format!(
                 "logs larger than the diagnostic limit ({total} bytes after {name})"
             ));
@@ -113,6 +133,7 @@ fn write_zip(
         zip.start_file(name.as_str(), if image { stored } else { deflated })
             .map_err(|e| format!("{name}: {e}"))?;
         zip.write_all(&bytes).map_err(|e| format!("{name}: {e}"))?;
+        included += 1;
     }
     zip.finish()
         .map_err(|e| format!("{}: {e}", partial.display()))?;

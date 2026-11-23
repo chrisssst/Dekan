@@ -1,0 +1,48 @@
+{
+  "binary_sha256": "7fb0edd76d6a5dcc4ba453d6315dd9a862786ecc7509fc2265e7208e5f3aac51",
+  "method": "Static PE string slices; lengths verified from x64 code references",
+  "files": [
+    {
+      "file": "native.css",
+      "offset": "0x143d0b0",
+      "length": 11799,
+      "sha256": "0eb7b5e4402ce28558d03aef9fed02b23df09b585038b4517d4205fdd11a2777"
+    },
+    {
+      "file": "icon-uri.txt",
+      "offset": "0x143fec7",
+      "length": 11534,
+      "sha256": "135d85c6ae4c87e2e5564521520e7f55f9e839258a0b013f607a31095eb9b2c8"
+    },
+    {
+      "file": "core.js",
+      "offset": "0x1442bd5",
+      "length": 6304,
+      "sha256": "04897b0b0348d21753fc2822b9d4f79e6e426abfc62750e8b180e6a3e1f90acb"
+    },
+    {
+      "file": "mods.js",
+      "offset": "0x1444475",
+      "length": 12985,
+      "sha256": "2f8686496ccf06e5bd48bffb4964bac4b25bec89214429e6bf629f294be2a39e"
+    },
+    {
+      "file": "identity.js",
+      "offset": "0x144772e",
+      "length": 20656,
+      "sha256": "545b2931024464e07980a9d2685a9d8b3cb150b7e0ae514af07b7b0ed33dd98e"
+    },
+    {
+      "file": "identity-render.js",
+      "offset": "0x144c7de",
+      "length": 18877,
+      "sha256": "6c0e391484c0d9fc07490c0b3fbe424e942e712a2b073ab04312668a539631a0"
+    },
+    {
+      "file": "carousel.js",
+      "offset": "0x145119b",
+      "length": 18159,
+      "sha256": "3778f654afaae3578e19922628a0e7f6b2313ac37a7dd7ce44a78fb88871e4ad"
+    }
+  ]
+}

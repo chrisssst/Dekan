@@ -20,12 +20,14 @@ exclude = [
 ]
 
 [workspace.package]
-version = "2.2.0"
+version = "2.3.0"
 authors = ["Dekan"]
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/chrisssst/Dekan"
+homepage = "https://github.com/chrisssst/Dekan"
+description = "Dekan — Open-source League of Legends skin changer, chroma selector, TFT cosmetic generator, and custom mod manager (.fantome / .modpkg) for Windows, written in Rust."
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -65,7 +67,6 @@ slint = { version = "1.18.1", default-features = false, features = [
 slint-build = "1.18.1"
 i-slint-backend-testing = "1.18.1"
 raw-window-handle = "0.6"
-ciborium = "0.2.2"
 
 [profile.release]
 lto = true

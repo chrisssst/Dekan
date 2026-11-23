@@ -280,6 +280,7 @@ fn with_party(mut state: dekan_core::state::AppState) -> dekan_core::state::AppS
         champion_id: 103,
         skin_id: 103_015,
         chroma_id: None,
+        identity: None,
     }];
     state
 }

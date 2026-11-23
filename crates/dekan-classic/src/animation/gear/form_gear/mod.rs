@@ -5,7 +5,7 @@ use dekan_wad::prop::{parse_prop_file, serialize_prop_file};
 use tracing::warn;
 
 use crate::error::ClassicError;
-use crate::form_state::{form_active, form_parts};
+use crate::form_state::{form_active, form_parts, keep_default_visible};
 use crate::gear_toggle::{GearSwap, bin_error, h, named, pointer};
 use crate::vfx_markers::{FIELD_EMBED, FIELD_LIST2, FIELD_POINTER, embed, text};
 
@@ -216,7 +216,8 @@ pub fn gear_coverage(
         .filter(|name| !name.is_empty())
         .map(h)
         .collect();
-    let plan = material_plan(gear_bodies, swaps, &hidden)?;
+    let normalized = keep_default_visible(swaps, &hidden);
+    let plan = material_plan(gear_bodies, &normalized, &hidden)?;
     Ok(GearCoverage {
         idle_forms: gears.iter().filter(|g| idle_override(g).is_some()).count(),
         material_parts: plan.overrides.len(),

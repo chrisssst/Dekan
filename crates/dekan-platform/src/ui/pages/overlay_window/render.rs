@@ -18,6 +18,7 @@ impl Overlay {
             origin: None,
             columns: 1,
             tiles: HashMap::new(),
+            raw_previews: HashMap::new(),
             previews: HashMap::new(),
             preview_for: None,
             presets: PresetsView::default(),
@@ -309,9 +310,15 @@ impl Overlay {
         self.view.set_preview_name(gem.name.clone());
         self.view.set_preview_anchor_x(x);
         self.view.set_preview_anchor_y(y);
-        match self.previews.get(&id) {
+        let cached = self.previews.get(&id).cloned().or_else(|| {
+            let bytes = self.raw_previews.get(&id)?;
+            let image = runtime::image(bytes)?;
+            self.previews.insert(id, image.clone());
+            Some(image)
+        });
+        match cached {
             Some(image) => {
-                self.view.set_preview_image(image.clone());
+                self.view.set_preview_image(image);
                 self.view.set_preview_loading(false);
             }
             None => {
@@ -328,7 +335,25 @@ impl Overlay {
         self.view.set_preview_visible(false);
     }
 
+    pub(super) fn deliver_raw_preview(&mut self, chroma_id: u32, bytes: Arc<[u8]>) {
+        if self.raw_previews.len() >= 512 && !self.raw_previews.contains_key(&chroma_id) {
+            if let Some(&evict) = self.raw_previews.keys().next() {
+                self.raw_previews.remove(&evict);
+                self.previews.remove(&evict);
+            }
+        }
+        self.raw_previews.insert(chroma_id, Arc::clone(&bytes));
+        if self.preview_for == Some(chroma_id) {
+            self.decode_and_show_preview(chroma_id, &bytes);
+        }
+    }
+
+    #[cfg(test)]
     pub(super) fn deliver_preview(&mut self, chroma_id: u32, bytes: &[u8]) {
+        self.deliver_raw_preview(chroma_id, Arc::from(bytes));
+    }
+
+    fn decode_and_show_preview(&mut self, chroma_id: u32, bytes: &[u8]) {
         let Some(image) = runtime::image(bytes) else {
             warn!(
                 chroma_id,
