@@ -9,7 +9,7 @@ const root = path.resolve(import.meta.dirname, '../../crates/dekan-app/src/selec
 const files = ['i18n.js', 'core.js', 'mods.js', 'identity/identity.js', 'identity/identity-render.js', 'carousel.js'];
 const css = fs.readFileSync(path.join(root, 'native.css'), 'utf8');
 const icon = 'data:image/png;base64,' + fs.readFileSync(path.resolve(import.meta.dirname, '../../crates/dekan-platform/ui/assets/logo-56.png')).toString('base64');
-const source = `(function(){ const CSS=${JSON.stringify(css)}; const DEKAN_ICON_URI=${JSON.stringify(icon)}; ${files.map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n')} })()`;
+const source = `(function(){ ${files.map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n')} })()`;
 const { window } = parseHTML('<html lang="en"><head></head><body><div class="right-nav-menu"></div></body></html>');
 const intervals = new Map();
 const timers = new Map();
@@ -17,6 +17,7 @@ let nextTimer = 0;
 const storage = new Map();
 const originalFetch = async () => ({ ok: false });
 const context = vm.createContext({
+    CSS: css, DEKAN_ICON_URI: icon,
     window, document: window.document, navigator: { language: 'en', clipboard: { writeText() {} } },
     MutationObserver: window.MutationObserver, MessageEvent, WebSocket: class {}, Response,
     setInterval: (fn) => { const id = ++nextTimer; intervals.set(id, fn); return id; },
@@ -91,10 +92,10 @@ assert.equal(api.cleanup(), true);
 assert.equal(window.__dekanInClient, undefined);
 assert.equal(document.getElementById('dekan-nav-btn'), null);
 assert.equal(document.getElementById('dekan-in-client-style'), null);
-assert.equal(document.getElementById('dekan-identity-style'), null);
+assert.equal(document.getElementById('dekan-id-style'), null);
 assert.equal(window.fetch, originalFetch);
 assert.equal(intervals.size, 0);
 assert.equal(timers.size, 0);
 assert.equal(vm.runInContext(source, context), true, 'script reinstalls after cleanup');
 window.__dekanInClient.cleanup();
-console.log('Native client DOM fixture passed: branding, destinations, TR/EN, mod/party commands, cleanup and reinstall.');
+console.log('Native client DOM fixture passed: branding, destinations, TR/EN, carousel/chroma selection, mod/party commands, cleanup and reinstall.');

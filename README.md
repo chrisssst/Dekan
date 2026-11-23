@@ -58,7 +58,7 @@ irm https://raw.githubusercontent.com/chrisssst/Dekan/main/install.ps1 | iex
 ## Features
 
 - **Skins, Chromas & Forms (`Ctrl+5`):** Supports 170+ champions and 9,000+ skins, chromas, Exalted, Ultimate, and Hall of Legends forms, plus localized loading-screen names.
-- **Dekan Interface:** Pick skins in the standalone Dekan window, without Pengu Loader.
+- **Dekan Interface:** Pick skins in the themed Dekan window or enable the native League client carousel and Dekan menu, without Pengu Loader.
 - **TFT Generation:** Includes updated generation support for TFT cosmetic assets.
 - **Custom Mods (`.fantome`, `.modpkg`, `.zip`):** Import and repair custom skins, maps, HUDs, fonts, and announcers.
 - **Party Mode:** End-to-end encrypted (`XChaCha20-Poly1305`) skin and identity sync with up to 5 friends.
@@ -75,7 +75,7 @@ See the **[installation guide](https://github.com/chrisssst/Dekan#installation)*
 No. Overlays are built separately and loaded in memory at match start. Your game files stay untouched.
 
 **Does it require Administrator privileges or Pengu Loader?**
-Dekan normally runs without Administrator privileges and does not use Pengu Loader. Its skin picker is the standalone Dekan window. The supplied native launcher follows its own Mod Manager startup requirements.
+Dekan normally runs without Administrator privileges and does not use Pengu Loader. Its default skin picker is the standalone Dekan window, with an opt-in native client mode. The supplied native launcher follows its own Mod Manager startup requirements.
 
 **Can other players see my skin?**
 Only locally, unless you and your friends enable **Party Mode** inside Dekan.

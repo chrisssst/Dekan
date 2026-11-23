@@ -84,7 +84,7 @@ Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\party.json"; DestDir: "{localappdata}\Dekan\state"; Flags: onlyifdoesntexist
 
 [INI]
-Filename: "{app}\language.ini"; Section: "ui"; Key: "language"; String: "{language}"; Flags: uninsdeleteentry uninsdeletesectionifempty uninsdeletefileifempty
+Filename: "{app}\language.ini"; Section: "ui"; Key: "language"; String: "{language}"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\dekan.ico"
@@ -101,6 +101,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
 
 [UninstallDelete]
+Type: files; Name: "{app}\language.ini"
 Type: filesandordirs; Name: "{localappdata}\Dekan\logs"
 Type: filesandordirs; Name: "{localappdata}\Dekan\state"
 Type: filesandordirs; Name: "{localappdata}\Dekan\webview2"
