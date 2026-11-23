@@ -360,8 +360,8 @@
         title.className = "dekan-tier-bar-title";
         title.textContent = translate("Dekan — All ranks & prestige");
         bar.appendChild(title);
-        RANKED_TIERS.forEach((tier) => { bar.appendChild(makeTierChip(tier, borderKey === "ranked:" + tier, null, () => saveIdentityPatch({ border: "ranked:" + tier }))); });
-        PRESTIGE_LEVELS.forEach((lvl, idx) => { const val = "prestige:" + (idx + 1) + ":" + lvl; bar.appendChild(makeTierChip("Nv." + lvl, borderKey === val, null, () => saveIdentityPatch({ border: val }))); });
+        RANKED_TIERS.forEach((tier) => { bar.appendChild(makeTierChip(translate(tier), borderKey === "ranked:" + tier, null, () => saveIdentityPatch({ border: "ranked:" + tier }))); });
+        PRESTIGE_LEVELS.forEach((lvl, idx) => { const val = "prestige:" + (idx + 1) + ":" + lvl; bar.appendChild(makeTierChip(translate("Lv.") + lvl, borderKey === val, null, () => saveIdentityPatch({ border: val }))); });
       }
     }
     const bannersTab = document.querySelector(".identity-customizer-tab-banners-component");
@@ -377,7 +377,7 @@
         bar.appendChild(title);
         RANKED_TIERS.forEach((tier) => {
           const asset = "/lol-game-data/assets/ASSETS/Regalia/BannerSkins/" + tier.toLowerCase() + ".png";
-          bar.appendChild(makeTierChip(tier, bannerKey === asset, asset, () => saveIdentityPatch({ banner: asset })));
+          bar.appendChild(makeTierChip(translate(tier), bannerKey === asset, asset, () => saveIdentityPatch({ banner: asset })));
         });
       }
     }

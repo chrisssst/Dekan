@@ -24,6 +24,7 @@ const context = vm.createContext({
     setTimeout: (fn) => { const id = ++nextTimer; timers.set(id, fn); return id; },
     clearTimeout: (id) => timers.delete(id), console,
 });
+window.Element.prototype.getBoundingClientRect = () => ({ left: 100, top: 100, bottom: 150, width: 50, height: 50 });
 window.fetch = originalFetch;
 window.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
 window.__dekanLanguage = 'en';
@@ -62,6 +63,22 @@ const mod = document.querySelector('.dekan-chip');
 assert.equal(mod.textContent, 'Map A'); mod.onclick(event);
 const command = api.drain(null)[0];
 assert.equal(command.type, 'set_mods'); assert.equal(command.selection.map, 'map-a');
+const carousel = document.createElement('div');
+carousel.className = 'skin-selection-carousel';
+carousel.innerHTML = '<div class="skin-selection-item skin-carousel-offset-2"><img src="/lol-game-data/assets/v1/champion-splashes/238/238001.jpg"></div>';
+document.body.appendChild(carousel);
+const champion = { ...catalog, champion_id: 238, champion_name: 'Zed', skins: [{id:238001,name:'Shockblade Zed',chromas:[{id:238015,name:'Ruby',color:'#ff0000',form:false}]}] };
+const picked = api.sync(champion, null);
+assert.equal(picked[0].type, 'select'); assert.equal(picked[0].id, 238001);
+const chroma = document.querySelector('.dekan-chroma-btn');
+assert.ok(chroma, 'client carousel offers chroma button');
+chroma.onclick({ ...event, stopImmediatePropagation() {} });
+const swatches = document.querySelectorAll('.dekan-swatch');
+assert.equal(swatches.length, 2);
+swatches[1].dispatchEvent(new window.Event('click', { bubbles:true }));
+const variant = api.drain(238001);
+assert.equal(variant[0].type, 'select'); assert.equal(variant[0].id, 238015);
+carousel.remove();
 window.__dekanLanguage = 'tr';
 api.sync(catalog, null);
 nav.onclick(event);

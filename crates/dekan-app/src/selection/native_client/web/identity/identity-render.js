@@ -273,7 +273,7 @@
       if (nameEl && !card.querySelector(".dekan-party-badge")) {
         const badge = document.createElement("span");
         badge.className = "dekan-party-badge";
-        badge.textContent = "PARTY";
+        badge.textContent = translate("PARTY");
         nameEl.appendChild(badge);
       }
     });

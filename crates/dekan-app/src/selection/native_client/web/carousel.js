@@ -220,7 +220,7 @@
     if (!btn) {
       btn = document.createElement("div");
       btn.className = CHROMA_BTN_CLASS;
-      btn.title = "Chromas / Forms";
+      btn.title = translate("Chromas / Forms");
       const core = document.createElement("div");
       core.className = "dekan-chroma-core";
       btn.appendChild(core);

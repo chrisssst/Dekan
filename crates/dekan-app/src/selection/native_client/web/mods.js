@@ -217,7 +217,7 @@
     glow.className = "menu-item-glow";
     const icon = document.createElement("div");
     icon.className = "menu-item-icon dekan-nav-ico";
-    icon.style.webkitMaskImage = "url(" + DEKAN_ICON_URI + ")";
+    icon.style.cssText = "background: center / contain no-repeat url(" + DEKAN_ICON_URI + "); -webkit-mask-image: none; mask-image: none;";
     wrap.appendChild(glow);
     wrap.appendChild(icon);
     item.appendChild(wrap);

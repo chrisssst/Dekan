@@ -1013,7 +1013,7 @@ name = "dekan-app"
 version = "2.3.0"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.23.1",
  "dekan-classic",
  "dekan-core",
  "dekan-inject",

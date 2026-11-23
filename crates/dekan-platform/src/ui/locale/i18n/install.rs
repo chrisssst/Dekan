@@ -19,16 +19,15 @@ fn parse(source: &str) -> Option<Language> {
     for line in source.lines().map(str::trim) {
         if line.starts_with('[') {
             ui = line.eq_ignore_ascii_case("[ui]");
-        } else if ui {
-            if let Some((key, value)) = line.split_once('=') {
-                if key.trim().eq_ignore_ascii_case("language") {
-                    return match value.trim().to_ascii_lowercase().as_str() {
-                        "turkish" => Some(Language::Turkish),
-                        "english" => Some(Language::English),
-                        _ => None,
-                    };
-                }
-            }
+        } else if let Some((_, value)) = line
+            .split_once('=')
+            .filter(|(key, _)| ui && key.trim().eq_ignore_ascii_case("language"))
+        {
+            return match value.trim().to_ascii_lowercase().as_str() {
+                "turkish" => Some(Language::Turkish),
+                "english" => Some(Language::English),
+                _ => None,
+            };
         }
     }
     None

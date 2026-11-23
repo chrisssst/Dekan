@@ -1,4 +1,10 @@
 const TURKISH = {
+  "Chromas / Forms": "Renkler / Biçimler",
+  "Lv.": "Sv.",
+  "PARTY": "PARTİ",
+  "IRON": "DEMİR", "BRONZE": "BRONZ", "SILVER": "GÜMÜŞ", "GOLD": "ALTIN",
+  "PLATINUM": "PLATİN", "EMERALD": "ZÜMRÜT", "DIAMOND": "ELMAS",
+  "MASTER": "USTALIK", "GRANDMASTER": "ÜSTATLIK", "CHALLENGER": "ŞAMPİYONLUK",
   "Home": "Ana sayfa",
   "Mods": "Modlar",
   "Party": "Parti",
